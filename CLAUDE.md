@@ -257,3 +257,10 @@ Migrations must be backward-compatible with the currently running server.
 | Month-end recurrence (29–31) | Clamp to the last day of shorter months; explicitly tested |
 | Float money errors | Integer cents everywhere; `AmountCents` branded type prevents mix-ups |
 | `callback_query` left unanswered | Always `answerCallbackQuery`, even on the error path, or the client spins forever |
+| tsup bundling a CJS dependency into ESM | Its `require()` calls throw at runtime and only in production. `skipNodeModulesBundle: true` keeps node_modules external; only `@spendlygo/*` is bundled |
+| Server bundles `@spendlygo/db` source | That package's runtime imports (`drizzle-orm`, `postgres`) become the server's, and pnpm's strict layout means they must be declared in `apps/server/package.json` |
+| `bot.init()` before `serve()` | Makes Telegram a hard dependency of startup, so an outage fails the Render health check and rolls back the deploy. HTTP binds first; the webhook returns 503 until the bot is ready (ADR 0004) |
+| Postgres treats NULLs as distinct in unique indexes | `UNIQUE (user_id, slug)` does **not** constrain system categories where `user_id IS NULL`. A partial unique index `ON (slug) WHERE user_id IS NULL` does, and is the seed's conflict target |
+| `onConflictDoUpdate` with `set: { name: table.name }` | Assigns each column to itself and silently does nothing. Use ``sql`excluded.name` `` |
+| React 19 removed the global `JSX` namespace | `import type { JSX } from 'react'` |
+| Drizzle 0.38 has no `.nullsNotDistinct()` on the index builder | Use a partial unique index with `.where()` instead |

@@ -1,0 +1,9 @@
+node_modules
+dist
+build
+coverage
+pnpm-lock.yaml
+packages/db/migrations
+
+# Prose docs are hand-formatted; Prettier reflows tables and lists.
+*.md

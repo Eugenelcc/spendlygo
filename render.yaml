@@ -1,0 +1,66 @@
+# Render blueprint — both services are on the FREE tier.
+#
+# GUARDRAILS.md section 1: do NOT add a third service. The free tier grants
+# 750 instance-hours/month and one always-on web service consumes ~730.
+# The Mini App is a Static Site precisely because those do not consume
+# instance hours and never sleep.
+#
+# The database is NOT defined here. Render's free Postgres is deleted after
+# 30 days. Provision Supabase separately and set DATABASE_URL.
+
+services:
+  - type: web
+    name: spendlygo-api
+    runtime: node
+    plan: free
+    region: singapore
+    branch: main
+    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm --filter @spendlygo/server build
+    startCommand: pnpm --filter @spendlygo/server start
+    healthCheckPath: /healthz
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: '22'
+      - key: BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_WEBHOOK_SECRET
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: CRON_SECRET
+        sync: false
+      - key: ALLOWED_TELEGRAM_IDS
+        sync: false
+      - key: DEFAULT_TIMEZONE
+        value: Asia/Singapore
+      - key: MINIAPP_URL
+        fromService:
+          type: web
+          name: spendlygo-app
+          property: hostport
+
+  - type: web
+    name: spendlygo-app
+    runtime: static
+    plan: free
+    branch: main
+    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm --filter @spendlygo/miniapp build
+    staticPublishPath: apps/miniapp/dist
+    autoDeploy: true
+    envVars:
+      - key: VITE_API_BASE_URL
+        fromService:
+          type: web
+          name: spendlygo-api
+          property: hostport
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    headers:
+      - path: /*
+        name: X-Frame-Options
+        value: ALLOWALL

@@ -34,8 +34,42 @@ Tailwind v4 · motion — deployed on Render's free tier.
 
 ## Status
 
-📋 **Planning complete, implementation not started.** See [PRD.md §13](./PRD.md#13-phased-roadmap)
-for the phased build order.
+🏗️ **Phase P0 — skeleton, done.** The monorepo, database schema, Telegram
+webhook, Mini App API and deployment blueprint are in place and tested. The bot
+answers `/start`, `/help` and `/app`; the Mini App connects, authenticates via
+Telegram `initData`, and renders the seeded categories.
+
+Next up is **P1 — quick-text capture**. See
+[PRD.md §13](./PRD.md#13-phased-roadmap) for the full build order.
+
+```
+P0 skeleton   ██████████ done
+P1 capture    ░░░░░░░░░░
+P2 mini app   ░░░░░░░░░░
+P3 goals      ░░░░░░░░░░
+P4 stats      ░░░░░░░░░░
+P5 automation ░░░░░░░░░░
+P6 polish     ░░░░░░░░░░
+```
+
+## Running it locally
+
+```bash
+pnpm install
+cp .env.example apps/server/.env      # fill in BOT_TOKEN and DATABASE_URL
+pnpm db:migrate && pnpm db:seed
+pnpm dev
+```
+
+Deployment is described in [CLAUDE.md](./CLAUDE.md#deployment); the Render
+blueprint is [render.yaml](./render.yaml).
+
+## Architecture decisions
+
+Short records of the non-obvious calls live in [docs/adr](./docs/adr) — why one
+web service and a static site, why Supabase rather than Render's Postgres, why
+receipt photos never leave Telegram, and why the HTTP server starts before the
+bot.
 
 ## License
 

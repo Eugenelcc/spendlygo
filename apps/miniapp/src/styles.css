@@ -1,0 +1,282 @@
+/*
+ * Design tokens — DESIGN.md sections 2, 3 and 4.
+ *
+ * Every colour resolves from a Telegram theme variable with a fallback, so the
+ * app adopts the user's chat theme and light/dark needs no separate handling.
+ * GUARDRAILS.md section 8 forbids hardcoding colours anywhere else.
+ */
+
+:root {
+  /* 2.1 — Telegram theme, with fallbacks for outside-Telegram rendering */
+  --bg: var(--tg-theme-bg-color, #ffffff);
+  --bg-secondary: var(--tg-theme-secondary-bg-color, #f1f1f4);
+  --bg-section: var(--tg-theme-section-bg-color, var(--bg));
+  --text: var(--tg-theme-text-color, #0f1115);
+  --text-subtle: var(--tg-theme-subtitle-text-color, #6b7280);
+  --text-hint: var(--tg-theme-hint-color, #8b949e);
+  --accent: var(--tg-theme-button-color, #2f8ced);
+  --accent-text: var(--tg-theme-button-text-color, #ffffff);
+  --link: var(--tg-theme-link-color, #2f8ced);
+  --destructive: var(--tg-theme-destructive-text-color, #e5484d);
+
+  /* 2.2 — semantic tokens */
+  --money-in: #1db954;
+  --pace-ahead: #1db954;
+  --pace-ontrack: var(--accent);
+  --pace-behind: #f5a623;
+  --over-budget: var(--destructive);
+
+  /* 4 — spacing and radii */
+  --space-screen-x: 16px;
+  --space-card: 16px;
+  --space-stack: 12px;
+  --radius-sm: 10px;
+  --radius-md: 16px;
+  --radius-lg: 24px;
+  --radius-full: 999px;
+
+  /* 5.1 — durations for the non-spring cases */
+  --duration-fast: 120ms;
+  --duration-base: 200ms;
+  --ease-out: cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+:root[data-color-scheme='dark'] {
+  --money-in: #3ddc84;
+  --pace-ahead: #3ddc84;
+  --pace-behind: #ffb84d;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family:
+    -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Roboto, system-ui, sans-serif;
+  font-size: 16px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+  overscroll-behavior-y: none;
+}
+
+/* 10 — reduced motion is a first-class state, not a broken one */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+.screen {
+  max-width: 520px;
+  margin: 0 auto;
+  padding: 24px var(--space-screen-x) max(24px, calc(env(safe-area-inset-bottom) + 16px));
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-stack);
+  min-height: 100dvh;
+}
+
+.brand {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.brand__name {
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.brand__version {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-hint);
+}
+
+.card {
+  background: var(--bg-secondary);
+  border-radius: var(--radius-md);
+  padding: var(--space-card);
+  animation: rise var(--duration-base) var(--ease-out) both;
+}
+
+.card--stagger-1 {
+  animation-delay: 40ms;
+}
+.card--stagger-2 {
+  animation-delay: 80ms;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.card__label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-hint);
+  margin-bottom: 10px;
+}
+
+.row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  padding: 7px 0;
+}
+
+.row + .row {
+  border-top: 1px solid color-mix(in srgb, var(--text-hint) 18%, transparent);
+}
+
+.row__key {
+  color: var(--text-subtle);
+  font-size: 15px;
+}
+
+.row__value {
+  font-weight: 600;
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-subtle);
+}
+
+.status__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-full);
+  background: var(--pace-ontrack);
+  flex: none;
+}
+
+.status__dot--ok {
+  background: var(--pace-ahead);
+}
+.status__dot--error {
+  background: var(--over-budget);
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  min-height: 36px;
+  border-radius: var(--radius-full);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 500;
+  transition: transform var(--duration-fast) var(--ease-out);
+}
+
+.chip:active {
+  transform: scale(0.94);
+}
+
+.empty {
+  text-align: center;
+  padding: 40px 20px;
+  color: var(--text-subtle);
+}
+
+.empty__emoji {
+  font-size: 40px;
+  line-height: 1;
+  margin-bottom: 14px;
+}
+
+.empty__title {
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 6px;
+}
+
+.empty__body {
+  font-size: 15px;
+  max-width: 34ch;
+  margin: 0 auto;
+}
+
+.skeleton {
+  background: color-mix(in srgb, var(--text-hint) 20%, transparent);
+  border-radius: var(--radius-sm);
+  height: 14px;
+  animation: shimmer 1.3s ease-in-out infinite;
+}
+
+.skeleton + .skeleton {
+  margin-top: 10px;
+}
+.skeleton--short {
+  width: 45%;
+}
+
+@keyframes shimmer {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 0.85;
+  }
+}
+
+.footnote {
+  margin-top: auto;
+  padding-top: 20px;
+  font-size: 13px;
+  color: var(--text-hint);
+  text-align: center;
+}
+
+code {
+  font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
+  font-size: 0.92em;
+  background: color-mix(in srgb, var(--text-hint) 16%, transparent);
+  padding: 2px 5px;
+  border-radius: 5px;
+}
