@@ -61,6 +61,8 @@ function makeConfig(overrides: Partial<Config> = {}): Config {
     cronSecret: CRON_SECRET,
     allowedTelegramIds: new Set<bigint>(),
     defaultTimezone: 'Asia/Singapore',
+    // Tests must never reach out and re-point a real bot's webhook.
+    autoSetWebhook: false,
     version: 'test',
     ...overrides,
   };

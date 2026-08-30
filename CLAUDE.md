@@ -140,6 +140,7 @@ Keep `.env.example` in sync with this table. Never commit real values.
 | `ALLOWED_TELEGRAM_IDS` | server | Comma-separated allowlist while private |
 | `NODE_ENV` | server | `development` \| `production` |
 | `PORT` | server | Injected by Render |
+| `AUTO_SET_WEBHOOK` | server | `true` (default) lets the server register its own webhook at boot. Set `false` when a tunnel points a dev bot at localhost |
 | `VITE_API_BASE_URL` | miniapp | Server origin. **Public — never put a secret here.** |
 
 Config is read once through a Zod-validated module that fails fast at boot,
@@ -169,8 +170,20 @@ Scheduling is external and free (cron-job.org):
 🔴 **Do not add a third Render service.** The free tier grants 750
 instance-hours/month; one always-on service uses ~730. See `GUARDRAILS.md` §1.
 
-**Deploy order for a schema change:** migrate → deploy server → deploy Mini App.
-Migrations must be backward-compatible with the currently running server.
+**Deploying needs no local tooling.** The API service's build command runs
+`pnpm db:migrate && pnpm db:seed` after a successful build, Render generates
+`TELEGRAM_WEBHOOK_SECRET` and `CRON_SECRET` via `generateValue`, and the server
+registers its own Telegram webhook at boot (`ensureWebhook`, controlled by
+`AUTO_SET_WEBHOOK`). Only `BOT_TOKEN`, `ALLOWED_TELEGRAM_IDS` and
+`DATABASE_URL` are supplied by hand.
+
+Migrations run in the **build**, not at boot: a failed migration then fails the
+deploy loudly instead of leaving a half-working service serving traffic. Both
+commands are idempotent, so they are safe on every deploy.
+
+**Deploy order for a schema change:** migrations ship with the deploy that needs
+them, so they must be backward-compatible with the *currently running* server —
+the old version keeps serving until the new one passes its health check.
 
 ---
 

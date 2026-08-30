@@ -17,7 +17,7 @@ import { systemClock } from '@spendlygo/core';
 import { createDatabase } from '@spendlygo/db';
 import { loadConfig } from './config.js';
 import { createApp } from './app.js';
-import { configureBotMenu, createBot } from './bot/index.js';
+import { configureBotMenu, createBot, ensureWebhook } from './bot/index.js';
 import type { AppContext } from './context.js';
 import { describeError, logger, setLogLevel } from './logger.js';
 
@@ -64,6 +64,10 @@ async function main(): Promise<void> {
 
       await configureBotMenu(bot, ctx);
       logger.info('bot.menu_configured');
+
+      // Last, because it is what starts traffic flowing: everything above must
+      // be in place before Telegram is told where to deliver updates.
+      await ensureWebhook(bot, ctx);
     } catch (error) {
       logger.warn('bot.init_failed', { retryInMs: delayMs, ...describeError(error) });
       setTimeout(() => {

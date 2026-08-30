@@ -27,6 +27,14 @@ const envSchema = z.object({
   ALLOWED_TELEGRAM_IDS: z.string().default(''),
 
   DEFAULT_TIMEZONE: z.string().default('Asia/Singapore'),
+
+  // The server registers its own Telegram webhook at boot so deploying needs no
+  // local tooling. Set to "false" when a tunnel points a dev bot at localhost
+  // and you do not want the deployed URL overwritten.
+  AUTO_SET_WEBHOOK: z
+    .enum(['true', 'false'])
+    .default('true')
+    .transform((value) => value === 'true'),
 });
 
 export type Env = z.infer<typeof envSchema>;
@@ -44,6 +52,7 @@ export interface Config {
   /** Empty means "no allowlist". GUARDRAILS.md section 4 wants this populated. */
   allowedTelegramIds: ReadonlySet<bigint>;
   defaultTimezone: string;
+  autoSetWebhook: boolean;
   version: string;
 }
 
@@ -106,6 +115,7 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): Config {
     cronSecret: env.CRON_SECRET,
     allowedTelegramIds,
     defaultTimezone: env.DEFAULT_TIMEZONE,
+    autoSetWebhook: env.AUTO_SET_WEBHOOK,
     version: process.env.npm_package_version ?? '0.1.0',
   };
 }

@@ -60,6 +60,51 @@ export function createBot(ctx: AppContext): SpendlygoBot {
   return bot;
 }
 
+/** The webhook URL Telegram should deliver updates to, or null if we can't know it. */
+export function desiredWebhookUrl(ctx: AppContext): string | null {
+  const { serverUrl, autoSetWebhook } = ctx.config;
+  if (!autoSetWebhook) return null;
+  // Telegram only accepts HTTPS webhook URLs, so a local server cannot register.
+  if (!serverUrl?.startsWith('https://')) return null;
+  return `${serverUrl}/telegram/webhook`;
+}
+
+/**
+ * Register the webhook with Telegram from inside the running server.
+ *
+ * Deploying otherwise requires running a script with the bot token on a
+ * developer's machine. The server already knows its own URL and secret, so it
+ * can do this itself — which also self-heals if the secret is rotated, since
+ * `getWebhookInfo` never reveals the stored secret for us to compare against.
+ *
+ * Called once per boot, not per request.
+ */
+export async function ensureWebhook(bot: SpendlygoBot, ctx: AppContext): Promise<void> {
+  const url = desiredWebhookUrl(ctx);
+
+  if (!url) {
+    logger.info('webhook.autoset_skipped', {
+      reason: ctx.config.autoSetWebhook ? 'no_https_server_url' : 'disabled',
+    });
+    return;
+  }
+
+  await bot.api.setWebhook(url, {
+    secret_token: ctx.config.webhookSecret,
+    allowed_updates: ['message', 'callback_query', 'my_chat_member'],
+    // Never drop queued updates: a transaction logged while we were restarting
+    // must still arrive.
+    drop_pending_updates: false,
+  });
+
+  const info = await bot.api.getWebhookInfo();
+  logger.info('webhook.registered', {
+    url: info.url,
+    pending: info.pending_update_count,
+    lastError: info.last_error_message ?? null,
+  });
+}
+
 /**
  * One-time setup of the command menu and the chat menu button.
  *
