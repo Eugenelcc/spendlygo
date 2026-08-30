@@ -37,7 +37,6 @@ export function createBot(ctx: AppContext): SpendlygoBot {
   });
 
   bot.command('today', (botCtx) => handleToday(ctx, botCtx));
-  bot.command('month', (botCtx) => handleToday(ctx, botCtx));
   bot.command('budget', (botCtx) => handleBudget(ctx, botCtx));
   bot.command('recent', (botCtx) => handleRecent(ctx, botCtx));
   bot.command('undo', (botCtx) => handleUndoCommand(ctx, botCtx));
@@ -47,6 +46,24 @@ export function createBot(ctx: AppContext): SpendlygoBot {
   // GUARDRAILS section 10: every callback query gets an answer, including the
   // ones nothing above claimed, or the client spins forever.
   bot.on('callback_query', (botCtx) => botCtx.answerCallbackQuery());
+
+  /**
+   * Receipts are phase P6. Until then say so: a silent non-response would let
+   * someone believe their receipt was filed.
+   */
+  bot.on([':photo', ':document'], async (botCtx) => {
+    await botCtx.reply(
+      "I can't store receipts yet — that's still being built.\n\n" +
+        'You can log the amount though: `12.50 lunch`',
+      { parse_mode: 'Markdown' },
+    );
+  });
+
+  bot.on([':voice', ':audio', ':video_note'], async (botCtx) => {
+    await botCtx.reply("I can't listen to voice notes yet. Type it instead: `12.50 lunch`", {
+      parse_mode: 'Markdown',
+    });
+  });
 
   // Anything else: try to read it as a transaction (PRD F1).
   bot.on('message:text', async (botCtx) => {

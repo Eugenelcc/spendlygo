@@ -84,7 +84,9 @@ export function SettingsScreen({
         <label className="toggle">
           <span>
             Nightly summary at {String(user.digestHour).padStart(2, '0')}:00
-            <span className="toggle__hint">What you spent, and tomorrow's number</span>
+            <span className="toggle__hint">
+              Saves your preference — the message itself isn't sending yet
+            </span>
           </span>
           <input
             type="checkbox"
@@ -114,9 +116,7 @@ export function SettingsScreen({
         </div>
       </section>
 
-      <p className="footnote">
-        Your data is yours. Send <code>/export</code> to the bot for a CSV of everything.
-      </p>
+      <p className="footnote">Your data is yours — CSV export is on the way.</p>
     </div>
   );
 }
