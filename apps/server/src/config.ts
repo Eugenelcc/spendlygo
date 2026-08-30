@@ -19,8 +19,8 @@ const envSchema = z.object({
 
   DATABASE_URL: z.string().url('DATABASE_URL must be a Postgres connection string'),
 
-  MINIAPP_URL: z.string().url('MINIAPP_URL must be a full URL'),
-  SERVER_URL: z.string().url('SERVER_URL must be a full URL').optional(),
+  MINIAPP_URL: z.string().min(1, 'MINIAPP_URL is required'),
+  SERVER_URL: z.string().min(1).optional(),
 
   CRON_SECRET: z.string().min(16, 'CRON_SECRET must be at least 16 characters'),
 
@@ -45,6 +45,22 @@ export interface Config {
   allowedTelegramIds: ReadonlySet<bigint>;
   defaultTimezone: string;
   version: string;
+}
+
+/**
+ * Render's dashboard shows a service address as a bare host, and its
+ * `fromService` blueprint property returns `host:port`. Accepting both, rather
+ * than demanding a scheme, means a value pasted from Render cannot fail boot.
+ */
+function normaliseOrigin(value: string): string {
+  const trimmed = value.trim().replace(/\/+$/, '');
+  const withScheme = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+
+  try {
+    return new URL(withScheme).origin;
+  } catch {
+    throw new Error(`Not a usable URL or hostname: "${value}"`);
+  }
 }
 
 function formatIssues(error: z.ZodError): string {
@@ -85,8 +101,8 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): Config {
     botToken: env.BOT_TOKEN,
     webhookSecret: env.TELEGRAM_WEBHOOK_SECRET,
     databaseUrl: env.DATABASE_URL,
-    miniappUrl: env.MINIAPP_URL.replace(/\/$/, ''),
-    serverUrl: env.SERVER_URL?.replace(/\/$/, ''),
+    miniappUrl: normaliseOrigin(env.MINIAPP_URL),
+    serverUrl: env.SERVER_URL ? normaliseOrigin(env.SERVER_URL) : undefined,
     cronSecret: env.CRON_SECRET,
     allowedTelegramIds,
     defaultTimezone: env.DEFAULT_TIMEZONE,
