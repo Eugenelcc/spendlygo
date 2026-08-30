@@ -9,17 +9,17 @@ import { createApiRouter } from './api/index.js';
 import { createTasksRouter } from './tasks/tick.js';
 import { onError, onNotFound } from './middleware/errors.js';
 import { logger } from './logger.js';
+import type { RuntimeState } from './runtime-state.js';
 
 const bootedAt = Date.now();
 
 export interface CreateAppOptions {
   /**
-   * Whether grammY has fetched its bot info yet. The HTTP server starts before
-   * `bot.init()` resolves so that `/healthz` answers immediately — see
-   * src/index.ts — which means the webhook can receive an update while the bot
-   * is still initialising.
+   * Boot progress. The HTTP server starts before `bot.init()` resolves so that
+   * `/healthz` answers immediately — see src/index.ts — which means the webhook
+   * can receive an update while the bot is still initialising.
    */
-  isBotReady: () => boolean;
+  state: RuntimeState;
 }
 
 export function createApp(ctx: AppContext, bot: SpendlygoBot, options: CreateAppOptions): Hono {
@@ -41,6 +41,8 @@ export function createApp(ctx: AppContext, bot: SpendlygoBot, options: CreateApp
       status: 'ok',
       version: ctx.config.version,
       uptimeSeconds: Math.floor((Date.now() - bootedAt) / 1000),
+      bot: options.state.bot,
+      webhook: options.state.webhook,
     };
     return c.json(body);
   });
@@ -73,7 +75,7 @@ export function createApp(ctx: AppContext, bot: SpendlygoBot, options: CreateApp
       return c.json({ error: { code: 'unauthorized', message: 'Unauthorized' } }, 401);
     }
 
-    if (!options.isBotReady()) {
+    if (options.state.bot !== 'ready') {
       // 503 asks Telegram to redeliver rather than dropping the update. Losing
       // a transaction to a cold start would be a data-loss bug.
       logger.warn('webhook.not_ready');

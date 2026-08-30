@@ -20,6 +20,7 @@ import { createApp } from './app.js';
 import { configureBotMenu, createBot, ensureWebhook } from './bot/index.js';
 import type { AppContext } from './context.js';
 import { describeError, logger, setLogLevel } from './logger.js';
+import { createRuntimeState } from './runtime-state.js';
 import { isPermanentTelegramError } from './telegram/errors.js';
 
 const BOT_INIT_RETRY_MS = 5_000;
@@ -39,9 +40,9 @@ async function main(): Promise<void> {
   };
 
   const bot = createBot(ctx);
-  let botReady = false;
+  const state = createRuntimeState();
 
-  const app = createApp(ctx, bot, { isBotReady: () => botReady });
+  const app = createApp(ctx, bot, { state });
 
   const server = serve({ fetch: app.fetch, port: config.port }, (info) => {
     logger.info('server.listening', {
@@ -73,7 +74,7 @@ async function main(): Promise<void> {
       return;
     }
 
-    botReady = true;
+    state.bot = 'ready';
     logger.info('bot.ready', { username: bot.botInfo.username });
 
     configureBotMenu(bot, ctx)
@@ -95,13 +96,14 @@ async function main(): Promise<void> {
    */
   const registerWebhook = async (delayMs = BOT_INIT_RETRY_MS): Promise<void> => {
     try {
-      await ensureWebhook(bot, ctx);
+      state.webhook = await ensureWebhook(bot, ctx);
     } catch (error) {
       if (isPermanentTelegramError(error)) {
         logger.error('webhook.registration_rejected', {
           hint: 'Telegram refused this request and will keep refusing it. Fix the cause; retrying will not help.',
           ...describeError(error),
         });
+        state.webhook = 'rejected';
         return;
       }
 

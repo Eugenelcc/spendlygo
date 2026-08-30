@@ -48,10 +48,18 @@ export type ApiError = z.infer<typeof apiErrorSchema>;
 
 // --- GET /healthz -----------------------------------------------------------
 
+/**
+ * `bot` and `webhook` are in-memory flags, not live checks — `/healthz` must
+ * stay dependency-free (GUARDRAILS.md section 7). They exist so the state that
+ * usually requires reading deploy logs can be read from a browser instead.
+ * Deliberately free of URLs, tokens and counts, since this endpoint is public.
+ */
 export const healthResponseSchema = z.object({
   status: z.literal('ok'),
   version: z.string(),
   uptimeSeconds: z.number(),
+  bot: z.enum(['starting', 'ready']),
+  webhook: z.enum(['pending', 'registered', 'rejected', 'skipped']),
 });
 export type HealthResponse = z.infer<typeof healthResponseSchema>;
 
@@ -95,6 +103,133 @@ export const categoriesResponseSchema = z.object({
   categories: z.array(categorySchema),
 });
 export type CategoriesResponse = z.infer<typeof categoriesResponseSchema>;
+
+// --- transactions -----------------------------------------------------------
+
+export const transactionSchema = z.object({
+  id: z.string().uuid(),
+  direction: directionSchema,
+  amountCents: z.number().int().positive(),
+  note: z.string().nullable(),
+  occurredOn: isoDateSchema,
+  source: transactionSourceSchema,
+  createdAt: z.string().datetime(),
+  categoryId: z.string().uuid().nullable(),
+  categorySlug: z.string().nullable(),
+  categoryName: z.string().nullable(),
+  categoryEmoji: z.string().nullable(),
+  categoryColorToken: z.string().nullable(),
+});
+export type Transaction = z.infer<typeof transactionSchema>;
+
+export const createTransactionSchema = z.object({
+  direction: directionSchema,
+  amountCents: amountCentsSchema,
+  categoryId: z.string().uuid().nullable().optional(),
+  note: z.string().trim().max(280).nullable().optional(),
+  /** Defaults to today in the user's timezone when omitted. */
+  occurredOn: isoDateSchema.optional(),
+});
+export type CreateTransactionBody = z.infer<typeof createTransactionSchema>;
+
+export const updateTransactionSchema = createTransactionSchema.partial();
+export type UpdateTransactionBody = z.infer<typeof updateTransactionSchema>;
+
+export const transactionsResponseSchema = z.object({
+  transactions: z.array(transactionSchema),
+});
+export type TransactionsResponse = z.infer<typeof transactionsResponseSchema>;
+
+export const transactionResponseSchema = z.object({
+  transaction: transactionSchema,
+  /** The recalculated figure, so the client can animate straight to it. */
+  safeToSpend: z.lazy(() => safeToSpendSchema),
+});
+
+// --- safe to spend (F6) -----------------------------------------------------
+
+export const safeToSpendSchema = z.object({
+  hasBudget: z.boolean(),
+  budgetCents: z.number().int().nonnegative().nullable(),
+  spentMonthToDateCents: z.number().int().nonnegative(),
+  spentTodayCents: z.number().int().nonnegative(),
+  remainingCents: z.number().int(),
+  safeTodayCents: z.number().int().nonnegative(),
+  leftForTodayCents: z.number().int().nonnegative(),
+  overspentCents: z.number().int().nonnegative(),
+  daysRemaining: z.number().int().positive(),
+  dayOfMonth: z.number().int().positive(),
+  daysInMonth: z.number().int().positive(),
+  expectedSpendCents: z.number().int().nonnegative(),
+  projectedSpendCents: z.number().int().nonnegative(),
+  pace: paceSchema,
+  budgetUsedRatio: z.number().min(0).max(1),
+});
+export type SafeToSpend = z.infer<typeof safeToSpendSchema>;
+
+// --- GET /api/today ---------------------------------------------------------
+
+export const todayResponseSchema = z.object({
+  today: isoDateSchema,
+  currency: z.string(),
+  locale: z.string(),
+  safeToSpend: safeToSpendSchema,
+  monthIn: z.number().int().nonnegative(),
+  monthOut: z.number().int().nonnegative(),
+  transactions: z.array(transactionSchema),
+  /** Last 7 days including today, oldest first. For the sparkline. */
+  recentDays: z.array(z.object({ day: isoDateSchema, outCents: z.number().int().nonnegative() })),
+});
+export type TodayResponse = z.infer<typeof todayResponseSchema>;
+
+// --- GET /api/stats ---------------------------------------------------------
+
+export const statsPeriodSchema = z.enum(['day', 'month', 'year']);
+export type StatsPeriod = z.infer<typeof statsPeriodSchema>;
+
+export const statsResponseSchema = z.object({
+  period: statsPeriodSchema,
+  from: isoDateSchema,
+  to: isoDateSchema,
+  label: z.string(),
+  inCents: z.number().int().nonnegative(),
+  outCents: z.number().int().nonnegative(),
+  netCents: z.number().int(),
+  count: z.number().int().nonnegative(),
+  byCategory: z.array(
+    z.object({
+      categoryId: z.string().uuid().nullable(),
+      name: z.string(),
+      emoji: z.string(),
+      colorToken: z.string(),
+      outCents: z.number().int().nonnegative(),
+      count: z.number().int().nonnegative(),
+    }),
+  ),
+  /** Buckets across the period: hours for a day, days for a month, months for a year. */
+  series: z.array(
+    z.object({
+      label: z.string(),
+      key: z.string(),
+      outCents: z.number().int().nonnegative(),
+      inCents: z.number().int().nonnegative(),
+    }),
+  ),
+  /** The equivalent previous period, for the "vs last month" comparison. */
+  previousOutCents: z.number().int().nonnegative(),
+});
+export type StatsResponse = z.infer<typeof statsResponseSchema>;
+
+// --- PATCH /api/settings ----------------------------------------------------
+
+export const updateSettingsSchema = z.object({
+  monthlyBudgetCents: z.number().int().nonnegative().nullable().optional(),
+  timezone: z.string().min(1).optional(),
+  digestHour: z.number().int().min(0).max(23).optional(),
+  digestEnabled: z.boolean().optional(),
+  nudgeEnabled: z.boolean().optional(),
+});
+export type UpdateSettingsBody = z.infer<typeof updateSettingsSchema>;
 
 // --- POST /tasks/tick -------------------------------------------------------
 

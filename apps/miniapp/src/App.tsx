@@ -1,63 +1,63 @@
 import { useEffect, useMemo, useState, type JSX } from 'react';
-import type { CategoriesResponse, MeResponse } from '@spendlygo/shared';
-import { api, ApiRequestError } from './lib/api';
+import {
+  QueryClient,
+  QueryClientProvider,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query';
+import type { StatsPeriod, Transaction } from '@spendlygo/shared';
+import { api, ApiRequestError, setInitData } from './lib/api';
 import {
   applyThemeParams,
+  haptics,
   isInsideTelegram,
   retrieveLaunchParams,
+  signalReady,
   type LaunchParams,
 } from './lib/telegram';
+import { Capture } from './components/Capture';
+import { Sheet } from './components/Sheet';
+import { TodayScreen } from './screens/Today';
+import { StatsScreen } from './screens/Stats';
+import { HistoryScreen } from './screens/History';
+import { SettingsScreen } from './screens/Settings';
+import { formatMoney } from './lib/format';
 
-type LoadState =
-  | { status: 'loading' }
-  | { status: 'ready'; me: MeResponse; categories: CategoriesResponse }
-  | { status: 'error'; message: string };
+type Tab = 'today' | 'stats' | 'history' | 'settings';
 
-/**
- * Phase P0 — the connection screen.
- *
- * It exists to prove the full loop end to end: Telegram launch parameters are
- * read, initData reaches the server, the server verifies its signature, and a
- * real user row comes back. The Today screen in DESIGN.md section 7.1 replaces
- * this in phase P2.
- */
+const TABS: Array<{ id: Tab; label: string; icon: string }> = [
+  { id: 'today', label: 'Today', icon: '◎' },
+  { id: 'stats', label: 'Stats', icon: '◧' },
+  { id: 'history', label: 'History', icon: '≡' },
+  { id: 'settings', label: 'Settings', icon: '⚙' },
+];
+
+const client = new QueryClient({
+  defaultOptions: {
+    queries: {
+      // The free instance sleeps; a failed first request is usually a cold
+      // start rather than a real error, so retry patiently.
+      retry: 2,
+      retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 8000),
+      staleTime: 15_000,
+      refetchOnWindowFocus: true,
+    },
+  },
+});
+
 export function App(): JSX.Element {
   const launch = useMemo<LaunchParams>(() => retrieveLaunchParams(), []);
-  const [state, setState] = useState<LoadState>({ status: 'loading' });
 
   useEffect(() => {
     applyThemeParams(launch.themeParams, launch.colorScheme);
+    if (launch.initData) setInitData(launch.initData);
+    signalReady();
   }, [launch]);
-
-  useEffect(() => {
-    const initData = launch.initData;
-    if (!initData) return;
-
-    let cancelled = false;
-
-    void (async () => {
-      try {
-        const [me, categories] = await Promise.all([api.me(initData), api.categories(initData)]);
-        if (!cancelled) setState({ status: 'ready', me, categories });
-      } catch (error) {
-        if (cancelled) return;
-        const message =
-          error instanceof ApiRequestError
-            ? error.message
-            : 'Could not reach the server. Check your connection and try again.';
-        setState({ status: 'error', message });
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [launch.initData]);
 
   if (!isInsideTelegram(launch)) {
     return (
-      <main className="screen">
-        <Brand />
+      <main className="screen screen--center">
         <div className="empty">
           <div className="empty__emoji">💬</div>
           <div className="empty__title">Open this from Telegram</div>
@@ -70,113 +70,257 @@ export function App(): JSX.Element {
   }
 
   return (
-    <main className="screen">
-      <Brand />
+    <QueryClientProvider client={client}>
+      <Shell />
+    </QueryClientProvider>
+  );
+}
 
-      {state.status === 'loading' && (
+function Shell(): JSX.Element {
+  const queryClient = useQueryClient();
+  const [tab, setTab] = useState<Tab>('today');
+  const [captureOpen, setCaptureOpen] = useState(false);
+  const [selected, setSelected] = useState<Transaction | null>(null);
+  const [period, setPeriod] = useState<StatsPeriod>('month');
+  const [toast, setToast] = useState<string | null>(null);
+
+  const me = useQuery({ queryKey: ['me'], queryFn: api.me });
+  const categories = useQuery({ queryKey: ['categories'], queryFn: api.categories });
+  const today = useQuery({ queryKey: ['today'], queryFn: api.today });
+
+  const stats = useQuery({
+    queryKey: ['stats', period],
+    queryFn: () => api.stats(period),
+    enabled: tab === 'stats',
+  });
+
+  const history = useQuery({
+    queryKey: ['transactions'],
+    queryFn: () => api.transactions({ limit: 100 }),
+    enabled: tab === 'history',
+  });
+
+  /** Everything money-related is invalidated together — the figures interlock. */
+  const refreshAll = () => {
+    void queryClient.invalidateQueries({ queryKey: ['today'] });
+    void queryClient.invalidateQueries({ queryKey: ['transactions'] });
+    void queryClient.invalidateQueries({ queryKey: ['stats'] });
+    void queryClient.invalidateQueries({ queryKey: ['me'] });
+  };
+
+  const showToast = (message: string) => {
+    setToast(message);
+    window.setTimeout(() => setToast(null), 2600);
+  };
+
+  const create = useMutation({
+    mutationFn: api.createTransaction,
+    onSuccess: (result) => {
+      haptics.success();
+      setCaptureOpen(false);
+      refreshAll();
+      const money = formatMoney(result.transaction.amountCents, {
+        currency: me.data?.user.currency,
+        locale: me.data?.user.locale,
+      });
+      showToast(
+        result.safeToSpend.hasBudget
+          ? `Saved ${money} · ${formatMoney(result.safeToSpend.leftForTodayCents, {
+              currency: me.data?.user.currency,
+              locale: me.data?.user.locale,
+            })} left today`
+          : `Saved ${money}`,
+      );
+    },
+    onError: () => haptics.error(),
+  });
+
+  const remove = useMutation({
+    mutationFn: api.deleteTransaction,
+    onSuccess: () => {
+      haptics.rigid();
+      setSelected(null);
+      refreshAll();
+      showToast('Deleted');
+    },
+    onError: () => haptics.error(),
+  });
+
+  const settings = useMutation({
+    mutationFn: api.updateSettings,
+    onSuccess: () => {
+      haptics.success();
+      refreshAll();
+      showToast('Saved');
+    },
+    onError: () => haptics.error(),
+  });
+
+  if (me.isPending || today.isPending) {
+    return (
+      <main className="screen">
         <div className="card">
-          <div className="card__label">Connecting</div>
           <div className="skeleton" />
           <div className="skeleton" />
           <div className="skeleton skeleton--short" />
         </div>
-      )}
+      </main>
+    );
+  }
 
-      {state.status === 'error' && (
-        <div className="card">
-          <div className="status">
-            <span className="status__dot status__dot--error" />
-            Not connected
-          </div>
-          <p style={{ marginBottom: 0, color: 'var(--text-subtle)', fontSize: 15 }}>
-            {state.message}
-          </p>
+  if (me.isError || today.isError) {
+    const error = (me.error ?? today.error) as unknown;
+    const message =
+      error instanceof ApiRequestError
+        ? error.message
+        : "Couldn't reach the server. It may be waking up — try again in a moment.";
+
+    return (
+      <main className="screen screen--center">
+        <div className="empty">
+          <div className="empty__emoji">📡</div>
+          <div className="empty__title">Not connected</div>
+          <p className="empty__body">{message}</p>
+          <button
+            type="button"
+            className="primary primary--inline"
+            onClick={() => {
+              void me.refetch();
+              void today.refetch();
+            }}
+          >
+            Try again
+          </button>
         </div>
-      )}
+      </main>
+    );
+  }
 
-      {state.status === 'ready' && <Connected me={state.me} categories={state.categories} />}
-
-      <p className="footnote">Phase P0 · capture and statistics are on the way</p>
-    </main>
-  );
-}
-
-function Brand(): JSX.Element {
-  return (
-    <header className="brand">
-      <span className="brand__name">Spendlygo</span>
-      <span className="brand__version">preview</span>
-    </header>
-  );
-}
-
-function Connected({
-  me,
-  categories,
-}: {
-  me: MeResponse;
-  categories: CategoriesResponse;
-}): JSX.Element {
-  const expenseCategories = categories.categories.filter((c) => c.kind === 'expense');
-  const budget = me.user.monthlyBudgetCents;
+  const currency = me.data.user.currency;
+  const locale = me.data.user.locale;
 
   return (
     <>
-      <div className="card">
-        <div className="status">
-          <span className="status__dot status__dot--ok" />
-          Signed in as {me.user.firstName ?? 'you'}
-        </div>
-      </div>
+      <main className="app">
+        {tab === 'today' && (
+          <TodayScreen
+            data={today.data}
+            onSelectTransaction={setSelected}
+            onSetBudget={() => setTab('settings')}
+          />
+        )}
 
-      <div className="card card--stagger-1">
-        <div className="card__label">Account</div>
-        <div className="row">
-          <span className="row__key">Today</span>
-          <span className="row__value">{me.today}</span>
-        </div>
-        <div className="row">
-          <span className="row__key">Timezone</span>
-          <span className="row__value">{me.user.timezone}</span>
-        </div>
-        <div className="row">
-          <span className="row__key">Currency</span>
-          <span className="row__value">{me.user.currency}</span>
-        </div>
-        <div className="row">
-          <span className="row__key">Monthly budget</span>
-          <span className="row__value">
-            {budget === null
-              ? 'Not set yet'
-              : formatCents(budget, me.user.locale, me.user.currency)}
-          </span>
-        </div>
-      </div>
+        {tab === 'stats' && (
+          <StatsScreen
+            period={period}
+            onPeriodChange={setPeriod}
+            data={stats.data}
+            loading={stats.isPending}
+            currency={currency}
+            locale={locale}
+            today={today.data.today}
+          />
+        )}
 
-      <div className="card card--stagger-2">
-        <div className="card__label">Categories · {expenseCategories.length}</div>
-        <div className="chips">
-          {expenseCategories.map((category) => (
-            <span className="chip" key={category.id}>
-              <span aria-hidden="true">{category.emoji}</span>
-              {category.name}
+        {tab === 'history' && (
+          <HistoryScreen
+            transactions={history.data?.transactions ?? []}
+            loading={history.isPending}
+            currency={currency}
+            locale={locale}
+            today={today.data.today}
+            onSelect={setSelected}
+          />
+        )}
+
+        {tab === 'settings' && (
+          <SettingsScreen
+            me={me.data}
+            busy={settings.isPending}
+            onSaveBudget={(cents) => settings.mutate({ monthlyBudgetCents: cents })}
+            onToggleDigest={(enabled) => settings.mutate({ digestEnabled: enabled })}
+          />
+        )}
+      </main>
+
+      <button
+        type="button"
+        className="fab"
+        aria-label="Add a transaction"
+        onClick={() => {
+          haptics.press();
+          setCaptureOpen(true);
+        }}
+      >
+        +
+      </button>
+
+      <nav className="tabs" aria-label="Sections">
+        {TABS.map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            className={`tabs__item ${tab === item.id ? 'tabs__item--on' : ''}`}
+            aria-current={tab === item.id ? 'page' : undefined}
+            onClick={() => {
+              haptics.select();
+              setTab(item.id);
+            }}
+          >
+            <span className="tabs__icon" aria-hidden="true">
+              {item.icon}
             </span>
-          ))}
-        </div>
-      </div>
+            {item.label}
+          </button>
+        ))}
+      </nav>
+
+      <Sheet open={captureOpen} onClose={() => setCaptureOpen(false)} title="Add a transaction">
+        <Capture
+          categories={categories.data?.categories ?? []}
+          currency={currency}
+          locale={locale}
+          today={today.data.today}
+          busy={create.isPending}
+          error={
+            create.isError
+              ? create.error instanceof ApiRequestError
+                ? create.error.message
+                : "Couldn't save — tap to retry."
+              : null
+          }
+          onSubmit={(input) => create.mutate(input)}
+        />
+      </Sheet>
+
+      <Sheet open={selected !== null} onClose={() => setSelected(null)} title="Transaction">
+        {selected && (
+          <div className="detail">
+            <div className="detail__amount">
+              {selected.direction === 'in' ? '+' : '−'}
+              {formatMoney(selected.amountCents, { currency, locale })}
+            </div>
+            <div className="detail__meta">
+              {selected.categoryEmoji ?? '•'} {selected.categoryName ?? 'Uncategorised'} ·{' '}
+              {selected.occurredOn}
+            </div>
+            {selected.note && <p className="detail__note">{selected.note}</p>}
+            <button
+              type="button"
+              className="danger"
+              disabled={remove.isPending}
+              onClick={() => remove.mutate(selected.id)}
+            >
+              {remove.isPending ? 'Deleting…' : 'Delete'}
+            </button>
+            <p className="detail__hint">
+              Deleted entries stop counting immediately and are purged after 30 days.
+            </p>
+          </div>
+        )}
+      </Sheet>
+
+      {toast && <div className="toast">{toast}</div>}
     </>
   );
-}
-
-/**
- * Local formatter for the preview screen only. The shared `formatCents` in
- * @spendlygo/core becomes the single formatter once the Money component lands
- * in phase P2 (DESIGN.md section 8).
- */
-function formatCents(cents: number, locale: string, currency: string): string {
-  return new Intl.NumberFormat(locale, {
-    style: 'currency',
-    currency,
-    minimumFractionDigits: 0,
-  }).format(cents / 100);
 }

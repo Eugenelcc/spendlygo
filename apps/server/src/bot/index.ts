@@ -10,6 +10,8 @@ import type { AppContext } from '../context.js';
 import { describeError, logger } from '../logger.js';
 import { handleHelp } from './commands/help.js';
 import { handleStart } from './commands/start.js';
+import { handleBudget, handleRecent, handleToday, handleUndoCommand } from './commands/money.js';
+import { handleCapture, handleUndo, UNDO_PREFIX } from './capture.js';
 import { canLaunchMiniApp, openAppKeyboard } from './keyboards.js';
 import { allowlist, timing, withUser, type BotContext } from './middleware.js';
 
@@ -34,17 +36,50 @@ export function createBot(ctx: AppContext): SpendlygoBot {
     await botCtx.reply('Here you go:', { reply_markup: keyboard });
   });
 
-  // Any other slash command. Capture (PRD F1) lands in P1; until then, say so
-  // plainly rather than pretending to understand.
+  bot.command('today', (botCtx) => handleToday(ctx, botCtx));
+  bot.command('budget', (botCtx) => handleBudget(ctx, botCtx));
+  bot.command('recent', (botCtx) => handleRecent(ctx, botCtx));
+  bot.command('undo', (botCtx) => handleUndoCommand(ctx, botCtx));
+
+  bot.callbackQuery(new RegExp(`^${UNDO_PREFIX}`), (botCtx) => handleUndo(ctx, botCtx));
+
+  // GUARDRAILS section 10: every callback query gets an answer, including the
+  // ones nothing above claimed, or the client spins forever.
+  bot.on('callback_query', (botCtx) => botCtx.answerCallbackQuery());
+
+  /**
+   * Receipts are phase P6. Until then say so: a silent non-response would let
+   * someone believe their receipt was filed.
+   */
+  bot.on([':photo', ':document'], async (botCtx) => {
+    await botCtx.reply(
+      "I can't store receipts yet — that's still being built.\n\n" +
+        'You can log the amount though: `12.50 lunch`',
+      { parse_mode: 'Markdown' },
+    );
+  });
+
+  bot.on([':voice', ':audio', ':video_note'], async (botCtx) => {
+    await botCtx.reply("I can't listen to voice notes yet. Type it instead: `12.50 lunch`", {
+      parse_mode: 'Markdown',
+    });
+  });
+
+  // Anything else: try to read it as a transaction (PRD F1).
   bot.on('message:text', async (botCtx) => {
     const text = botCtx.message.text.trim();
+
     if (text.startsWith('/')) {
-      await botCtx.reply("I don't know that command yet. Try /help.");
+      await botCtx.reply("I don't know that command. Try /help.");
       return;
     }
+
+    const captured = await handleCapture(ctx, botCtx);
+    if (captured) return;
+
     await botCtx.reply(
-      "I can't log spending yet — quick-text capture is the next thing being built.\n" +
-        'Try /help to see what is coming.',
+      "I couldn't find an amount in that.\n\nTry `12.50 lunch` — amount first, then what it was for.",
+      { parse_mode: 'Markdown' },
     );
   });
 
@@ -79,14 +114,17 @@ export function desiredWebhookUrl(ctx: AppContext): string | null {
  *
  * Called once per boot, not per request.
  */
-export async function ensureWebhook(bot: SpendlygoBot, ctx: AppContext): Promise<void> {
+export async function ensureWebhook(
+  bot: SpendlygoBot,
+  ctx: AppContext,
+): Promise<'registered' | 'skipped'> {
   const url = desiredWebhookUrl(ctx);
 
   if (!url) {
     logger.info('webhook.autoset_skipped', {
       reason: ctx.config.autoSetWebhook ? 'no_https_server_url' : 'disabled',
     });
-    return;
+    return 'skipped';
   }
 
   await bot.api.setWebhook(url, {
@@ -103,6 +141,8 @@ export async function ensureWebhook(bot: SpendlygoBot, ctx: AppContext): Promise
     pending: info.pending_update_count,
     lastError: info.last_error_message ?? null,
   });
+
+  return 'registered';
 }
 
 /**
@@ -113,9 +153,13 @@ export async function ensureWebhook(bot: SpendlygoBot, ctx: AppContext): Promise
  */
 export async function configureBotMenu(bot: SpendlygoBot, ctx: AppContext): Promise<void> {
   await bot.api.setMyCommands([
-    { command: 'start', description: 'Get started' },
+    { command: 'today', description: "What's safe to spend today" },
     { command: 'app', description: 'Open Spendlygo' },
+    { command: 'budget', description: 'Show or set your monthly budget' },
+    { command: 'recent', description: 'Your last 10 entries' },
+    { command: 'undo', description: 'Undo the last entry' },
     { command: 'help', description: 'How to log a spend' },
+    { command: 'start', description: 'Start over' },
   ]);
 
   if (canLaunchMiniApp(ctx.config)) {
