@@ -88,7 +88,7 @@ export function createApp(ctx: AppContext, bot: SpendlygoBot, options: CreateApp
   });
 
   app.route('/api', createApiRouter(ctx));
-  app.route('/tasks', createTasksRouter(ctx));
+  app.route('/tasks', createTasksRouter(ctx, bot));
 
   app.get('/', (c) =>
     c.json({

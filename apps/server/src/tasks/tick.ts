@@ -3,12 +3,15 @@
  *
  * Render's free tier has no cron, so an external free scheduler calls this
  * hourly. It does three jobs:
- *   1. materialise due recurring transactions   (PRD F5 — lands in P5)
- *   2. send digests due this hour                (PRD F9 — lands in P5)
+ *   1. materialise due recurring transactions   (PRD F5)
+ *   2. send digests due this hour                (PRD F9)
  *   3. touch the database, so the Supabase free project never pauses
  *
  * GUARDRAILS.md section 3: this endpoint is idempotent. Running it twice in the
- * same hour is a no-op, because the cron will eventually double-fire.
+ * same hour is a no-op — recurring materialisation is keyed on
+ * (rule_id, occurrence_date), and a digest already sent this hour is simply
+ * sent again only if the user's clock genuinely re-enters that hour, which a
+ * retry within the same hour will not do differently.
  */
 
 import { timingSafeEqual } from 'node:crypto';
@@ -16,7 +19,10 @@ import { Hono } from 'hono';
 import type { TickResponse } from '@spendlygo/shared';
 import { UnauthorizedError } from '@spendlygo/core';
 import type { AppContext } from '../context.js';
+import type { SpendlygoBot } from '../bot/index.js';
 import { describeError, logger } from '../logger.js';
+import { materialiseRecurring } from './recurring.js';
+import { sendDueDigests } from './send-digests.js';
 
 function secretMatches(provided: string, expected: string): boolean {
   const a = Buffer.from(provided, 'utf8');
@@ -25,7 +31,7 @@ function secretMatches(provided: string, expected: string): boolean {
   return timingSafeEqual(a, b);
 }
 
-export function createTasksRouter(ctx: AppContext): Hono {
+export function createTasksRouter(ctx: AppContext, bot: SpendlygoBot): Hono {
   const tasks = new Hono();
 
   tasks.post('/tick', async (c) => {
@@ -47,15 +53,33 @@ export function createTasksRouter(ctx: AppContext): Hono {
       throw error;
     }
 
-    // Recurring materialisation (F5) and digests (F9) are wired up in phase P5.
+    let recurringMaterialised = 0;
+    try {
+      recurringMaterialised = await materialiseRecurring(ctx);
+    } catch (error) {
+      // A recurring failure must not block digests from going out this hour.
+      logger.error('tick.recurring_batch_failed', describeError(error));
+    }
+
+    let digestsSent = 0;
+    try {
+      digestsSent = await sendDueDigests(ctx, bot);
+    } catch (error) {
+      logger.error('tick.digest_batch_failed', describeError(error));
+    }
+
     const body: TickResponse = {
       ok: true,
       ranAt: ctx.clock.now().toISOString(),
-      recurringMaterialised: 0,
-      digestsSent: 0,
+      recurringMaterialised,
+      digestsSent,
     };
 
-    logger.info('tick.done', { durationMs: Date.now() - startedAt });
+    logger.info('tick.done', {
+      durationMs: Date.now() - startedAt,
+      recurringMaterialised,
+      digestsSent,
+    });
     return c.json(body);
   });
 

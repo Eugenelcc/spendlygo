@@ -231,6 +231,50 @@ export const updateSettingsSchema = z.object({
 });
 export type UpdateSettingsBody = z.infer<typeof updateSettingsSchema>;
 
+// --- recurring rules (F5) ----------------------------------------------------
+
+export const recurringRuleSchema = z.object({
+  id: z.string().uuid(),
+  direction: directionSchema,
+  amountCents: z.number().int().positive(),
+  categoryId: z.string().uuid().nullable(),
+  categoryName: z.string().nullable(),
+  categoryEmoji: z.string().nullable(),
+  note: z.string().nullable(),
+  cadence: cadenceSchema,
+  anchorDate: isoDateSchema,
+  dayOfMonth: z.number().int().min(1).max(31).nullable(),
+  endDate: isoDateSchema.nullable(),
+  lastRunOn: isoDateSchema.nullable(),
+  active: z.boolean(),
+});
+export type RecurringRule = z.infer<typeof recurringRuleSchema>;
+
+export const createRecurringRuleSchema = z
+  .object({
+    direction: directionSchema,
+    amountCents: amountCentsSchema,
+    categoryId: z.string().uuid().nullable().optional(),
+    note: z.string().trim().max(280).nullable().optional(),
+    cadence: cadenceSchema,
+    anchorDate: isoDateSchema,
+    dayOfMonth: z.number().int().min(1).max(31).nullable().optional(),
+    endDate: isoDateSchema.nullable().optional(),
+  })
+  .refine(
+    (value) =>
+      value.cadence === 'monthly' || value.cadence === 'yearly'
+        ? value.dayOfMonth !== null && value.dayOfMonth !== undefined
+        : true,
+    { message: 'dayOfMonth is required for monthly and yearly rules', path: ['dayOfMonth'] },
+  );
+export type CreateRecurringRuleBody = z.infer<typeof createRecurringRuleSchema>;
+
+export const recurringRulesResponseSchema = z.object({
+  rules: z.array(recurringRuleSchema),
+});
+export type RecurringRulesResponse = z.infer<typeof recurringRulesResponseSchema>;
+
 // --- POST /tasks/tick -------------------------------------------------------
 
 export const tickResponseSchema = z.object({

@@ -43,11 +43,11 @@ P1 capture    ██████████ done
 P2 mini app   ██████████ done
 P3 goals      ██████████ done
 P4 stats      ██████████ done
-P5 automation ░░░░░░░░░░  recurring transactions, daily digest
+P5 automation ██████████ done
 P6 polish     ░░░░░░░░░░  photos, CSV export
 ```
 
-245 tests, initial Mini App bundle 77 KB gzipped.
+277 tests, initial Mini App bundle 78 KB gzipped.
 
 ## Running it locally
 

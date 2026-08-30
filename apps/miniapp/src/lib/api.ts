@@ -1,7 +1,9 @@
 import type {
   CategoriesResponse,
+  CreateRecurringRuleBody,
   CreateTransactionBody,
   MeResponse,
+  RecurringRulesResponse,
   SafeToSpend,
   StatsResponse,
   TodayResponse,
@@ -103,4 +105,15 @@ export const api = {
       method: 'PATCH',
       body: JSON.stringify(body),
     }),
+
+  recurringRules: () => request<RecurringRulesResponse>('/api/recurring'),
+
+  createRecurringRule: (body: CreateRecurringRuleBody) =>
+    request<{ rule: RecurringRulesResponse['rules'][number] }>('/api/recurring', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  deleteRecurringRule: (id: string) =>
+    request<{ ok: true }>(`/api/recurring/${id}`, { method: 'DELETE' }),
 };

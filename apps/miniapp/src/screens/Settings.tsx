@@ -1,5 +1,6 @@
 import { useState, type JSX } from 'react';
-import type { MeResponse } from '@spendlygo/shared';
+import type { Cadence, Category, Direction, MeResponse, RecurringRule } from '@spendlygo/shared';
+import { RecurringForm } from '../components/RecurringForm';
 import { formatMoney } from '../lib/format';
 import { haptics } from '../lib/telegram';
 
@@ -8,18 +9,48 @@ export interface SettingsScreenProps {
   busy: boolean;
   onSaveBudget: (cents: number | null) => void;
   onToggleDigest: (enabled: boolean) => void;
+  categories: Category[];
+  today: string;
+  recurringRules: RecurringRule[];
+  recurringLoading: boolean;
+  recurringBusy: boolean;
+  onAddRecurring: (input: {
+    direction: Direction;
+    amountCents: number;
+    categoryId: string | null;
+    note: string | null;
+    cadence: Cadence;
+    anchorDate: string;
+    dayOfMonth: number | null;
+  }) => void;
+  onDeleteRecurring: (id: string) => void;
 }
+
+const CADENCE_LABEL: Record<Cadence, string> = {
+  daily: 'day',
+  weekly: 'week',
+  monthly: 'month',
+  yearly: 'year',
+};
 
 export function SettingsScreen({
   me,
   busy,
   onSaveBudget,
   onToggleDigest,
+  categories,
+  today,
+  recurringRules,
+  recurringLoading,
+  recurringBusy,
+  onAddRecurring,
+  onDeleteRecurring,
 }: SettingsScreenProps): JSX.Element {
   const { user } = me;
   const [draft, setDraft] = useState(
     user.monthlyBudgetCents === null ? '' : String(user.monthlyBudgetCents / 100),
   );
+  const [addingRecurring, setAddingRecurring] = useState(false);
 
   const parsed = Number(draft.replace(/,/g, ''));
   const valid = draft.trim() !== '' && Number.isFinite(parsed) && parsed >= 0;
@@ -98,6 +129,81 @@ export function SettingsScreen({
           />
           <span className="toggle__track" aria-hidden="true" />
         </label>
+      </section>
+
+      <section className="card">
+        <div className="card__head">
+          <span className="card__label">Recurring</span>
+          {!addingRecurring && (
+            <button
+              type="button"
+              className="link"
+              onClick={() => {
+                haptics.tap();
+                setAddingRecurring(true);
+              }}
+            >
+              + Add
+            </button>
+          )}
+        </div>
+
+        {addingRecurring ? (
+          <RecurringForm
+            categories={categories}
+            currency={user.currency}
+            locale={user.locale}
+            today={today}
+            busy={recurringBusy}
+            onCancel={() => setAddingRecurring(false)}
+            onSubmit={(input) => {
+              onAddRecurring(input);
+              setAddingRecurring(false);
+            }}
+          />
+        ) : recurringLoading ? (
+          <div className="skeleton" />
+        ) : recurringRules.length === 0 ? (
+          <p className="card__prose">
+            Rent, salary, subscriptions — anything that happens on its own. Nothing set up yet.
+          </p>
+        ) : (
+          <div className="recur-list">
+            {recurringRules.map((rule) => (
+              <div className="recur-row" key={rule.id}>
+                <span className="recur-row__emoji" aria-hidden="true">
+                  {rule.categoryEmoji ?? (rule.direction === 'in' ? '💰' : '🔁')}
+                </span>
+                <span className="recur-row__body">
+                  <span className="recur-row__label">
+                    {rule.note ?? rule.categoryName ?? 'Recurring'}
+                  </span>
+                  <span className="recur-row__meta">
+                    every {CADENCE_LABEL[rule.cadence]}
+                    {rule.dayOfMonth ? ` · day ${rule.dayOfMonth}` : ''}
+                  </span>
+                </span>
+                <span
+                  className={`recur-row__amount ${rule.direction === 'in' ? 'txn__amount--in' : ''}`}
+                >
+                  {rule.direction === 'in' ? '+' : '−'}
+                  {formatMoney(rule.amountCents, { currency: user.currency, locale: user.locale })}
+                </span>
+                <button
+                  type="button"
+                  className="recur-row__remove"
+                  aria-label={`Stop ${rule.note ?? 'this recurring transaction'}`}
+                  onClick={() => {
+                    haptics.rigid();
+                    onDeleteRecurring(rule.id);
+                  }}
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
       </section>
 
       <section className="card">

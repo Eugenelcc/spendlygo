@@ -100,6 +100,12 @@ function Shell(): JSX.Element {
     enabled: tab === 'history',
   });
 
+  const recurring = useQuery({
+    queryKey: ['recurring'],
+    queryFn: api.recurringRules,
+    enabled: tab === 'settings',
+  });
+
   /** Everything money-related is invalidated together — the figures interlock. */
   const refreshAll = () => {
     void queryClient.invalidateQueries({ queryKey: ['today'] });
@@ -152,6 +158,26 @@ function Shell(): JSX.Element {
       haptics.success();
       refreshAll();
       showToast('Saved');
+    },
+    onError: () => haptics.error(),
+  });
+
+  const addRecurring = useMutation({
+    mutationFn: api.createRecurringRule,
+    onSuccess: () => {
+      haptics.success();
+      void queryClient.invalidateQueries({ queryKey: ['recurring'] });
+      showToast('Recurring transaction added');
+    },
+    onError: () => haptics.error(),
+  });
+
+  const deleteRecurring = useMutation({
+    mutationFn: api.deleteRecurringRule,
+    onSuccess: () => {
+      haptics.rigid();
+      void queryClient.invalidateQueries({ queryKey: ['recurring'] });
+      showToast('Stopped');
     },
     onError: () => haptics.error(),
   });
@@ -239,6 +265,13 @@ function Shell(): JSX.Element {
             busy={settings.isPending}
             onSaveBudget={(cents) => settings.mutate({ monthlyBudgetCents: cents })}
             onToggleDigest={(enabled) => settings.mutate({ digestEnabled: enabled })}
+            categories={categories.data?.categories ?? []}
+            today={today.data.today}
+            recurringRules={recurring.data?.rules ?? []}
+            recurringLoading={recurring.isPending}
+            recurringBusy={addRecurring.isPending || deleteRecurring.isPending}
+            onAddRecurring={(input) => addRecurring.mutate(input)}
+            onDeleteRecurring={(id) => deleteRecurring.mutate(id)}
           />
         )}
       </main>

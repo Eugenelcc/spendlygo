@@ -3,6 +3,7 @@ export * as schema from './schema.js';
 export * as usersRepo from './repositories/users.js';
 export * as categoriesRepo from './repositories/categories.js';
 export * as transactionsRepo from './repositories/transactions.js';
+export * as recurringRepo from './repositories/recurring.js';
 export type {
   User,
   NewUser,
@@ -16,4 +17,5 @@ export type {
   NewRecurringRule,
   BudgetPeriod,
   EventRow,
+  RecurringRun,
 } from './schema.js';

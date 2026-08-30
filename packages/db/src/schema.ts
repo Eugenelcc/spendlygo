@@ -287,3 +287,4 @@ export type RecurringRule = typeof recurringRules.$inferSelect;
 export type NewRecurringRule = typeof recurringRules.$inferInsert;
 export type BudgetPeriod = typeof budgetPeriods.$inferSelect;
 export type EventRow = typeof events.$inferSelect;
+export type RecurringRun = typeof recurringRuns.$inferSelect;

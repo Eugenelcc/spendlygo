@@ -12,14 +12,22 @@ import {
   yearRange,
   type IsoDate,
 } from '@spendlygo/core';
-import { categoriesRepo, transactionsRepo, usersRepo } from '@spendlygo/db';
 import {
+  categoriesRepo,
+  recurringRepo,
+  transactionsRepo,
+  usersRepo,
+  type RecurringRule as DbRecurringRule,
+} from '@spendlygo/db';
+import {
+  createRecurringRuleSchema,
   createTransactionSchema,
   statsPeriodSchema,
   updateSettingsSchema,
   updateTransactionSchema,
   type CategoriesResponse,
   type MeResponse,
+  type RecurringRulesResponse,
   type SafeToSpend,
   type StatsResponse,
   type TodayResponse,
@@ -276,7 +284,74 @@ export function createApiRouter(ctx: AppContext): Hono<ApiEnv> {
     return c.json(body);
   });
 
+  // --- recurring rules (F5) --------------------------------------------------
+
+  api.get('/recurring', async (c) => {
+    const user = c.get('user');
+    const [rules, categories] = await Promise.all([
+      recurringRepo.listActiveForUser(ctx.db, user.id),
+      categoriesRepo.listForUser(ctx.db, user.id, { includeArchived: true }),
+    ]);
+    const categoryById = new Map(categories.map((cat) => [cat.id, cat]));
+
+    const body: RecurringRulesResponse = {
+      rules: rules.map((rule) => toApiRule(rule, categoryById)),
+    };
+    return c.json(body);
+  });
+
+  api.post('/recurring', async (c) => {
+    const user = c.get('user');
+    const input = await parseBody(c, createRecurringRuleSchema);
+
+    const created = await recurringRepo.create(ctx.db, {
+      userId: user.id,
+      direction: input.direction,
+      amountCents: input.amountCents,
+      categoryId: input.categoryId ?? null,
+      note: input.note ?? null,
+      cadence: input.cadence,
+      anchorDate: input.anchorDate,
+      dayOfMonth: input.dayOfMonth ?? null,
+      endDate: input.endDate ?? null,
+    });
+
+    const categories = await categoriesRepo.listForUser(ctx.db, user.id, { includeArchived: true });
+    const categoryById = new Map(categories.map((cat) => [cat.id, cat]));
+
+    return c.json({ rule: toApiRule(created, categoryById) }, 201);
+  });
+
+  api.delete('/recurring/:id', async (c) => {
+    const user = c.get('user');
+    const deleted = await recurringRepo.deactivate(ctx.db, user.id, c.req.param('id'));
+    if (!deleted) throw new NotFoundError('No such recurring rule');
+    return c.json({ ok: true });
+  });
+
   return api;
+}
+
+function toApiRule(
+  rule: DbRecurringRule,
+  categoryById: Map<string, { name: string; emoji: string }>,
+): RecurringRulesResponse['rules'][number] {
+  const category = rule.categoryId ? categoryById.get(rule.categoryId) : undefined;
+  return {
+    id: rule.id,
+    direction: rule.direction,
+    amountCents: rule.amountCents,
+    categoryId: rule.categoryId,
+    categoryName: category?.name ?? null,
+    categoryEmoji: category?.emoji ?? null,
+    note: rule.note,
+    cadence: rule.cadence,
+    anchorDate: rule.anchorDate,
+    dayOfMonth: rule.dayOfMonth,
+    endDate: rule.endDate,
+    lastRunOn: rule.lastRunOn,
+    active: rule.active,
+  };
 }
 
 async function guessCategoryId(
