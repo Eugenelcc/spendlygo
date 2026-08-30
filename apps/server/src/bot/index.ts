@@ -79,14 +79,17 @@ export function desiredWebhookUrl(ctx: AppContext): string | null {
  *
  * Called once per boot, not per request.
  */
-export async function ensureWebhook(bot: SpendlygoBot, ctx: AppContext): Promise<void> {
+export async function ensureWebhook(
+  bot: SpendlygoBot,
+  ctx: AppContext,
+): Promise<'registered' | 'skipped'> {
   const url = desiredWebhookUrl(ctx);
 
   if (!url) {
     logger.info('webhook.autoset_skipped', {
       reason: ctx.config.autoSetWebhook ? 'no_https_server_url' : 'disabled',
     });
-    return;
+    return 'skipped';
   }
 
   await bot.api.setWebhook(url, {
@@ -103,6 +106,8 @@ export async function ensureWebhook(bot: SpendlygoBot, ctx: AppContext): Promise
     pending: info.pending_update_count,
     lastError: info.last_error_message ?? null,
   });
+
+  return 'registered';
 }
 
 /**

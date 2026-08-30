@@ -13,7 +13,11 @@ import { Bot } from 'grammy';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { fixedClock } from '@spendlygo/core';
-import { categoriesResponseSchema, meResponseSchema } from '@spendlygo/shared';
+import {
+  categoriesResponseSchema,
+  healthResponseSchema,
+  meResponseSchema,
+} from '@spendlygo/shared';
 import { createDatabase, schema, type DatabaseHandle } from '@spendlygo/db';
 import { createApp } from './app.js';
 import type { Config } from './config.js';
@@ -81,7 +85,7 @@ describeIfDb('HTTP surface', () => {
     // grammY does not contact Telegram until an update is dispatched, so an
     // uninitialised bot is fine for testing the surrounding HTTP layer.
     return createApp(ctx, new Bot(BOT_TOKEN, { botInfo: undefined as never }), {
-      isBotReady: () => true,
+      state: { bot: 'ready', webhook: 'registered' },
     });
   };
 
@@ -104,7 +108,29 @@ describeIfDb('HTTP surface', () => {
     it('answers without touching the database', async () => {
       const response = await buildApp(makeConfig()).request('/healthz');
       expect(response.status).toBe(200);
-      expect(await response.json()).toMatchObject({ status: 'ok', version: 'test' });
+      expect(healthResponseSchema.parse(await response.json())).toMatchObject({
+        status: 'ok',
+        version: 'test',
+      });
+    });
+
+    it('reports boot progress, so "the bot does nothing" is diagnosable from a URL', async () => {
+      const ctx: AppContext = {
+        config: makeConfig(),
+        db: handle.db,
+        dbHandle: handle,
+        clock: fixedClock(NOW),
+      };
+      const app = createApp(ctx, new Bot(BOT_TOKEN, { botInfo: undefined as never }), {
+        state: { bot: 'starting', webhook: 'rejected' },
+      });
+
+      const body = healthResponseSchema.parse(await (await app.request('/healthz')).json());
+      expect(body.bot).toBe('starting');
+      expect(body.webhook).toBe('rejected');
+      // Still 200: the service is up and must keep passing Render's health
+      // check while the bot is still coming up.
+      expect(body.status).toBe('ok');
     });
   });
 

@@ -48,10 +48,18 @@ export type ApiError = z.infer<typeof apiErrorSchema>;
 
 // --- GET /healthz -----------------------------------------------------------
 
+/**
+ * `bot` and `webhook` are in-memory flags, not live checks — `/healthz` must
+ * stay dependency-free (GUARDRAILS.md section 7). They exist so the state that
+ * usually requires reading deploy logs can be read from a browser instead.
+ * Deliberately free of URLs, tokens and counts, since this endpoint is public.
+ */
 export const healthResponseSchema = z.object({
   status: z.literal('ok'),
   version: z.string(),
   uptimeSeconds: z.number(),
+  bot: z.enum(['starting', 'ready']),
+  webhook: z.enum(['pending', 'registered', 'rejected', 'skipped']),
 });
 export type HealthResponse = z.infer<typeof healthResponseSchema>;
 
