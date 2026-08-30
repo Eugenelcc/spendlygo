@@ -20,6 +20,7 @@ import { createApp } from './app.js';
 import { configureBotMenu, createBot, ensureWebhook } from './bot/index.js';
 import type { AppContext } from './context.js';
 import { describeError, logger, setLogLevel } from './logger.js';
+import { isPermanentTelegramError } from './telegram/errors.js';
 
 const BOT_INIT_RETRY_MS = 5_000;
 const BOT_INIT_MAX_RETRY_MS = 60_000;
@@ -55,23 +56,61 @@ async function main(): Promise<void> {
    * grammY needs its bot info before it can dispatch webhook updates. Retry
    * with backoff instead of exiting: a transient Telegram outage should leave
    * the service up and answering health checks, not take it down.
+   *
+   * Only `bot.init()` is retried here. Menu setup and webhook registration are
+   * separate best-effort steps, because re-running the whole sequence for a
+   * failure in the last stage means re-fetching bot info and rewriting the
+   * command menu on every attempt — wasted calls against Telegram's rate limit.
    */
   const initBot = async (delayMs = BOT_INIT_RETRY_MS): Promise<void> => {
     try {
       await bot.init();
-      botReady = true;
-      logger.info('bot.ready', { username: bot.botInfo.username });
-
-      await configureBotMenu(bot, ctx);
-      logger.info('bot.menu_configured');
-
-      // Last, because it is what starts traffic flowing: everything above must
-      // be in place before Telegram is told where to deliver updates.
-      await ensureWebhook(bot, ctx);
     } catch (error) {
       logger.warn('bot.init_failed', { retryInMs: delayMs, ...describeError(error) });
       setTimeout(() => {
         void initBot(Math.min(delayMs * 2, BOT_INIT_MAX_RETRY_MS));
+      }, delayMs).unref();
+      return;
+    }
+
+    botReady = true;
+    logger.info('bot.ready', { username: bot.botInfo.username });
+
+    configureBotMenu(bot, ctx)
+      .then(() => logger.info('bot.menu_configured'))
+      .catch((error) => logger.warn('bot.menu_setup_failed', describeError(error)));
+
+    // Last, because it starts traffic flowing: the server must be ready to
+    // handle updates before Telegram is told where to deliver them.
+    void registerWebhook();
+  };
+
+  /**
+   * Webhook registration, retried only when retrying could help.
+   *
+   * A 4xx from `setWebhook` means the request itself is wrong — a malformed URL,
+   * an illegal secret token — and will fail identically forever. Retrying it
+   * every minute just buries the real error in a scrolling log, so we surface it
+   * once, loudly, and stop.
+   */
+  const registerWebhook = async (delayMs = BOT_INIT_RETRY_MS): Promise<void> => {
+    try {
+      await ensureWebhook(bot, ctx);
+    } catch (error) {
+      if (isPermanentTelegramError(error)) {
+        logger.error('webhook.registration_rejected', {
+          hint: 'Telegram refused this request and will keep refusing it. Fix the cause; retrying will not help.',
+          ...describeError(error),
+        });
+        return;
+      }
+
+      logger.warn('webhook.registration_failed', {
+        retryInMs: delayMs,
+        ...describeError(error),
+      });
+      setTimeout(() => {
+        void registerWebhook(Math.min(delayMs * 2, BOT_INIT_MAX_RETRY_MS));
       }, delayMs).unref();
     }
   };

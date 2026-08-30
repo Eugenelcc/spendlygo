@@ -54,7 +54,7 @@ function makeConfig(overrides: Partial<Config> = {}): Config {
     isProduction: false,
     port: 0,
     botToken: BOT_TOKEN,
-    webhookSecret: WEBHOOK_SECRET,
+    webhookSecretToken: WEBHOOK_SECRET,
     databaseUrl: TEST_DATABASE_URL ?? '',
     miniappUrl: MINIAPP_URL,
     serverUrl: undefined,

@@ -6,6 +6,7 @@
  * `process.env` everywhere else in this app.
  */
 
+import { createHash } from 'node:crypto';
 import { z } from 'zod';
 
 const envSchema = z.object({
@@ -44,7 +45,12 @@ export interface Config {
   isProduction: boolean;
   port: number;
   botToken: string;
-  webhookSecret: string;
+  /**
+   * The value sent to Telegram as `secret_token` and compared against the
+   * `X-Telegram-Bot-Api-Secret-Token` header. Derived — see
+   * `deriveTelegramSecretToken`, and never equal to the configured secret.
+   */
+  webhookSecretToken: string;
   databaseUrl: string;
   miniappUrl: string;
   serverUrl: string | undefined;
@@ -70,6 +76,33 @@ function normaliseOrigin(value: string): string {
   } catch {
     throw new Error(`Not a usable URL or hostname: "${value}"`);
   }
+}
+
+/** Telegram's rule for `secret_token`: 1-256 chars of A-Z, a-z, 0-9, _ and -. */
+const TELEGRAM_SECRET_TOKEN_PATTERN = /^[A-Za-z0-9_-]{1,256}$/;
+
+/**
+ * Turn any configured secret into one Telegram will accept.
+ *
+ * Telegram rejects a `secret_token` containing anything outside
+ * `[A-Za-z0-9_-]`, and Render's `generateValue` produces base64-style values
+ * that routinely include `+`, `/` or `=`. Rather than push that constraint
+ * onto whoever sets the variable — which would mean generating secrets by hand
+ * again — we hash it. SHA-256 hex is 64 characters drawn from `[0-9a-f]`, so
+ * the result is always legal, always the same for a given input, and needs no
+ * storage.
+ *
+ * The configured secret itself is therefore never sent to Telegram, which is a
+ * small bonus: what crosses the wire is a hash of it.
+ */
+export function deriveTelegramSecretToken(secret: string): string {
+  const token = createHash('sha256').update(secret, 'utf8').digest('hex');
+
+  /* c8 ignore next 3 -- unreachable: hex output always matches the pattern. */
+  if (!TELEGRAM_SECRET_TOKEN_PATTERN.test(token)) {
+    throw new Error('Derived Telegram secret token is not URL-safe');
+  }
+  return token;
 }
 
 function formatIssues(error: z.ZodError): string {
@@ -108,7 +141,7 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): Config {
     isProduction: env.NODE_ENV === 'production',
     port: env.PORT,
     botToken: env.BOT_TOKEN,
-    webhookSecret: env.TELEGRAM_WEBHOOK_SECRET,
+    webhookSecretToken: deriveTelegramSecretToken(env.TELEGRAM_WEBHOOK_SECRET),
     databaseUrl: env.DATABASE_URL,
     miniappUrl: normaliseOrigin(env.MINIAPP_URL),
     serverUrl: env.SERVER_URL ? normaliseOrigin(env.SERVER_URL) : undefined,

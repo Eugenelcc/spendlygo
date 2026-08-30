@@ -278,5 +278,7 @@ the old version keeps serving until the new one passes its health check.
 | React 19 removed the global `JSX` namespace | `import type { JSX } from 'react'` |
 | pnpm runs each script with its own package as cwd | A plain `dotenv/config` would read `packages/db/.env` for migrations and `apps/server/.env` for the bot. Every script resolves the **root** `.env` explicitly |
 | Render's `fromService` returns `host:port`, never a URL | No scheme, so it fails URL validation and makes the Mini App fetch a relative path. Config normalises a bare host; `render.yaml` uses literals |
+| Telegram's `secret_token` charset | Only `A-Za-z0-9_-`. Render's `generateValue` emits base64 with `+/=`, so `setWebhook` returns `400: secret token contains illegal characters`. Config hashes the configured secret to a hex token that is always legal — so what we send Telegram is never the raw value |
+| Retrying a Telegram 4xx | A malformed request fails identically forever. `isPermanentTelegramError` stops the loop and logs once, loudly; 429 stays retryable because it asks us to retry |
 | Postgres NOTICEs on re-migration | `CREATE ... IF NOT EXISTS` for drizzle's bookkeeping logs a NOTICE object every run. Suppress with `onnotice` or it reads like a failed migration |
 | Drizzle 0.38 has no `.nullsNotDistinct()` on the index builder | Use a partial unique index with `.where()` instead |

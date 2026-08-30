@@ -23,7 +23,7 @@ const url = `${config.serverUrl}/telegram/webhook`;
 const bot = new Bot(config.botToken);
 
 await bot.api.setWebhook(url, {
-  secret_token: config.webhookSecret,
+  secret_token: config.webhookSecretToken,
   allowed_updates: ['message', 'callback_query', 'my_chat_member'],
   drop_pending_updates: false,
 });
