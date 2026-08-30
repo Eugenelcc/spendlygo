@@ -73,7 +73,9 @@ services:
   - type: web
     name: spendlygo-app
     runtime: static
-    plan: free
+    # No `plan` here. Static sites have no instance plans at all — they are
+    # always free and unmetered — and declaring one fails blueprint validation
+    # with "no such plan free for service type web".
     branch: main
     buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm --filter @spendlygo/miniapp build
     staticPublishPath: apps/miniapp/dist

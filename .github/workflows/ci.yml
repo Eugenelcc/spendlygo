@@ -50,6 +50,9 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      - name: Validate the Render blueprint
+        run: node scripts/check-render-blueprint.mjs
+
       - name: Typecheck
         run: pnpm typecheck
 
