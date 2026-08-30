@@ -10,7 +10,7 @@ function contextWith(overrides: Partial<Config>): AppContext {
     isProduction: true,
     port: 3000,
     botToken: '111111:token',
-    webhookSecret: 'secret-secret-secret',
+    webhookSecretToken: 'secret-secret-secret',
     databaseUrl: 'postgresql://localhost/db',
     miniappUrl: 'https://spendlygo-app.onrender.com',
     serverUrl: 'https://spendlygo-api.onrender.com',

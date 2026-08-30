@@ -68,7 +68,7 @@ export function createApp(ctx: AppContext, bot: SpendlygoBot, options: CreateApp
 
   app.post('/telegram/webhook', async (c) => {
     const provided = c.req.header('X-Telegram-Bot-Api-Secret-Token');
-    if (provided !== ctx.config.webhookSecret) {
+    if (provided !== ctx.config.webhookSecretToken) {
       logger.warn('webhook.rejected');
       return c.json({ error: { code: 'unauthorized', message: 'Unauthorized' } }, 401);
     }

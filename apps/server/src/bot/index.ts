@@ -90,7 +90,7 @@ export async function ensureWebhook(bot: SpendlygoBot, ctx: AppContext): Promise
   }
 
   await bot.api.setWebhook(url, {
-    secret_token: ctx.config.webhookSecret,
+    secret_token: ctx.config.webhookSecretToken,
     allowed_updates: ['message', 'callback_query', 'my_chat_member'],
     // Never drop queued updates: a transaction logged while we were restarting
     // must still arrive.
