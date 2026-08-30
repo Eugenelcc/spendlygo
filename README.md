@@ -34,23 +34,20 @@ Tailwind v4 · motion — deployed on Render's free tier.
 
 ## Status
 
-🏗️ **Phase P0 — skeleton, done.** The monorepo, database schema, Telegram
-webhook, Mini App API and deployment blueprint are in place and tested. The bot
-answers `/start`, `/help` and `/app`; the Mini App connects, authenticates via
-Telegram `initData`, and renders the seeded categories.
-
-Next up is **P1 — quick-text capture**. See
-[PRD.md §13](./PRD.md#13-phased-roadmap) for the full build order.
+🚀 **Usable.** Phases P0–P4 are done: quick-text capture, the Mini App, the
+safe-to-spend engine, and statistics.
 
 ```
 P0 skeleton   ██████████ done
-P1 capture    ░░░░░░░░░░
-P2 mini app   ░░░░░░░░░░
-P3 goals      ░░░░░░░░░░
-P4 stats      ░░░░░░░░░░
-P5 automation ░░░░░░░░░░
-P6 polish     ░░░░░░░░░░
+P1 capture    ██████████ done
+P2 mini app   ██████████ done
+P3 goals      ██████████ done
+P4 stats      ██████████ done
+P5 automation ░░░░░░░░░░  recurring transactions, daily digest
+P6 polish     ░░░░░░░░░░  photos, CSV export
 ```
+
+245 tests, initial Mini App bundle 77 KB gzipped.
 
 ## Running it locally
 

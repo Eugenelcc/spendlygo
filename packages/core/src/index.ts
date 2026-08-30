@@ -3,3 +3,5 @@ export * from './clock.js';
 export * from './money.js';
 export * from './time.js';
 export * from './categories.js';
+export * from './parser.js';
+export * from './safe-to-spend.js';

@@ -71,3 +71,101 @@ export function applyThemeParams(theme: ThemeParams, colorScheme: 'light' | 'dar
 export function isInsideTelegram(params: LaunchParams): boolean {
   return params.initData !== null && params.initData !== '';
 }
+
+// --- the Telegram bridge ----------------------------------------------------
+//
+// Telegram clients expose a message channel rather than a JS API, and
+// `telegram-web-app.js` is a thin wrapper over it. Talking to the channel
+// directly keeps GUARDRAILS.md section 6 intact (no third-party script, no
+// external origin) at the cost of about twenty lines.
+
+interface TelegramWebviewProxy {
+  postEvent?: (eventType: string, eventData: string) => void;
+}
+
+declare global {
+  interface Window {
+    TelegramWebviewProxy?: TelegramWebviewProxy;
+  }
+}
+
+/**
+ * Telegram's Windows client uses `window.external.notify`. The DOM lib already
+ * types `external` as `External`, so it is narrowed at the call site rather
+ * than redeclared globally.
+ */
+function windowsNotify(): ((payload: string) => void) | null {
+  const external = window.external as unknown as { notify?: unknown } | undefined;
+  return typeof external?.notify === 'function'
+    ? (external.notify as (payload: string) => void)
+    : null;
+}
+
+/** Every call is wrapped: an unsupported client must degrade, never throw. */
+function postEvent(eventType: string, eventData: Record<string, unknown> = {}): void {
+  try {
+    if (window.TelegramWebviewProxy?.postEvent) {
+      window.TelegramWebviewProxy.postEvent(eventType, JSON.stringify(eventData));
+      return;
+    }
+    const notify = windowsNotify();
+    if (notify) {
+      notify(JSON.stringify({ eventType, eventData }));
+      return;
+    }
+    if (window.parent !== window) {
+      window.parent.postMessage(JSON.stringify({ eventType, eventData }), '*');
+    }
+  } catch {
+    /* Not inside Telegram, or the client does not support this event. */
+  }
+}
+
+/** Tell Telegram the app has painted, and ask for the full sheet height. */
+export function signalReady(): void {
+  postEvent('web_app_ready');
+  postEvent('web_app_expand');
+}
+
+/** Paint Telegram's own chrome to match the app background. */
+export function setHeaderColor(color: string): void {
+  postEvent('web_app_set_header_color', { color });
+  postEvent('web_app_set_background_color', { color });
+}
+
+export function closeApp(): void {
+  postEvent('web_app_close');
+}
+
+/**
+ * Haptics (DESIGN.md section 6).
+ *
+ * Only ever fired in response to something the user did — never on load,
+ * scroll, or incoming data.
+ */
+export const haptics = {
+  tap: () =>
+    postEvent('web_app_trigger_haptic_feedback', { type: 'impact', impact_style: 'light' }),
+  press: () =>
+    postEvent('web_app_trigger_haptic_feedback', { type: 'impact', impact_style: 'medium' }),
+  soft: () =>
+    postEvent('web_app_trigger_haptic_feedback', { type: 'impact', impact_style: 'soft' }),
+  rigid: () =>
+    postEvent('web_app_trigger_haptic_feedback', { type: 'impact', impact_style: 'rigid' }),
+  select: () => postEvent('web_app_trigger_haptic_feedback', { type: 'selection_change' }),
+  success: () =>
+    postEvent('web_app_trigger_haptic_feedback', {
+      type: 'notification',
+      notification_type: 'success',
+    }),
+  warning: () =>
+    postEvent('web_app_trigger_haptic_feedback', {
+      type: 'notification',
+      notification_type: 'warning',
+    }),
+  error: () =>
+    postEvent('web_app_trigger_haptic_feedback', {
+      type: 'notification',
+      notification_type: 'error',
+    }),
+};

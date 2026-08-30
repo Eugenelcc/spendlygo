@@ -4,22 +4,29 @@ import type { BotContext } from '../middleware.js';
 
 const HELP = `*Logging money*
 
-Type an amount and a note:
-\`12.50 lunch\`  ·  \`8.20 grab #transport\`
-\`+3000 salary\`  ·  \`45 dinner @yesterday\`
+Type the amount first, then what it was for:
 
-Modifiers (any order, all optional):
-\`#category\` — set the category
-\`@date\` — \`today\`, \`yesterday\`, or \`12/03\`
-\`+\` — this is income, not a spend
-\`k\` — thousands, so \`2.5k\` is 2,500
+\`12.50 lunch\`
+\`8.20 grab\`
+\`+3000 salary\`
+
+*Optional extras* — any order, all optional
+
+\`#category\` — file it yourself: \`12.50 lunch #food\`
+\`@date\` — \`@today\`, \`@yesterday\`, \`@12/03\`
+\`+\` — this is money coming in, not going out
+\`k\` — thousands, so \`2.5k rent\` is 2,500
+
+If you leave the category out, I'll guess it from what you wrote.
+Every entry gets an *Undo* button for five minutes.
 
 *Commands*
-/app — open Spendlygo
-/help — this message
-/start — start over
-
-_More commands arrive as features ship — see the roadmap in the repo._`;
+/today — what's safe to spend today
+/budget — show or set your monthly budget
+/recent — your last 10 entries
+/undo — undo the last entry
+/app — open the app
+/help — this message`;
 
 export async function handleHelp(ctx: AppContext, botCtx: BotContext): Promise<void> {
   await botCtx.reply(HELP, {
