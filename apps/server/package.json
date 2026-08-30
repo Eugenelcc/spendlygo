@@ -1,0 +1,29 @@
+{
+  "name": "@spendlygo/server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch --env-file-if-exists=../../.env src/index.ts",
+    "build": "tsup",
+    "start": "node --env-file-if-exists=../../.env dist/index.js",
+    "typecheck": "tsc --noEmit",
+    "set-webhook": "tsx --env-file-if-exists=../../.env src/scripts/set-webhook.ts",
+    "delete-webhook": "tsx --env-file-if-exists=../../.env src/scripts/delete-webhook.ts"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.13.7",
+    "@spendlygo/core": "workspace:*",
+    "@spendlygo/db": "workspace:*",
+    "@spendlygo/shared": "workspace:*",
+    "drizzle-orm": "^0.38.3",
+    "grammy": "^1.32.0",
+    "hono": "^4.6.15",
+    "postgres": "^3.4.5",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "tsup": "^8.3.5",
+    "tsx": "^4.19.2"
+  }
+}
