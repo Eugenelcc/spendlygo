@@ -1,5 +1,10 @@
-import 'dotenv/config';
+import { config as loadDotenv } from 'dotenv';
 import { defineConfig } from 'drizzle-kit';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
+
+// The single .env lives at the repository root — see src/scripts/migrate.ts.
+loadDotenv({ path: resolve(dirname(fileURLToPath(import.meta.url)), '../../.env') });
 
 /**
  * `drizzle-kit generate` diffs the schema against the committed migrations and

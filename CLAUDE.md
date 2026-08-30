@@ -263,4 +263,7 @@ Migrations must be backward-compatible with the currently running server.
 | Postgres treats NULLs as distinct in unique indexes | `UNIQUE (user_id, slug)` does **not** constrain system categories where `user_id IS NULL`. A partial unique index `ON (slug) WHERE user_id IS NULL` does, and is the seed's conflict target |
 | `onConflictDoUpdate` with `set: { name: table.name }` | Assigns each column to itself and silently does nothing. Use ``sql`excluded.name` `` |
 | React 19 removed the global `JSX` namespace | `import type { JSX } from 'react'` |
+| pnpm runs each script with its own package as cwd | A plain `dotenv/config` would read `packages/db/.env` for migrations and `apps/server/.env` for the bot. Every script resolves the **root** `.env` explicitly |
+| Render's `fromService` returns `host:port`, never a URL | No scheme, so it fails URL validation and makes the Mini App fetch a relative path. Config normalises a bare host; `render.yaml` uses literals |
+| Postgres NOTICEs on re-migration | `CREATE ... IF NOT EXISTS` for drizzle's bookkeeping logs a NOTICE object every run. Suppress with `onnotice` or it reads like a failed migration |
 | Drizzle 0.38 has no `.nullsNotDistinct()` on the index builder | Use a partial unique index with `.where()` instead |

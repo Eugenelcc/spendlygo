@@ -5,11 +5,25 @@
  * they customise one. Safe to re-run: it upserts on (user_id, slug).
  */
 
-import 'dotenv/config';
+import { config as loadDotenv } from 'dotenv';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
 import { DEFAULT_CATEGORIES } from '@spendlygo/core';
 import { sql } from 'drizzle-orm';
 import { createDatabase } from '../client.js';
 import { categories } from '../schema.js';
+
+const here = dirname(fileURLToPath(import.meta.url));
+
+/**
+ * Config comes from a single `.env` at the REPOSITORY ROOT.
+ *
+ * pnpm runs each workspace script with that package as its working directory,
+ * so a plain `dotenv/config` would look for `packages/db/.env` while the server
+ * looked for `apps/server/.env`. One file, resolved explicitly, removes a whole
+ * category of "it works for migrate but not for the bot" confusion.
+ */
+loadDotenv({ path: resolve(here, '../../../../.env') });
 
 const url = process.env.DATABASE_URL;
 if (!url) {

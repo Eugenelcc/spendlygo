@@ -6,12 +6,24 @@
  * against a live database.
  */
 
-import 'dotenv/config';
+import { config as loadDotenv } from 'dotenv';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import { migrate } from 'drizzle-orm/postgres-js/migrator';
 import postgres from 'postgres';
-import { fileURLToPath } from 'node:url';
-import { dirname, resolve } from 'node:path';
+
+const here = dirname(fileURLToPath(import.meta.url));
+
+/**
+ * Config comes from a single `.env` at the REPOSITORY ROOT.
+ *
+ * pnpm runs each workspace script with that package as its working directory,
+ * so a plain `dotenv/config` would look for `packages/db/.env` while the server
+ * looked for `apps/server/.env`. One file, resolved explicitly, removes a whole
+ * category of "it works for migrate but not for the bot" confusion.
+ */
+loadDotenv({ path: resolve(here, '../../../../.env') });
 
 const url = process.env.DATABASE_URL;
 if (!url) {
@@ -19,10 +31,13 @@ if (!url) {
   process.exit(1);
 }
 
-const migrationsFolder = resolve(dirname(fileURLToPath(import.meta.url)), '../../migrations');
+const migrationsFolder = resolve(here, '../../migrations');
 
 // A single connection: migrations run serially and must not race.
-const client = postgres(url, { max: 1, prepare: false });
+// Notices are suppressed because Postgres emits "already exists, skipping" for
+// drizzle's own bookkeeping on every run after the first, and a wall of NOTICE
+// objects during a production migration reads like a failure.
+const client = postgres(url, { max: 1, prepare: false, onnotice: () => {} });
 
 try {
   console.log(`Applying migrations from ${migrationsFolder} …`);

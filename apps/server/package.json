@@ -4,12 +4,12 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "tsx watch --env-file-if-exists=.env src/index.ts",
+    "dev": "tsx watch --env-file-if-exists=../../.env src/index.ts",
     "build": "tsup",
-    "start": "node --env-file-if-exists=.env dist/index.js",
+    "start": "node --env-file-if-exists=../../.env dist/index.js",
     "typecheck": "tsc --noEmit",
-    "set-webhook": "tsx --env-file-if-exists=.env src/scripts/set-webhook.ts",
-    "delete-webhook": "tsx --env-file-if-exists=.env src/scripts/delete-webhook.ts"
+    "set-webhook": "tsx --env-file-if-exists=../../.env src/scripts/set-webhook.ts",
+    "delete-webhook": "tsx --env-file-if-exists=../../.env src/scripts/delete-webhook.ts"
   },
   "dependencies": {
     "@hono/node-server": "^1.13.7",
