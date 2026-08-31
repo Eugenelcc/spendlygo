@@ -12,7 +12,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { fixedClock } from '@spendlygo/core';
 import { createDatabase, schema, type DatabaseHandle } from '@spendlygo/db';
-import { statsResponseSchema, todayResponseSchema } from '@spendlygo/shared';
+import { recapResponseSchema, statsResponseSchema, todayResponseSchema } from '@spendlygo/shared';
 import { createApp } from '../app.js';
 import type { Config } from '../config.js';
 import type { AppContext } from '../context.js';
@@ -214,6 +214,8 @@ describeIfDb('transactions API', () => {
       // 7 days of sparkline, gaps filled, oldest first.
       expect(body.recentDays).toHaveLength(7);
       expect(body.recentDays.at(-1)?.day).toBe(TODAY);
+      // No history seeded for this fresh user — zero, not undefined or an error.
+      expect(body.streak).toEqual({ current: 0, longest: 0 });
     });
 
     it('reports no budget honestly rather than inventing one (PRD F6.6)', async () => {
@@ -293,6 +295,29 @@ describeIfDb('transactions API', () => {
 
     it('rejects an unauthenticated request', async () => {
       expect((await app.request('/api/stats?period=month')).status).toBe(401);
+    });
+  });
+
+  describe('GET /api/recap', () => {
+    it.each(['month', 'year'] as const)('matches the contract for %s', async (period) => {
+      const response = await app.request(`/api/recap?period=${period}`, {
+        headers: auth(OWNER),
+      });
+      expect(response.status).toBe(200);
+      const body = recapResponseSchema.parse(await json(response));
+      expect(body.period).toBe(period);
+    });
+
+    it('defaults to the month containing today when no period is given', async () => {
+      const body = recapResponseSchema.parse(
+        await json(await app.request('/api/recap', { headers: auth(OWNER) })),
+      );
+      expect(body.period).toBe('month');
+      expect(body.label).toContain('August');
+    });
+
+    it('rejects an unauthenticated request', async () => {
+      expect((await app.request('/api/recap?period=month')).status).toBe(401);
     });
   });
 

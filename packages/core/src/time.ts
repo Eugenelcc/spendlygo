@@ -192,6 +192,26 @@ export function yearRange(year: number): DateRange {
   };
 }
 
+const MONTH_NAMES = [
+  'January',
+  'February',
+  'March',
+  'April',
+  'May',
+  'June',
+  'July',
+  'August',
+  'September',
+  'October',
+  'November',
+  'December',
+];
+
+/** Full English month name. `month` is 1-12. */
+export function monthName(month: number): string {
+  return MONTH_NAMES[month - 1] ?? '';
+}
+
 /** ISO 8601 weekday, 1 = Monday .. 7 = Sunday. */
 export function isoWeekday(date: IsoDate): number {
   const { year, month, day } = parseIsoDate(date);

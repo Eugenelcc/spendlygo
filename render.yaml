@@ -43,12 +43,17 @@ services:
       - key: DEFAULT_TIMEZONE
         value: Asia/Singapore
 
-      # --- you supply these three ---
+      # --- you supply these ---
       - key: BOT_TOKEN
         sync: false
       - key: ALLOWED_TELEGRAM_IDS
         sync: false
       - key: DATABASE_URL
+        sync: false
+      # Optional — a free key from https://ocr.space/ocrapi (no credit card).
+      # Leave unset and photo attachments still work, just without the F4.6
+      # amount pre-fill. See GUARDRAILS.md section 1 and ADR 0005.
+      - key: OCR_SPACE_API_KEY
         sync: false
 
       # --- Render generates these; you never see or choose them ---

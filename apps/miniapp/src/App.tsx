@@ -6,7 +6,7 @@ import {
   useQuery,
   useQueryClient,
 } from '@tanstack/react-query';
-import type { StatsPeriod, Transaction } from '@spendlygo/shared';
+import type { RecapPeriod, StatsPeriod, Transaction } from '@spendlygo/shared';
 import { api, ApiRequestError, setInitData } from './lib/api';
 import {
   applyThemeParams,
@@ -17,6 +17,7 @@ import {
   type LaunchParams,
 } from './lib/telegram';
 import { Capture } from './components/Capture';
+import { RecapCard } from './components/RecapCard';
 import { Sheet } from './components/Sheet';
 import { TodayScreen } from './screens/Today';
 import { StatsScreen } from './screens/Stats';
@@ -83,6 +84,8 @@ function Shell(): JSX.Element {
   const [selected, setSelected] = useState<Transaction | null>(null);
   const [period, setPeriod] = useState<StatsPeriod>('month');
   const [toast, setToast] = useState<string | null>(null);
+  const [recapOpen, setRecapOpen] = useState(false);
+  const [recapPeriod, setRecapPeriod] = useState<RecapPeriod>('month');
 
   const me = useQuery({ queryKey: ['me'], queryFn: api.me });
   const categories = useQuery({ queryKey: ['categories'], queryFn: api.categories });
@@ -104,6 +107,12 @@ function Shell(): JSX.Element {
     queryKey: ['recurring'],
     queryFn: api.recurringRules,
     enabled: tab === 'settings',
+  });
+
+  const recap = useQuery({
+    queryKey: ['recap', recapPeriod],
+    queryFn: () => api.recap(recapPeriod),
+    enabled: recapOpen,
   });
 
   const goals = useQuery({
@@ -312,6 +321,10 @@ function Shell(): JSX.Element {
             currency={currency}
             locale={locale}
             today={today.data.today}
+            onOpenRecap={() => {
+              setRecapPeriod(period === 'year' ? 'year' : 'month');
+              setRecapOpen(true);
+            }}
           />
         )}
 
@@ -430,6 +443,17 @@ function Shell(): JSX.Element {
             </p>
           </div>
         )}
+      </Sheet>
+
+      <Sheet open={recapOpen} onClose={() => setRecapOpen(false)} title="Recap">
+        <RecapCard
+          data={recap.data}
+          loading={recap.isPending}
+          period={recapPeriod}
+          onChangePeriod={setRecapPeriod}
+          currency={currency}
+          locale={locale}
+        />
       </Sheet>
 
       {toast && <div className="toast">{toast}</div>}

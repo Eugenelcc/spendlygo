@@ -369,6 +369,31 @@ export async function totalsByMonth(
   return rows as MonthlyTotal[];
 }
 
+/**
+ * Distinct dates this user logged anything, since `sinceDate`, for streaks.
+ *
+ * Deliberately user-scoped, not household-scoped — a logging streak is a
+ * personal habit, matching the savings-goals precedent (packages/db/src/
+ * schema.ts) rather than the shared-budget aggregates above.
+ */
+export async function distinctLoggedDates(
+  db: Database,
+  userId: string,
+  sinceDate: string,
+): Promise<string[]> {
+  const rows = await db
+    .selectDistinct({ day: transactions.occurredOn })
+    .from(transactions)
+    .where(
+      and(
+        eq(transactions.userId, userId),
+        isNull(transactions.deletedAt),
+        gte(transactions.occurredOn, sinceDate),
+      ),
+    );
+  return rows.map((row) => row.day);
+}
+
 /** Category ids ordered by how recently and often they were used (PRD F2.3). */
 export async function frequentCategoryIds(
   db: Database,

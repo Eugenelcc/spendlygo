@@ -41,9 +41,19 @@ export function TodayScreen({
   const usedToday =
     sts.safeTodayCents > 0 ? Math.min(1, sts.spentTodayCents / sts.safeTodayCents) : 1;
 
+  // A 1-day "streak" isn't a streak yet — matches the threshold the bot uses.
+  const streakWorthShowing = data.streak.current >= 2;
+
   return (
     <div className="screen">
-      <p className="date">{formatLongDate(data.today)}</p>
+      <div className="date-row">
+        <p className="date">{formatLongDate(data.today)}</p>
+        {streakWorthShowing && (
+          <span className="streak-badge" aria-label={`${data.streak.current}-day logging streak`}>
+            🔥 {data.streak.current}
+          </span>
+        )}
+      </div>
 
       {sts.hasBudget ? (
         <>

@@ -14,13 +14,14 @@ import {
   daysInMonth,
   formatCents,
   isoWeekday,
+  monthName,
   monthRange,
   parseIsoDate,
   type AmountCents,
   type IsoDate,
 } from '@spendlygo/core';
-import { recurringRepo, transactionsRepo, type User } from '@spendlygo/db';
-import { computeSafeToSpend } from '../api/service.js';
+import { recurringRepo, type User } from '@spendlygo/db';
+import { computePeriodStats, computeSafeToSpend, computeStreak } from '../api/service.js';
 import { escapeMarkdown } from '../bot/markdown.js';
 import type { AppContext } from '../context.js';
 
@@ -49,11 +50,12 @@ export async function buildDailyDigest(
       formatCents(cents as AmountCents, { currency: user.currency, locale: user.locale }),
     );
 
-  const [todayResult, tomorrowResult, runs, loggedToday] = await Promise.all([
+  const [todayResult, tomorrowResult, runs, loggedToday, streak] = await Promise.all([
     computeSafeToSpend(ctx, user, today),
     computeSafeToSpend(ctx, user, addDays(today, 1)),
     recurringRepo.runsOn(ctx.db, user.id, today),
     recurringRepo.hasAnyTransactionOn(ctx.db, user.id, today),
+    computeStreak(ctx, user, today),
   ]);
 
   const lines: string[] = [`*Today* — ${money(todayResult.spentTodayCents)} spent`];
@@ -81,12 +83,25 @@ export async function buildDailyDigest(
     );
   }
 
-  const nudgeWorthy = user.nudgeEnabled && !loggedToday && runs.length === 0;
-  if (nudgeWorthy) {
-    lines.push('', "_You haven't logged anything today._");
+  // Not gated on loggedToday: a streak still standing is worth celebrating,
+  // and a streak about to lapse is exactly when the reminder matters most.
+  const streakWorthMentioning = streak.current >= 2;
+  if (streakWorthMentioning) {
+    lines.push('', `🔥 ${streak.current}-day streak`);
   }
 
-  const worthSending = todayResult.hasBudget || runs.length > 0 || nudgeWorthy;
+  const nudgeWorthy = user.nudgeEnabled && !loggedToday && runs.length === 0;
+  if (nudgeWorthy) {
+    lines.push(
+      '',
+      streakWorthMentioning
+        ? "_You haven't logged anything today — don't lose the streak._"
+        : "_You haven't logged anything today._",
+    );
+  }
+
+  const worthSending =
+    todayResult.hasBudget || runs.length > 0 || nudgeWorthy || streakWorthMentioning;
 
   return { text: lines.join('\n'), worthSending };
 }
@@ -111,76 +126,44 @@ async function buildPeriodSummary(
       formatCents(cents as AmountCents, { currency: user.currency, locale: user.locale }),
     );
 
-  const [totals, previous, byCategory, byDay, safeToSpend] = await Promise.all([
-    transactionsRepo.totalsForPeriod(ctx.db, user.id, user.householdId, options.from, options.to),
-    transactionsRepo.totalsForPeriod(
-      ctx.db,
-      user.id,
-      user.householdId,
-      options.previousFrom,
-      options.previousTo,
-    ),
-    transactionsRepo.totalsByCategory(ctx.db, user.id, user.householdId, options.from, options.to),
-    transactionsRepo.totalsByDay(ctx.db, user.id, user.householdId, options.from, options.to),
-    computeSafeToSpend(ctx, user, options.to),
-  ]);
+  const stats = await computePeriodStats(ctx, user, options);
 
-  if (totals.count === 0 && !safeToSpend.hasBudget) {
+  if (stats.totals.count === 0 && !stats.safeToSpend.hasBudget) {
     return { text: '', worthSending: false };
   }
 
-  const lines: string[] = [`*${options.heading}* — ${money(totals.outCents)} spent`];
+  const lines: string[] = [`*${options.heading}* — ${money(stats.totals.outCents)} spent`];
 
-  if (safeToSpend.hasBudget) {
-    lines.push(PACE_LABEL[safeToSpend.pace] ?? '');
+  if (stats.safeToSpend.hasBudget) {
+    lines.push(PACE_LABEL[stats.safeToSpend.pace] ?? '');
   }
 
-  if (previous.outCents > 0) {
-    const delta = Math.round(((totals.outCents - previous.outCents) / previous.outCents) * 100);
+  if (stats.deltaPct !== null) {
     lines.push(
-      delta === 0
+      stats.deltaPct === 0
         ? 'Same as the period before'
-        : `${Math.abs(delta)}% ${delta > 0 ? 'more' : 'less'} than the period before`,
+        : `${Math.abs(stats.deltaPct)}% ${stats.deltaPct > 0 ? 'more' : 'less'} than the period before`,
     );
   }
 
-  if (byCategory.length > 0) {
+  if (stats.byCategory.length > 0) {
     lines.push('', '*Top categories*');
-    for (const category of byCategory.slice(0, 3)) {
+    for (const category of stats.byCategory.slice(0, 3)) {
       lines.push(
         `${category.emoji ?? '•'} ${escapeMarkdown(category.name ?? 'Uncategorised')} — ${money(category.outCents)}`,
       );
     }
   }
 
-  // Every day counts, including a zero-spend day — that IS the best day.
-  const dayOutById = new Map(byDay.map((row) => [row.day, row.outCents]));
-  const allDays: IsoDate[] = [];
-  let cursor = options.from;
-  while (cursor <= options.to) {
-    allDays.push(cursor);
-    cursor = addDays(cursor, 1);
+  if (stats.bestDay && stats.worstDay) {
+    lines.push(
+      '',
+      `Lightest day: ${formatDayLabel(stats.bestDay.day)} · Heaviest: ${formatDayLabel(stats.worstDay.day)} (${money(stats.worstDay.outCents)})`,
+    );
   }
 
-  if (allDays.length > 1) {
-    let best = allDays[0] as IsoDate;
-    let worst = allDays[0] as IsoDate;
-    for (const day of allDays) {
-      const spend = dayOutById.get(day) ?? 0;
-      if (spend < (dayOutById.get(best) ?? 0)) best = day;
-      if (spend > (dayOutById.get(worst) ?? 0)) worst = day;
-    }
-    const worstSpend = dayOutById.get(worst) ?? 0;
-    if (worstSpend > 0) {
-      lines.push(
-        '',
-        `Lightest day: ${formatDayLabel(best)} · Heaviest: ${formatDayLabel(worst)} (${money(worstSpend)})`,
-      );
-    }
-  }
-
-  if (totals.inCents > 0) {
-    lines.push('', `${money(totals.inCents)} received`);
+  if (stats.totals.inCents > 0) {
+    lines.push('', `${money(stats.totals.inCents)} received`);
   }
 
   return { text: lines.join('\n'), worthSending: true };
@@ -249,23 +232,8 @@ export async function buildMonthlyDigest(
   const previousParts = parseIsoDate(previousAnchor);
   const previousRange = monthRange(previousParts.year, previousParts.month);
 
-  const monthName = [
-    'January',
-    'February',
-    'March',
-    'April',
-    'May',
-    'June',
-    'July',
-    'August',
-    'September',
-    'October',
-    'November',
-    'December',
-  ][month - 1];
-
   return buildPeriodSummary(ctx, user, {
-    heading: monthName ?? 'This month',
+    heading: monthName(month) || 'This month',
     from: range.start,
     to: today,
     previousFrom: previousRange.start,

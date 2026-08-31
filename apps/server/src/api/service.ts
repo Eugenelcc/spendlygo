@@ -10,6 +10,7 @@ import {
   addDays,
   calculateGoalProgress,
   calculateSafeToSpend,
+  calculateStreak,
   centsOf,
   isoDateOf,
   monthRange,
@@ -17,6 +18,7 @@ import {
   type AmountCents,
   type IsoDate,
   type SafeToSpendResult,
+  type StreakResult,
 } from '@spendlygo/core';
 import {
   householdsRepo,
@@ -135,6 +137,106 @@ export function toApiSavingsGoal(
     monthsRemaining: progress.monthsRemaining,
     suggestedMonthlyCents: progress.suggestedMonthlyCents,
     progressRatio: progress.progressRatio,
+  };
+}
+
+// A year plus change of history is enough to find a genuine "longest streak"
+// without an unbounded scan as an account ages.
+const STREAK_LOOKBACK_DAYS = 366;
+
+/**
+ * Days logged in a row. Personal even inside a shared household — see
+ * `transactionsRepo.distinctLoggedDates`.
+ */
+export async function computeStreak(
+  ctx: AppContext,
+  user: User,
+  today: IsoDate,
+): Promise<StreakResult> {
+  const since = addDays(today, -STREAK_LOOKBACK_DAYS);
+  const loggedDates = await transactionsRepo.distinctLoggedDates(ctx.db, user.id, since);
+  return calculateStreak(loggedDates as IsoDate[], today);
+}
+
+export interface PeriodStatsOptions {
+  from: IsoDate;
+  to: IsoDate;
+  previousFrom: IsoDate;
+  previousTo: IsoDate;
+}
+
+export interface PeriodStats {
+  from: IsoDate;
+  to: IsoDate;
+  totals: transactionsRepo.PeriodTotals;
+  previousOutCents: number;
+  /** Percent change vs. the previous period. Null with nothing to compare against. */
+  deltaPct: number | null;
+  /** Every category with spend, highest first. Callers slice to taste. */
+  byCategory: transactionsRepo.CategoryTotal[];
+  /** Every day in the range counts, including a zero-spend one — that IS the best day. */
+  bestDay: { day: IsoDate; outCents: number } | null;
+  /** Null for a single-day period, or when nothing was spent on any day. */
+  worstDay: { day: IsoDate; outCents: number } | null;
+  safeToSpend: SafeToSpendResult;
+}
+
+/**
+ * The numbers behind both the periodic digest (apps/server/src/tasks/
+ * digest.ts) and the on-demand recap (apps/server/src/api/recap.ts) — one
+ * set of queries, formatted two different ways for two different moods.
+ */
+export async function computePeriodStats(
+  ctx: AppContext,
+  user: User,
+  options: PeriodStatsOptions,
+): Promise<PeriodStats> {
+  const { from, to, previousFrom, previousTo } = options;
+
+  const [totals, previous, byCategory, byDay, safeToSpend] = await Promise.all([
+    transactionsRepo.totalsForPeriod(ctx.db, user.id, user.householdId, from, to),
+    transactionsRepo.totalsForPeriod(ctx.db, user.id, user.householdId, previousFrom, previousTo),
+    transactionsRepo.totalsByCategory(ctx.db, user.id, user.householdId, from, to),
+    transactionsRepo.totalsByDay(ctx.db, user.id, user.householdId, from, to),
+    computeSafeToSpend(ctx, user, to),
+  ]);
+
+  const deltaPct =
+    previous.outCents > 0
+      ? Math.round(((totals.outCents - previous.outCents) / previous.outCents) * 100)
+      : null;
+
+  const dayOutById = new Map(byDay.map((row) => [row.day, row.outCents]));
+  const allDays: IsoDate[] = [];
+  for (let cursor = from; cursor <= to; cursor = addDays(cursor, 1)) allDays.push(cursor);
+
+  let bestDay: { day: IsoDate; outCents: number } | null = null;
+  let worstDay: { day: IsoDate; outCents: number } | null = null;
+  if (allDays.length > 1) {
+    let best = allDays[0] as IsoDate;
+    let worst = allDays[0] as IsoDate;
+    for (const day of allDays) {
+      const spend = dayOutById.get(day) ?? 0;
+      if (spend < (dayOutById.get(best) ?? 0)) best = day;
+      if (spend > (dayOutById.get(worst) ?? 0)) worst = day;
+    }
+    const worstSpend = dayOutById.get(worst) ?? 0;
+    if (worstSpend > 0) {
+      bestDay = { day: best, outCents: dayOutById.get(best) ?? 0 };
+      worstDay = { day: worst, outCents: worstSpend };
+    }
+  }
+
+  return {
+    from,
+    to,
+    totals,
+    previousOutCents: previous.outCents,
+    deltaPct,
+    byCategory,
+    bestDay,
+    worstDay,
+    safeToSpend,
   };
 }
 

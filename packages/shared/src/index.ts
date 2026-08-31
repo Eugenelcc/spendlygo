@@ -208,6 +208,16 @@ export const safeToSpendSchema = z.object({
 });
 export type SafeToSpend = z.infer<typeof safeToSpendSchema>;
 
+// --- streaks ------------------------------------------------------------
+
+export const streakSchema = z.object({
+  /** Consecutive days ending today or yesterday. 0 once a day has been skipped. */
+  current: z.number().int().nonnegative(),
+  /** The longest run in the lookback window (packages/core/src/streaks.ts). */
+  longest: z.number().int().nonnegative(),
+});
+export type Streak = z.infer<typeof streakSchema>;
+
 // --- GET /api/today ---------------------------------------------------------
 
 export const todayResponseSchema = z.object({
@@ -220,6 +230,7 @@ export const todayResponseSchema = z.object({
   transactions: z.array(transactionSchema),
   /** Last 7 days including today, oldest first. For the sparkline. */
   recentDays: z.array(z.object({ day: isoDateSchema, outCents: z.number().int().nonnegative() })),
+  streak: streakSchema,
 });
 export type TodayResponse = z.infer<typeof todayResponseSchema>;
 
@@ -260,6 +271,39 @@ export const statsResponseSchema = z.object({
   previousOutCents: z.number().int().nonnegative(),
 });
 export type StatsResponse = z.infer<typeof statsResponseSchema>;
+
+// --- GET /api/recap -----------------------------------------------------
+
+export const recapPeriodSchema = z.enum(['month', 'year']);
+export type RecapPeriod = z.infer<typeof recapPeriodSchema>;
+
+export const recapResponseSchema = z.object({
+  period: recapPeriodSchema,
+  label: z.string(),
+  from: isoDateSchema,
+  to: isoDateSchema,
+  inCents: z.number().int().nonnegative(),
+  outCents: z.number().int().nonnegative(),
+  netCents: z.number().int(),
+  previousOutCents: z.number().int().nonnegative(),
+  /** Percent change vs. the previous period. Null with nothing to compare against. */
+  deltaPct: z.number().int().nullable(),
+  /** Highest spend first. */
+  topCategories: z.array(
+    z.object({
+      categoryId: z.string().uuid().nullable(),
+      name: z.string(),
+      emoji: z.string(),
+      colorToken: z.string(),
+      outCents: z.number().int().nonnegative(),
+      count: z.number().int().nonnegative(),
+    }),
+  ),
+  bestDay: z.object({ day: isoDateSchema, outCents: z.number().int().nonnegative() }).nullable(),
+  worstDay: z.object({ day: isoDateSchema, outCents: z.number().int().nonnegative() }).nullable(),
+  streak: streakSchema,
+});
+export type RecapResponse = z.infer<typeof recapResponseSchema>;
 
 // --- PATCH /api/settings ----------------------------------------------------
 

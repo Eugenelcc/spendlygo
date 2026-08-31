@@ -72,7 +72,8 @@ is typed into, capture friction has regressed and we've built the wrong thing.
 - **F1** Quick-text capture in chat (`12.50 lunch #food`)
 - **F2** Mini App capture form (numpad, category chips, haptics)
 - **F3** Income tracking and net cashflow
-- **F4** Photo attachment on any transaction (store + view, **no OCR**)
+- **F4** Photo attachment on any transaction (store + view, OCR pre-fill via
+  OCR.space — GUARDRAILS.md section 1, ADR 0005)
 - **F5** Recurring transactions (rent, salary, subscriptions)
 - **F6** Safe-to-spend daily goals engine
 - **F7** Statistics: daily / monthly / yearly
@@ -85,7 +86,6 @@ is typed into, capture friction has regressed and we've built the wrong thing.
 
 | Feature | Phase | Why deferred |
 |---|---|---|
-| Receipt OCR (auto-read amount) | v2 | No genuinely free, accurate OCR at volume. Needs its own spike. |
 | Voice-note capture | v2 | Free speech-to-text is hard; Telegram gives us no transcript. |
 | Multi-currency + FX | v3 | User spends in SGD. Adds conversion, rate caching, historical rates. |
 | Shared households | v2 | Schema is ready; invite flow + permissions are real work. |
@@ -195,7 +195,7 @@ Launched from the chat via a `web_app` keyboard button or the bot menu button.
 
 ---
 
-### F4 — Photo attachments (no OCR in v1)
+### F4 — Photo attachments, with OCR pre-fill
 
 - **F4.1** Photos are **never copied** off Telegram. We store `file_id`,
   `file_unique_id`, dimensions, and byte size.
@@ -207,8 +207,15 @@ Launched from the chat via a `web_app` keyboard button or the bot menu button.
   Telegram file is not ours to delete.
 - **F4.5** In the Mini App, a transaction with an attachment shows a thumbnail
   badge; tapping opens a full-screen pinch-zoom viewer.
-- **F4.6** v2 hook: `attachments.ocr_status` and `ocr_payload` columns exist from
-  day one but are unused, so the OCR spike needs no migration.
+- **F4.6** Uploading a receipt photo sends its bytes (not the `file_id`, not any
+  other user data) to **OCR.space**'s free API for text extraction — see
+  GUARDRAILS.md section 6 for the exact, narrow scope of that exception, and
+  ADR 0005 for why. The extracted total is a **suggestion only**: it pre-fills
+  the amount field, the user reviews and confirms before anything is saved,
+  and OCR ever failing or mis-reading a receipt degrades to today's manual
+  entry, not an error. `attachments.ocr_status` (`none` / `pending` / `done` /
+  `failed`) and `ocr_payload` (the raw OCR.space response, for debugging a bad
+  read) track this per photo.
 
 ---
 
@@ -476,8 +483,8 @@ in the same hour must be a no-op.
 | **P3 — Goals** | F6 safe-to-spend, budget onboarding, pace, ring | The number is right for every edge case in the test suite |
 | **P4 — Stats** | F7 daily/monthly/yearly, drill-through, charts | All three periods, all charts animated |
 | **P5 — Automation** | F5 recurring, F9 digest, cron wiring, F3 net cashflow | Rent auto-logs; 21:00 digest arrives |
-| **P6 — Polish** | F4 photo viewer, F8 export, empty states, error states, onboarding | Ready to hand to a second person |
-| **v2** | Receipt OCR, voice capture, shared households | — |
+| **P6 — Polish** | F4 photo viewer + OCR pre-fill, F8 export, empty states, error states, onboarding | Ready to hand to a second person |
+| **v2** | Voice capture | — |
 
 ---
 
@@ -502,4 +509,4 @@ in the same hour must be a no-op.
 | Cold start makes the bot feel dead | Medium | Medium | 10-min keep-alive; Telegram retries webhooks; `/healthz` stays dependency-free so it answers instantly |
 | Parser mis-reads amounts | Medium | High | Confirmation card on every capture + 5-minute undo; never silently save an ambiguous parse |
 | Free-tier DB fills up (500 MB) | Low | Medium | Photos live in Telegram, not the DB. Text rows are tiny — 500 MB is ~10 years of daily use |
-| Scope creep into OCR/voice/multi-currency | **High** | High | This document. Deferred means deferred. |
+| Scope creep into voice/multi-currency, or OCR becoming authoritative instead of a suggestion | **High** | High | This document. Deferred means deferred; F4.6 pre-fills, never auto-saves. |

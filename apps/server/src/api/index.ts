@@ -5,6 +5,7 @@ import {
   daysInMonth,
   inferCategorySlug,
   isoDateOf,
+  monthName,
   monthRange,
   parseIsoDate,
   toIsoDate,
@@ -27,6 +28,7 @@ import {
   createRecurringRuleSchema,
   createSavingsGoalSchema,
   createTransactionSchema,
+  recapPeriodSchema,
   statsPeriodSchema,
   updateSavingsGoalSchema,
   updateSettingsSchema,
@@ -36,6 +38,7 @@ import {
   type HouseholdInviteResponse,
   type HouseholdResponse,
   type MeResponse,
+  type RecapResponse,
   type RecurringRulesResponse,
   type SafeToSpend,
   type SavingsGoalResponse,
@@ -47,8 +50,10 @@ import {
 import { NotFoundError } from '@spendlygo/core';
 import type { AppContext } from '../context.js';
 import { requireInitData, type ApiEnv } from '../middleware/auth.js';
+import { buildRecap } from './recap.js';
 import {
   computeSafeToSpend,
+  computeStreak,
   effectiveBudgetCents,
   recentDailySpend,
   toApiSavingsGoal,
@@ -97,21 +102,6 @@ function serialiseSafeToSpend(result: Awaited<ReturnType<typeof computeSafeToSpe
     budgetUsedRatio: result.budgetUsedRatio,
   };
 }
-
-const MONTH_NAMES = [
-  'January',
-  'February',
-  'March',
-  'April',
-  'May',
-  'June',
-  'July',
-  'August',
-  'September',
-  'October',
-  'November',
-  'December',
-];
 
 export function createApiRouter(ctx: AppContext): Hono<ApiEnv> {
   const api = new Hono<ApiEnv>();
@@ -235,7 +225,7 @@ export function createApiRouter(ctx: AppContext): Hono<ApiEnv> {
     const today = todayFor(ctx, user);
     const month = monthRange(parseIsoDate(today).year, parseIsoDate(today).month);
 
-    const [safeToSpend, monthTotals, todayTransactions, recentDays] = await Promise.all([
+    const [safeToSpend, monthTotals, todayTransactions, recentDays, streak] = await Promise.all([
       computeSafeToSpend(ctx, user, today),
       transactionsRepo.totalsForPeriod(ctx.db, user.id, user.householdId, month.start, month.end),
       transactionsRepo.list(ctx.db, user.id, user.householdId, {
@@ -244,6 +234,7 @@ export function createApiRouter(ctx: AppContext): Hono<ApiEnv> {
         limit: 100,
       }),
       recentDailySpend(ctx, user, today),
+      computeStreak(ctx, user, today),
     ]);
 
     const body: TodayResponse = {
@@ -255,6 +246,7 @@ export function createApiRouter(ctx: AppContext): Hono<ApiEnv> {
       monthOut: monthTotals.outCents,
       transactions: todayTransactions.map((row) => toApiTransaction(row, user.id)),
       recentDays,
+      streak,
     };
     return c.json(body);
   });
@@ -355,6 +347,41 @@ export function createApiRouter(ctx: AppContext): Hono<ApiEnv> {
     const anchor = (c.req.query('anchor') as IsoDate | undefined) ?? today;
 
     const body = await buildStats(ctx, user.id, user.householdId, period, anchor);
+    return c.json(body);
+  });
+
+  // --- recap (PRD-adjacent: a shareable month/year wrap-up) ------------------
+
+  api.get('/recap', async (c) => {
+    const user = c.get('user');
+    const today = todayFor(ctx, user);
+    const period = recapPeriodSchema.parse(c.req.query('period') ?? 'month');
+    const anchor = (c.req.query('anchor') as IsoDate | undefined) ?? today;
+
+    const recap = await buildRecap(ctx, user, period, anchor, today);
+
+    const body: RecapResponse = {
+      period: recap.period,
+      label: recap.label,
+      from: recap.from,
+      to: recap.to,
+      inCents: recap.stats.totals.inCents,
+      outCents: recap.stats.totals.outCents,
+      netCents: recap.stats.totals.inCents - recap.stats.totals.outCents,
+      previousOutCents: recap.stats.previousOutCents,
+      deltaPct: recap.stats.deltaPct,
+      topCategories: recap.stats.byCategory.slice(0, 5).map((category) => ({
+        categoryId: category.categoryId,
+        name: category.name ?? 'Uncategorised',
+        emoji: category.emoji ?? '❓',
+        colorToken: category.colorToken ?? 'uncategorised',
+        outCents: category.outCents,
+        count: category.count,
+      })),
+      bestDay: recap.stats.bestDay,
+      worstDay: recap.stats.worstDay,
+      streak: recap.streak,
+    };
     return c.json(body);
   });
 
@@ -567,14 +594,14 @@ async function buildStats(
   if (period === 'day') {
     from = anchor;
     to = anchor;
-    label = `${day} ${MONTH_NAMES[month - 1]}`;
+    label = `${day} ${monthName(month)}`;
     previousFrom = addDays(anchor, -1);
     previousTo = previousFrom;
   } else if (period === 'month') {
     const range = monthRange(year, month);
     from = range.start;
     to = range.end;
-    label = `${MONTH_NAMES[month - 1]} ${year}`;
+    label = `${monthName(month)} ${year}`;
     const previousAnchor = addMonths(range.start, -1);
     const previousRange = monthRange(
       parseIsoDate(previousAnchor).year,
@@ -644,7 +671,7 @@ async function buildSeries(
       const row = byMonth.get(key);
       return {
         key,
-        label: MONTH_NAMES[index]?.slice(0, 3) ?? '',
+        label: monthName(index + 1).slice(0, 3),
         outCents: row?.outCents ?? 0,
         inCents: row?.inCents ?? 0,
       };

@@ -126,6 +126,26 @@ button {
   text-align: center;
 }
 
+.date-row {
+  position: relative;
+  display: flex;
+  justify-content: center;
+}
+
+.streak-badge {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  padding: 3px 9px;
+  border-radius: var(--r-full);
+  background: var(--bg-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  animation: rise var(--base) var(--ease) both;
+}
+
 .section-title {
   margin: 8px 0 0;
   font-size: 11px;
@@ -1449,4 +1469,92 @@ code {
   flex-direction: column;
   gap: 8px;
   margin-top: 10px;
+}
+
+/* ---------- recap ---------- */
+
+.recap {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.recap__card {
+  border-radius: var(--r-lg, var(--r-md));
+  padding: 28px 20px;
+  text-align: center;
+  background: linear-gradient(
+    160deg,
+    color-mix(in srgb, var(--accent) 16%, var(--bg-secondary)),
+    var(--bg-secondary)
+  );
+  animation: rise var(--base) var(--ease) both;
+}
+
+.recap__heading {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-hint);
+}
+
+.recap__hero {
+  margin-top: 6px;
+  font-size: 40px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+
+.recap__caption {
+  font-size: 13px;
+  color: var(--text-hint);
+}
+
+.recap__delta {
+  margin-top: 10px;
+  font-size: 13px;
+  color: var(--text-subtle);
+}
+
+.recap__grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-top: 20px;
+  text-align: left;
+}
+
+.recap__stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px;
+  border-radius: var(--r-md);
+  background: var(--bg);
+}
+
+.recap__stat-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-hint);
+}
+
+.recap__stat-value {
+  font-size: 14px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.recap__stat-value--in {
+  color: var(--pace-ahead);
+}
+
+.recap__stat-sub {
+  font-size: 12px;
+  color: var(--text-hint);
+  font-variant-numeric: tabular-nums;
 }

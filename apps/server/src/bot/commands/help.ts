@@ -38,12 +38,17 @@ can then change the budget, and you'll both see everything either of you logs.
 \`/goals add 3000 vacation by 2026-12-31\`
 \`/goals put 50 vacation\` — tag money toward it
 
+*Recap* — a shareable wrap-up of your month or year
+
+\`/recap\` for this month, \`/recap year\` for the whole year.
+
 *Commands*
 /today — what's safe to spend today
 /budget — show or set your monthly budget
 /recurring — list or add recurring transactions
 /household — share a budget with a partner
 /goals — savings goals and progress
+/recap — your month or year at a glance
 /recent — your last 10 entries
 /undo — undo the last entry
 /app — open the app

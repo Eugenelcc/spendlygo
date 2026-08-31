@@ -7,6 +7,8 @@ import type {
   HouseholdInviteResponse,
   HouseholdResponse,
   MeResponse,
+  RecapPeriod,
+  RecapResponse,
   RecurringRulesResponse,
   SafeToSpend,
   SavingsGoalResponse,
@@ -80,6 +82,9 @@ export const api = {
 
   stats: (period: 'day' | 'month' | 'year', anchor?: string) =>
     request<StatsResponse>(`/api/stats?period=${period}${anchor ? `&anchor=${anchor}` : ''}`),
+
+  recap: (period: RecapPeriod, anchor?: string) =>
+    request<RecapResponse>(`/api/recap?period=${period}${anchor ? `&anchor=${anchor}` : ''}`),
 
   transactions: (params: { from?: string; to?: string; limit?: number; offset?: number } = {}) => {
     const query = new URLSearchParams();

@@ -12,6 +12,7 @@ export interface StatsScreenProps {
   currency: string;
   locale: string;
   today: string;
+  onOpenRecap: () => void;
 }
 
 const PERIODS: Array<{ value: StatsPeriod; label: string }> = [
@@ -28,6 +29,7 @@ export function StatsScreen({
   currency,
   locale,
   today,
+  onOpenRecap,
 }: StatsScreenProps): JSX.Element {
   const [openCategory, setOpenCategory] = useState<string | null>(null);
   const money = (cents: number) => formatMoney(cents, { currency, locale });
@@ -96,6 +98,18 @@ export function StatsScreen({
                     : `${Math.abs(delta)}% ${delta > 0 ? 'more' : 'less'} than the period before`}
                 </span>
               </p>
+            )}
+            {period !== 'day' && (
+              <button
+                type="button"
+                className="link"
+                onClick={() => {
+                  haptics.tap();
+                  onOpenRecap();
+                }}
+              >
+                🎉 Share recap
+              </button>
             )}
           </section>
 
