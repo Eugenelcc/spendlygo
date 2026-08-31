@@ -24,9 +24,14 @@ Legend: 🔴 **NEVER** — violating this is a defect, no exceptions.
   breaches the quota and starts billing.
 - 🔴 **NEVER** use Render's free Postgres. It is **deleted after 30 days**.
   The database is Supabase. This is not a preference.
-- 🔴 **NEVER** call a paid LLM/OCR/speech API. Category inference is a
-  deterministic keyword map (PRD F10.4). If a feature seems to need an LLM,
-  it is a v2 feature, not an v1 shortcut.
+- 🔴 **NEVER** call a paid LLM/OCR/speech API, or one that requires a credit
+  card, even on a free tier. Category inference is a deterministic keyword map
+  (PRD F10.4). If a feature seems to need an LLM, it is a v2 feature, not a v1
+  shortcut.
+- 🟡 The one named exception is receipt OCR (PRD F4.6) via **OCR.space**'s free
+  API tier — no card required, see ADR 0005. It is a narrow, pre-approved
+  carve-out of the rule above, not a precedent for adding other card-free paid
+  services without asking first.
 - 🟡 **ASK FIRST** before adding *any* new external service, even a free one —
   it becomes an availability dependency and a data-processor.
 - 🟢 **ALWAYS** record, in `docs/adr/`, the free-tier limits of anything added
@@ -40,6 +45,7 @@ Legend: 🔴 **NEVER** — violating this is a defect, no exceptions.
 | Mini App | Render Static Site | Free, CDN-served, never sleeps |
 | Database | Supabase Postgres | 500 MB DB, project pauses after 7 days idle |
 | Photo storage | **Telegram itself** | Unlimited; we store `file_id` only |
+| Receipt OCR | **OCR.space** (free API key) | No card required; ~500 requests/day, non-commercial use — verify against current limits before relying on it (ADR 0005) |
 | Scheduling | cron-job.org / UptimeRobot | Free tier |
 | CI | GitHub Actions | Free for public repos |
 
@@ -130,7 +136,12 @@ Legend: 🔴 **NEVER** — violating this is a defect, no exceptions.
 - 🔴 **NEVER** add third-party analytics, ad SDKs, session-replay tools, or
   externally-hosted fonts/scripts to the Mini App.
 - 🔴 **NEVER** send user financial data to any third party. There is no
-  "just for debugging" exception.
+  "just for debugging" exception. The one named carve-out: a receipt photo may
+  be forwarded to OCR.space for text extraction (PRD F4.6, ADR 0005) —
+  nothing else about the user or their account goes with it, the response is
+  used to pre-fill a field the user still confirms, and it is never logged
+  (previous bullet still applies). No other third party, and no other kind of
+  financial data, is covered by this exception.
 - 🟢 **ALWAYS** log with structured, redacted fields: `user_id`, event kind,
   duration, outcome. Never the payload.
 - 🟢 **ALWAYS** honour export (PRD F8) and full deletion on request.

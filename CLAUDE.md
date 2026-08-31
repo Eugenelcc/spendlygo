@@ -137,6 +137,7 @@ Keep `.env.example` in sync with this table. Never commit real values.
 | `DATABASE_URL` | server | Supabase **transaction pooler** URL (port 6543) |
 | `MINIAPP_URL` | server | Static site URL, used in `web_app` buttons |
 | `CRON_SECRET` | server | Bearer token guarding `/tasks/tick` |
+| `OCR_SPACE_API_KEY` | server | Free-tier key for receipt OCR (F4.6, ADR 0005). Optional: photo attachments still work without it, just without the amount pre-fill |
 | `ALLOWED_TELEGRAM_IDS` | server | Comma-separated allowlist while private |
 | `NODE_ENV` | server | `development` \| `production` |
 | `PORT` | server | Injected by Render |
@@ -174,8 +175,9 @@ instance-hours/month; one always-on service uses ~730. See `GUARDRAILS.md` §1.
 `pnpm db:migrate && pnpm db:seed` after a successful build, Render generates
 `TELEGRAM_WEBHOOK_SECRET` and `CRON_SECRET` via `generateValue`, and the server
 registers its own Telegram webhook at boot (`ensureWebhook`, controlled by
-`AUTO_SET_WEBHOOK`). Only `BOT_TOKEN`, `ALLOWED_TELEGRAM_IDS` and
-`DATABASE_URL` are supplied by hand.
+`AUTO_SET_WEBHOOK`). Only `BOT_TOKEN`, `ALLOWED_TELEGRAM_IDS`, `DATABASE_URL`
+and, optionally, `OCR_SPACE_API_KEY` are supplied by hand — none of these can
+be auto-generated, they come from an external account.
 
 Migrations run in the **build**, not at boot: a failed migration then fails the
 deploy loudly instead of leaving a half-working service serving traffic. Both
