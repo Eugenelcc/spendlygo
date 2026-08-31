@@ -76,6 +76,7 @@ describeIfDb('checkBudgetAlerts', () => {
     await usersRepo.updateSettings(handle.db, user.id, { monthlyBudgetCents: 100_000 });
     await transactionsRepo.create(handle.db, {
       userId: user.id,
+      householdId: null,
       direction: 'out',
       amountCents: 70_000,
       categoryId: null,
@@ -92,6 +93,7 @@ describeIfDb('checkBudgetAlerts', () => {
     await usersRepo.updateSettings(handle.db, user.id, { monthlyBudgetCents: 100_000 });
     await transactionsRepo.create(handle.db, {
       userId: user.id,
+      householdId: null,
       direction: 'out',
       amountCents: 85_000,
       categoryId: null,
@@ -111,6 +113,7 @@ describeIfDb('checkBudgetAlerts', () => {
     await usersRepo.updateSettings(handle.db, user.id, { monthlyBudgetCents: 100_000 });
     await transactionsRepo.create(handle.db, {
       userId: user.id,
+      householdId: null,
       direction: 'out',
       amountCents: 120_000,
       categoryId: null,
@@ -127,6 +130,7 @@ describeIfDb('checkBudgetAlerts', () => {
     await usersRepo.updateSettings(handle.db, user.id, { monthlyBudgetCents: 100_000 });
     await transactionsRepo.create(handle.db, {
       userId: user.id,
+      householdId: null,
       direction: 'out',
       amountCents: 90_000,
       categoryId: null,
@@ -147,6 +151,7 @@ describeIfDb('checkBudgetAlerts', () => {
     await usersRepo.updateSettings(handle.db, user.id, { monthlyBudgetCents: 100_000 });
     await transactionsRepo.create(handle.db, {
       userId: user.id,
+      householdId: null,
       direction: 'out',
       amountCents: 85_000,
       categoryId: null,
@@ -158,6 +163,7 @@ describeIfDb('checkBudgetAlerts', () => {
 
     await transactionsRepo.create(handle.db, {
       userId: user.id,
+      householdId: null,
       direction: 'out',
       amountCents: 20_000,
       categoryId: null,
@@ -180,6 +186,7 @@ describeIfDb('checkBudgetAlerts', () => {
     });
     await transactionsRepo.create(handle.db, {
       userId: user.id,
+      householdId: null,
       direction: 'out',
       amountCents: 120_000,
       categoryId: null,
@@ -216,6 +223,7 @@ describeIfDb('checkBudgetAlerts', () => {
     await usersRepo.updateSettings(handle.db, user.id, { monthlyBudgetCents: 100_000 });
     await transactionsRepo.create(handle.db, {
       userId: user.id,
+      householdId: null,
       direction: 'out',
       amountCents: 85_000,
       categoryId: null,

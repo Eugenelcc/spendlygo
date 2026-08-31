@@ -63,6 +63,31 @@ export const healthResponseSchema = z.object({
 });
 export type HealthResponse = z.infer<typeof healthResponseSchema>;
 
+// --- households ---------------------------------------------------------
+
+export const householdMemberSchema = z.object({
+  userId: z.string().uuid(),
+  firstName: z.string().nullable(),
+  isSelf: z.boolean(),
+});
+
+export const householdSchema = z.object({
+  id: z.string().uuid(),
+  members: z.array(householdMemberSchema),
+});
+export type Household = z.infer<typeof householdSchema>;
+
+export const householdResponseSchema = z.object({
+  household: householdSchema.nullable(),
+});
+export type HouseholdResponse = z.infer<typeof householdResponseSchema>;
+
+export const householdInviteResponseSchema = z.object({
+  code: z.string(),
+  expiresAt: z.string().datetime(),
+});
+export type HouseholdInviteResponse = z.infer<typeof householdInviteResponseSchema>;
+
 // --- GET /api/me ------------------------------------------------------------
 
 export const meResponseSchema = z.object({
@@ -74,6 +99,11 @@ export const meResponseSchema = z.object({
     timezone: z.string(),
     currency: z.string(),
     locale: z.string(),
+    /**
+     * The budget governing this user RIGHT NOW — the household's once they're
+     * in one, never their own dormant personal figure. See
+     * apps/server/src/api/service.ts#effectiveBudgetCents.
+     */
     monthlyBudgetCents: z.number().int().nonnegative().nullable(),
     digestHour: z.number().int().min(0).max(23),
     digestEnabled: z.boolean(),
@@ -81,6 +111,7 @@ export const meResponseSchema = z.object({
     alertsEnabled: z.boolean(),
     onboardedAt: z.string().datetime().nullable(),
   }),
+  household: householdSchema.nullable(),
   /** Today's date in the user's timezone — the client must not compute this. */
   today: isoDateSchema,
 });
@@ -120,6 +151,15 @@ export const transactionSchema = z.object({
   categoryName: z.string().nullable(),
   categoryEmoji: z.string().nullable(),
   categoryColorToken: z.string().nullable(),
+  /**
+   * Who logged this. Always present, but the Mini App only needs to render it
+   * when viewing a shared household — that's the whole point of a shared
+   * budget being transparent rather than merely combined.
+   */
+  authorUserId: z.string().uuid(),
+  authorName: z.string(),
+  /** True when this is the viewer's own entry — lets the UI skip the label. */
+  isOwn: z.boolean(),
 });
 export type Transaction = z.infer<typeof transactionSchema>;
 

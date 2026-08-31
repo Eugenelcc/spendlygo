@@ -37,6 +37,10 @@ export function TransactionRow({
         <span className="txn__meta">
           {transaction.categoryName ?? 'Uncategorised'}
           {transaction.source === 'recurring' && ' · repeating'}
+          {/* Only ever true inside a shared household — a solo transaction is
+              always the viewer's own. This is the whole point of sharing:
+              seeing what your partner logged, not just a combined total. */}
+          {!transaction.isOwn && ` · ${transaction.authorName}`}
         </span>
       </span>
       <span className={`txn__amount ${isIncome ? 'txn__amount--in' : ''}`}>

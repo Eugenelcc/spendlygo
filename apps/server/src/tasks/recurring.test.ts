@@ -74,7 +74,7 @@ describeIfDb('materialiseRecurring', () => {
     const count = await materialiseRecurring(ctxAt('2026-08-01T04:00:00Z'));
     expect(count).toBe(1);
 
-    const rows = await transactionsRepo.list(handle.db, userId, { limit: 10 });
+    const rows = await transactionsRepo.list(handle.db, userId, null, { limit: 10 });
     expect(rows).toHaveLength(1);
     expect(rows[0]?.amountCents).toBe(150_000);
     expect(rows[0]?.source).toBe('recurring');
@@ -100,7 +100,7 @@ describeIfDb('materialiseRecurring', () => {
     expect(first).toBe(1);
     expect(second).toBe(0); // the watermark already covers this occurrence
 
-    const rows = await transactionsRepo.list(handle.db, userId, { limit: 10 });
+    const rows = await transactionsRepo.list(handle.db, userId, null, { limit: 10 });
     expect(rows).toHaveLength(1);
   });
 
@@ -124,7 +124,7 @@ describeIfDb('materialiseRecurring', () => {
 
     expect(count).toBe(4); // the 2nd, 3rd, 4th and 5th — none skipped
 
-    const rows = await transactionsRepo.list(handle.db, userId, { limit: 10 });
+    const rows = await transactionsRepo.list(handle.db, userId, null, { limit: 10 });
     expect(rows).toHaveLength(5);
   });
 
@@ -144,7 +144,7 @@ describeIfDb('materialiseRecurring', () => {
     await materialiseRecurring(ctxAt('2026-01-31T04:00:00Z'));
     await materialiseRecurring(ctxAt('2026-02-28T04:00:00Z'));
 
-    const rows = await transactionsRepo.list(handle.db, userId, { limit: 10 });
+    const rows = await transactionsRepo.list(handle.db, userId, null, { limit: 10 });
     const dates = rows.map((row) => row.occurredOn).sort();
     expect(dates).toEqual(['2026-01-31', '2026-02-28']);
   });

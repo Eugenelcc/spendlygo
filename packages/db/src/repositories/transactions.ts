@@ -2,19 +2,39 @@
  * Transaction reads and writes.
  *
  * GUARDRAILS.md section 3: aggregate in SQL, never in JavaScript, and
- * soft-delete on user action. Section 4: every query filters by user_id here,
- * in the repository, so no call site can forget it.
+ * soft-delete on user action. Section 4: every query filters by ownership
+ * here, in the repository, so no call site can forget it.
+ *
+ * Households complicate "ownership" into two distinct questions, answered by
+ * two distinct filters below:
+ *
+ *  - `visibleTo` (used by `list`, the personal/History feed): a household's
+ *    shared entries, UNION the caller's own entries from before they had a
+ *    household. A household's creator keeps seeing their carried-over
+ *    history; a joining partner does not inherit it.
+ *
+ *  - `sharedScope` (used by every aggregate — safe-to-spend, Stats): STRICTLY
+ *    the household's entries once in one, nothing from before it existed. Two
+ *    partners must compute the identical shared number, and a creator's
+ *    un-shared past spending would otherwise silently count against a
+ *    partner who never logged it and never agreed to it.
+ *
+ * Mutations (`findById`, `update`, `softDelete`) stay author-only regardless
+ * of household — full visibility, not full control. Nobody edits or deletes
+ * a household-mate's entry.
  */
 
-import { and, asc, desc, eq, gte, isNull, lte, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, isNull, lte, or, sql } from 'drizzle-orm';
 import type { Database } from '../client.js';
-import { categories, transactions, type Transaction } from '../schema.js';
+import { categories, transactions, users, type Transaction } from '../schema.js';
 
 export type Direction = 'in' | 'out';
 export type TransactionSource = 'chat' | 'miniapp' | 'recurring';
 
 export interface CreateTransactionInput {
   userId: string;
+  /** The author's household at the moment of logging — see the file header. */
+  householdId: string | null;
   direction: Direction;
   amountCents: number;
   categoryId: string | null;
@@ -23,9 +43,10 @@ export interface CreateTransactionInput {
   source: TransactionSource;
 }
 
-/** A transaction with its category joined, which is what every screen shows. */
+/** A transaction with its category and author joined — what every screen shows. */
 export interface TransactionView {
   id: string;
+  userId: string;
   direction: Direction;
   amountCents: number;
   note: string | null;
@@ -37,15 +58,36 @@ export interface TransactionView {
   categoryName: string | null;
   categoryEmoji: string | null;
   categoryColorToken: string | null;
+  authorFirstName: string | null;
 }
 
-/** Live rows only — soft-deleted transactions are invisible to every read. */
-function live(userId: string) {
+/** Rows this exact author may edit or delete. Never household-widened. */
+function ownedByAuthor(userId: string) {
   return and(eq(transactions.userId, userId), isNull(transactions.deletedAt));
+}
+
+/** Rows this user should see in their personal feed — see the file header. */
+function visibleTo(userId: string, householdId: string | null) {
+  const ownership = householdId
+    ? or(
+        eq(transactions.householdId, householdId),
+        and(eq(transactions.userId, userId), isNull(transactions.householdId)),
+      )
+    : eq(transactions.userId, userId);
+  return and(ownership, isNull(transactions.deletedAt));
+}
+
+/** Rows that count toward the shared budget — see the file header. */
+function sharedScope(userId: string, householdId: string | null) {
+  const ownership = householdId
+    ? eq(transactions.householdId, householdId)
+    : eq(transactions.userId, userId);
+  return and(ownership, isNull(transactions.deletedAt));
 }
 
 const viewColumns = {
   id: transactions.id,
+  userId: transactions.userId,
   direction: transactions.direction,
   amountCents: transactions.amountCents,
   note: transactions.note,
@@ -57,13 +99,24 @@ const viewColumns = {
   categoryName: categories.name,
   categoryEmoji: categories.emoji,
   categoryColorToken: categories.colorToken,
+  authorFirstName: users.firstName,
 };
+
+/** Every view query joins the same two tables, in the same order. */
+function baseViewQuery(db: Database) {
+  return db
+    .select(viewColumns)
+    .from(transactions)
+    .leftJoin(categories, eq(transactions.categoryId, categories.id))
+    .leftJoin(users, eq(transactions.userId, users.id));
+}
 
 export async function create(db: Database, input: CreateTransactionInput): Promise<Transaction> {
   const rows = await db
     .insert(transactions)
     .values({
       userId: input.userId,
+      householdId: input.householdId,
       direction: input.direction,
       amountCents: input.amountCents,
       categoryId: input.categoryId,
@@ -78,16 +131,14 @@ export async function create(db: Database, input: CreateTransactionInput): Promi
   return row;
 }
 
+/** Author-only — see the file header. */
 export async function findById(
   db: Database,
   userId: string,
   id: string,
 ): Promise<TransactionView | null> {
-  const rows = await db
-    .select(viewColumns)
-    .from(transactions)
-    .leftJoin(categories, eq(transactions.categoryId, categories.id))
-    .where(and(live(userId), eq(transactions.id, id)))
+  const rows = await baseViewQuery(db)
+    .where(and(ownedByAuthor(userId), eq(transactions.id, id)))
     .limit(1);
   return (rows[0] as TransactionView | undefined) ?? null;
 }
@@ -104,16 +155,14 @@ export interface ListOptions {
 export async function list(
   db: Database,
   userId: string,
+  householdId: string | null,
   options: ListOptions = {},
 ): Promise<TransactionView[]> {
-  const filters = [live(userId)];
+  const filters = [visibleTo(userId, householdId)];
   if (options.from) filters.push(gte(transactions.occurredOn, options.from));
   if (options.to) filters.push(lte(transactions.occurredOn, options.to));
 
-  const rows = await db
-    .select(viewColumns)
-    .from(transactions)
-    .leftJoin(categories, eq(transactions.categoryId, categories.id))
+  const rows = await baseViewQuery(db)
     .where(and(...filters))
     .orderBy(desc(transactions.occurredOn), desc(transactions.createdAt))
     .limit(Math.min(options.limit ?? 50, 200))
@@ -122,12 +171,12 @@ export async function list(
   return rows as TransactionView[];
 }
 
-/** Soft delete (PRD F11.3). Returns false when the row is not this user's. */
+/** Soft delete (PRD F11.3). Author-only — see the file header. */
 export async function softDelete(db: Database, userId: string, id: string): Promise<boolean> {
   const rows = await db
     .update(transactions)
     .set({ deletedAt: new Date(), updatedAt: new Date() })
-    .where(and(live(userId), eq(transactions.id, id)))
+    .where(and(ownedByAuthor(userId), eq(transactions.id, id)))
     .returning({ id: transactions.id });
   return rows.length > 0;
 }
@@ -140,6 +189,7 @@ export interface UpdateTransactionInput {
   occurredOn?: string;
 }
 
+/** Author-only — see the file header. */
 export async function update(
   db: Database,
   userId: string,
@@ -149,7 +199,7 @@ export async function update(
   const rows = await db
     .update(transactions)
     .set({ ...input, updatedAt: new Date() })
-    .where(and(live(userId), eq(transactions.id, id)))
+    .where(and(ownedByAuthor(userId), eq(transactions.id, id)))
     .returning({ id: transactions.id });
 
   if (rows.length === 0) return null;
@@ -159,6 +209,8 @@ export async function update(
 // --- aggregates -------------------------------------------------------------
 // GUARDRAILS.md section 7: these run in Postgres. Pulling a transaction history
 // into Node to sum it would blow the 512 MB budget and get slower every month.
+// All of them use `sharedScope` — see the file header for why that must be
+// strict rather than the union `list` uses.
 
 export interface PeriodTotals {
   inCents: number;
@@ -171,6 +223,7 @@ export interface PeriodTotals {
 export async function totalsForPeriod(
   db: Database,
   userId: string,
+  householdId: string | null,
   from: string,
   to: string,
 ): Promise<PeriodTotals> {
@@ -184,7 +237,13 @@ export async function totalsForPeriod(
     })
     .from(transactions)
     .leftJoin(categories, eq(transactions.categoryId, categories.id))
-    .where(and(live(userId), gte(transactions.occurredOn, from), lte(transactions.occurredOn, to)));
+    .where(
+      and(
+        sharedScope(userId, householdId),
+        gte(transactions.occurredOn, from),
+        lte(transactions.occurredOn, to),
+      ),
+    );
 
   return rows[0] ?? { inCents: 0, outCents: 0, budgetedOutCents: 0, count: 0 };
 }
@@ -202,6 +261,7 @@ export interface CategoryTotal {
 export async function totalsByCategory(
   db: Database,
   userId: string,
+  householdId: string | null,
   from: string,
   to: string,
 ): Promise<CategoryTotal[]> {
@@ -219,7 +279,7 @@ export async function totalsByCategory(
     .leftJoin(categories, eq(transactions.categoryId, categories.id))
     .where(
       and(
-        live(userId),
+        sharedScope(userId, householdId),
         eq(transactions.direction, 'out'),
         gte(transactions.occurredOn, from),
         lte(transactions.occurredOn, to),
@@ -247,6 +307,7 @@ export interface DailyTotal {
 export async function totalsByDay(
   db: Database,
   userId: string,
+  householdId: string | null,
   from: string,
   to: string,
 ): Promise<DailyTotal[]> {
@@ -257,7 +318,13 @@ export async function totalsByDay(
       inCents: sql<number>`coalesce(sum(case when ${transactions.direction} = 'in' then ${transactions.amountCents} else 0 end), 0)::int`,
     })
     .from(transactions)
-    .where(and(live(userId), gte(transactions.occurredOn, from), lte(transactions.occurredOn, to)))
+    .where(
+      and(
+        sharedScope(userId, householdId),
+        gte(transactions.occurredOn, from),
+        lte(transactions.occurredOn, to),
+      ),
+    )
     .groupBy(transactions.occurredOn)
     .orderBy(asc(transactions.occurredOn));
 
@@ -273,6 +340,7 @@ export interface MonthlyTotal {
 export async function totalsByMonth(
   db: Database,
   userId: string,
+  householdId: string | null,
   from: string,
   to: string,
 ): Promise<MonthlyTotal[]> {
@@ -285,7 +353,13 @@ export async function totalsByMonth(
       inCents: sql<number>`coalesce(sum(case when ${transactions.direction} = 'in' then ${transactions.amountCents} else 0 end), 0)::int`,
     })
     .from(transactions)
-    .where(and(live(userId), gte(transactions.occurredOn, from), lte(transactions.occurredOn, to)))
+    .where(
+      and(
+        sharedScope(userId, householdId),
+        gte(transactions.occurredOn, from),
+        lte(transactions.occurredOn, to),
+      ),
+    )
     .groupBy(monthExpr)
     .orderBy(asc(monthExpr));
 
@@ -296,12 +370,13 @@ export async function totalsByMonth(
 export async function frequentCategoryIds(
   db: Database,
   userId: string,
+  householdId: string | null,
   limit = 8,
 ): Promise<string[]> {
   const rows = await db
     .select({ categoryId: transactions.categoryId })
     .from(transactions)
-    .where(and(live(userId), sql`${transactions.categoryId} is not null`))
+    .where(and(sharedScope(userId, householdId), sql`${transactions.categoryId} is not null`))
     // Recency-weighted: a category used once yesterday outranks one used
     // twice six months ago.
     .groupBy(transactions.categoryId)

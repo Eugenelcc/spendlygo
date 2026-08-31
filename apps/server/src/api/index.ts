@@ -14,10 +14,12 @@ import {
 } from '@spendlygo/core';
 import {
   categoriesRepo,
+  householdsRepo,
   recurringRepo,
   transactionsRepo,
   usersRepo,
   type RecurringRule as DbRecurringRule,
+  type User,
 } from '@spendlygo/db';
 import {
   createRecurringRuleSchema,
@@ -26,6 +28,9 @@ import {
   updateSettingsSchema,
   updateTransactionSchema,
   type CategoriesResponse,
+  type Household as ApiHousehold,
+  type HouseholdInviteResponse,
+  type HouseholdResponse,
   type MeResponse,
   type RecurringRulesResponse,
   type SafeToSpend,
@@ -36,7 +41,13 @@ import {
 import { NotFoundError } from '@spendlygo/core';
 import type { AppContext } from '../context.js';
 import { requireInitData, type ApiEnv } from '../middleware/auth.js';
-import { computeSafeToSpend, recentDailySpend, toApiTransaction, todayFor } from './service.js';
+import {
+  computeSafeToSpend,
+  effectiveBudgetCents,
+  recentDailySpend,
+  toApiTransaction,
+  todayFor,
+} from './service.js';
 
 /** Zod result -> ValidationError, so the error handler maps it to a 400. */
 async function parseBody<T>(
@@ -102,8 +113,13 @@ export function createApiRouter(ctx: AppContext): Hono<ApiEnv> {
 
   // --- account --------------------------------------------------------------
 
-  api.get('/me', (c) => {
+  api.get('/me', async (c) => {
     const user = c.get('user');
+    const [budgetCents, household] = await Promise.all([
+      effectiveBudgetCents(ctx, user),
+      loadHouseholdView(ctx, user),
+    ]);
+
     const body: MeResponse = {
       user: {
         id: user.id,
@@ -113,13 +129,14 @@ export function createApiRouter(ctx: AppContext): Hono<ApiEnv> {
         timezone: user.timezone,
         currency: user.currency,
         locale: user.locale,
-        monthlyBudgetCents: user.monthlyBudgetCents,
+        monthlyBudgetCents: budgetCents,
         digestHour: user.digestHour,
         digestEnabled: user.digestEnabled,
         nudgeEnabled: user.nudgeEnabled,
         alertsEnabled: user.alertsEnabled,
         onboardedAt: user.onboardedAt?.toISOString() ?? null,
       },
+      household,
       // PRD F7.2: the client must never derive a period boundary from the
       // device clock — it is resolved here, in the user's timezone.
       today: isoDateOf(ctx.clock.now(), user.timezone),
@@ -130,11 +147,26 @@ export function createApiRouter(ctx: AppContext): Hono<ApiEnv> {
   api.patch('/settings', async (c) => {
     const user = c.get('user');
     const input = await parseBody(c, updateSettingsSchema);
-    const updated = await usersRepo.updateSettings(ctx.db, user.id, input);
+    const { monthlyBudgetCents, ...personalInput } = input;
+
+    // A shared budget is written once, to the household — never duplicated
+    // onto the writer's own dormant `monthlyBudgetCents`, which would let it
+    // resurface with a stale value the moment they left the household.
+    if (monthlyBudgetCents !== undefined && user.householdId !== null) {
+      await householdsRepo.updateBudget(ctx.db, user.householdId, monthlyBudgetCents);
+    }
+
+    const personalUpdate =
+      monthlyBudgetCents !== undefined && user.householdId === null
+        ? { ...personalInput, monthlyBudgetCents }
+        : personalInput;
+
+    const updated = await usersRepo.updateSettings(ctx.db, user.id, personalUpdate);
+    const effectiveCents = await effectiveBudgetCents(ctx, updated);
 
     return c.json({
       user: {
-        monthlyBudgetCents: updated.monthlyBudgetCents,
+        monthlyBudgetCents: effectiveCents,
         timezone: updated.timezone,
         digestHour: updated.digestHour,
         digestEnabled: updated.digestEnabled,
@@ -142,6 +174,32 @@ export function createApiRouter(ctx: AppContext): Hono<ApiEnv> {
         alertsEnabled: updated.alertsEnabled,
       },
     });
+  });
+
+  // --- household (shared budget) ---------------------------------------------
+
+  api.get('/household', async (c) => {
+    const user = c.get('user');
+    const body: HouseholdResponse = { household: await loadHouseholdView(ctx, user) };
+    return c.json(body);
+  });
+
+  api.post('/household/invite', async (c) => {
+    const user = c.get('user');
+    const householdId = user.householdId ?? (await householdsRepo.create(ctx.db, user.id)).id;
+    const invite = await householdsRepo.createInvite(ctx.db, householdId, user.id);
+
+    const body: HouseholdInviteResponse = {
+      code: invite.code,
+      expiresAt: invite.expiresAt.toISOString(),
+    };
+    return c.json(body);
+  });
+
+  api.post('/household/leave', async (c) => {
+    const user = c.get('user');
+    await householdsRepo.leave(ctx.db, user.id);
+    return c.json({ ok: true });
   });
 
   api.get('/categories', async (c) => {
@@ -172,8 +230,12 @@ export function createApiRouter(ctx: AppContext): Hono<ApiEnv> {
 
     const [safeToSpend, monthTotals, todayTransactions, recentDays] = await Promise.all([
       computeSafeToSpend(ctx, user, today),
-      transactionsRepo.totalsForPeriod(ctx.db, user.id, month.start, month.end),
-      transactionsRepo.list(ctx.db, user.id, { from: today, to: today, limit: 100 }),
+      transactionsRepo.totalsForPeriod(ctx.db, user.id, user.householdId, month.start, month.end),
+      transactionsRepo.list(ctx.db, user.id, user.householdId, {
+        from: today,
+        to: today,
+        limit: 100,
+      }),
       recentDailySpend(ctx, user, today),
     ]);
 
@@ -184,7 +246,7 @@ export function createApiRouter(ctx: AppContext): Hono<ApiEnv> {
       safeToSpend: serialiseSafeToSpend(safeToSpend),
       monthIn: monthTotals.inCents,
       monthOut: monthTotals.outCents,
-      transactions: todayTransactions.map(toApiTransaction),
+      transactions: todayTransactions.map((row) => toApiTransaction(row, user.id)),
       recentDays,
     };
     return c.json(body);
@@ -196,14 +258,16 @@ export function createApiRouter(ctx: AppContext): Hono<ApiEnv> {
     const user = c.get('user');
     const { from, to, limit, offset } = c.req.query();
 
-    const rows = await transactionsRepo.list(ctx.db, user.id, {
+    const rows = await transactionsRepo.list(ctx.db, user.id, user.householdId, {
       from,
       to,
       limit: limit ? Number(limit) : 50,
       offset: offset ? Number(offset) : 0,
     });
 
-    const body: TransactionsResponse = { transactions: rows.map(toApiTransaction) };
+    const body: TransactionsResponse = {
+      transactions: rows.map((row) => toApiTransaction(row, user.id)),
+    };
     return c.json(body);
   });
 
@@ -218,6 +282,7 @@ export function createApiRouter(ctx: AppContext): Hono<ApiEnv> {
 
     const created = await transactionsRepo.create(ctx.db, {
       userId: user.id,
+      householdId: user.householdId,
       direction: input.direction,
       amountCents: input.amountCents,
       categoryId,
@@ -235,7 +300,7 @@ export function createApiRouter(ctx: AppContext): Hono<ApiEnv> {
 
     return c.json(
       {
-        transaction: toApiTransaction(view),
+        transaction: toApiTransaction(view, user.id),
         // Returned so the ring can animate straight to its new value without a
         // second round trip (DESIGN.md section 5.2).
         safeToSpend: serialiseSafeToSpend(safeToSpend),
@@ -260,7 +325,7 @@ export function createApiRouter(ctx: AppContext): Hono<ApiEnv> {
 
     const safeToSpend = await computeSafeToSpend(ctx, user);
     return c.json({
-      transaction: toApiTransaction(updated),
+      transaction: toApiTransaction(updated, user.id),
       safeToSpend: serialiseSafeToSpend(safeToSpend),
     });
   });
@@ -282,7 +347,7 @@ export function createApiRouter(ctx: AppContext): Hono<ApiEnv> {
     const period = statsPeriodSchema.parse(c.req.query('period') ?? 'month');
     const anchor = (c.req.query('anchor') as IsoDate | undefined) ?? today;
 
-    const body = await buildStats(ctx, user.id, period, anchor);
+    const body = await buildStats(ctx, user.id, user.householdId, period, anchor);
     return c.json(body);
   });
 
@@ -356,6 +421,20 @@ function toApiRule(
   };
 }
 
+async function loadHouseholdView(ctx: AppContext, user: User): Promise<ApiHousehold | null> {
+  if (user.householdId === null) return null;
+
+  const members = await householdsRepo.membersOf(ctx.db, user.householdId);
+  return {
+    id: user.householdId,
+    members: members.map((member) => ({
+      userId: member.id,
+      firstName: member.firstName,
+      isSelf: member.id === user.id,
+    })),
+  };
+}
+
 async function guessCategoryId(
   ctx: AppContext,
   userId: string,
@@ -376,6 +455,7 @@ async function guessCategoryId(
 async function buildStats(
   ctx: AppContext,
   userId: string,
+  householdId: string | null,
   period: 'day' | 'month' | 'year',
   anchor: IsoDate,
 ): Promise<StatsResponse> {
@@ -415,12 +495,12 @@ async function buildStats(
   }
 
   const [totals, byCategory, previous] = await Promise.all([
-    transactionsRepo.totalsForPeriod(ctx.db, userId, from, to),
-    transactionsRepo.totalsByCategory(ctx.db, userId, from, to),
-    transactionsRepo.totalsForPeriod(ctx.db, userId, previousFrom, previousTo),
+    transactionsRepo.totalsForPeriod(ctx.db, userId, householdId, from, to),
+    transactionsRepo.totalsByCategory(ctx.db, userId, householdId, from, to),
+    transactionsRepo.totalsForPeriod(ctx.db, userId, householdId, previousFrom, previousTo),
   ]);
 
-  const series = await buildSeries(ctx, userId, period, from, to, year, month);
+  const series = await buildSeries(ctx, userId, householdId, period, from, to, year, month);
 
   return {
     period,
@@ -451,6 +531,7 @@ async function buildStats(
 async function buildSeries(
   ctx: AppContext,
   userId: string,
+  householdId: string | null,
   period: 'day' | 'month' | 'year',
   from: IsoDate,
   to: IsoDate,
@@ -458,7 +539,7 @@ async function buildSeries(
   month: number,
 ): Promise<StatsResponse['series']> {
   if (period === 'year') {
-    const rows = await transactionsRepo.totalsByMonth(ctx.db, userId, from, to);
+    const rows = await transactionsRepo.totalsByMonth(ctx.db, userId, householdId, from, to);
     const byMonth = new Map(rows.map((row) => [row.month, row]));
 
     return Array.from({ length: 12 }, (_, index) => {
@@ -473,7 +554,7 @@ async function buildSeries(
     });
   }
 
-  const rows = await transactionsRepo.totalsByDay(ctx.db, userId, from, to);
+  const rows = await transactionsRepo.totalsByDay(ctx.db, userId, householdId, from, to);
   const byDay = new Map(rows.map((row) => [row.day, row]));
 
   if (period === 'day') {

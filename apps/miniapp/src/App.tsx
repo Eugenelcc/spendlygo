@@ -182,6 +182,33 @@ function Shell(): JSX.Element {
     onError: () => haptics.error(),
   });
 
+  // The invite code lives here rather than in the `me` query — it's a
+  // one-time secret handed back exactly once, never something to re-fetch.
+  const [householdInviteCode, setHouseholdInviteCode] = useState<string | null>(null);
+
+  const createHouseholdInvite = useMutation({
+    mutationFn: api.createHouseholdInvite,
+    onSuccess: (result) => {
+      haptics.success();
+      setHouseholdInviteCode(result.code);
+      // Creating an invite also creates the household if there wasn't one yet.
+      void queryClient.invalidateQueries({ queryKey: ['me'] });
+    },
+    onError: () => haptics.error(),
+  });
+
+  const leaveHousehold = useMutation({
+    mutationFn: api.leaveHousehold,
+    onSuccess: () => {
+      haptics.rigid();
+      setHouseholdInviteCode(null);
+      // Every scoped total changes shape the moment membership does.
+      refreshAll();
+      showToast('Left the shared budget');
+    },
+    onError: () => haptics.error(),
+  });
+
   if (me.isPending || today.isPending) {
     return (
       <main className="screen">
@@ -273,6 +300,11 @@ function Shell(): JSX.Element {
             recurringBusy={addRecurring.isPending || deleteRecurring.isPending}
             onAddRecurring={(input) => addRecurring.mutate(input)}
             onDeleteRecurring={(id) => deleteRecurring.mutate(id)}
+            householdInviteCode={householdInviteCode}
+            householdInviteBusy={createHouseholdInvite.isPending}
+            householdLeaveBusy={leaveHousehold.isPending}
+            onCreateHouseholdInvite={() => createHouseholdInvite.mutate()}
+            onLeaveHousehold={() => leaveHousehold.mutate()}
           />
         )}
       </main>

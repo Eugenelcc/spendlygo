@@ -2,6 +2,8 @@ import type {
   CategoriesResponse,
   CreateRecurringRuleBody,
   CreateTransactionBody,
+  HouseholdInviteResponse,
+  HouseholdResponse,
   MeResponse,
   RecurringRulesResponse,
   SafeToSpend,
@@ -116,4 +118,11 @@ export const api = {
 
   deleteRecurringRule: (id: string) =>
     request<{ ok: true }>(`/api/recurring/${id}`, { method: 'DELETE' }),
+
+  household: () => request<HouseholdResponse>('/api/household'),
+
+  createHouseholdInvite: () =>
+    request<HouseholdInviteResponse>('/api/household/invite', { method: 'POST' }),
+
+  leaveHousehold: () => request<{ ok: true }>('/api/household/leave', { method: 'POST' }),
 };

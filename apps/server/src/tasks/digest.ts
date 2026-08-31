@@ -112,10 +112,16 @@ async function buildPeriodSummary(
     );
 
   const [totals, previous, byCategory, byDay, safeToSpend] = await Promise.all([
-    transactionsRepo.totalsForPeriod(ctx.db, user.id, options.from, options.to),
-    transactionsRepo.totalsForPeriod(ctx.db, user.id, options.previousFrom, options.previousTo),
-    transactionsRepo.totalsByCategory(ctx.db, user.id, options.from, options.to),
-    transactionsRepo.totalsByDay(ctx.db, user.id, options.from, options.to),
+    transactionsRepo.totalsForPeriod(ctx.db, user.id, user.householdId, options.from, options.to),
+    transactionsRepo.totalsForPeriod(
+      ctx.db,
+      user.id,
+      user.householdId,
+      options.previousFrom,
+      options.previousTo,
+    ),
+    transactionsRepo.totalsByCategory(ctx.db, user.id, user.householdId, options.from, options.to),
+    transactionsRepo.totalsByDay(ctx.db, user.id, user.householdId, options.from, options.to),
     computeSafeToSpend(ctx, user, options.to),
   ]);
 

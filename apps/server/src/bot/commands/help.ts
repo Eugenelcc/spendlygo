@@ -28,10 +28,16 @@ an end-of-month summary. Turn them on or off in Settings.
 \`/recurring add 1500 rent monthly\`
 \`/recurring add 15 netflix monthly #bills\`
 
+*Sharing a budget* — with a partner, full transparency both ways
+
+\`/household invite\` gives you a code; they send \`/join CODE\`. Either of you
+can then change the budget, and you'll both see everything either of you logs.
+
 *Commands*
 /today — what's safe to spend today
 /budget — show or set your monthly budget
 /recurring — list or add recurring transactions
+/household — share a budget with a partner
 /recent — your last 10 entries
 /undo — undo the last entry
 /app — open the app

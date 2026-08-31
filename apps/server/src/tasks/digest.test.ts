@@ -79,6 +79,7 @@ describeIfDb('the digest family', () => {
     it('does not nudge someone who already logged something today', async () => {
       await transactionsRepo.create(handle.db, {
         userId: user.id,
+        householdId: null,
         direction: 'out',
         amountCents: 500,
         categoryId: null,
@@ -104,6 +105,7 @@ describeIfDb('the digest family', () => {
       await usersRepo.updateSettings(handle.db, user.id, { monthlyBudgetCents: 100 });
       await transactionsRepo.create(handle.db, {
         userId: user.id,
+        householdId: null,
         direction: 'out',
         amountCents: 100_000,
         categoryId: null,
@@ -130,6 +132,7 @@ describeIfDb('the digest family', () => {
       // Inside the week (Mon 24 Aug - Sun 30 Aug).
       await transactionsRepo.create(handle.db, {
         userId: user.id,
+        householdId: null,
         direction: 'out',
         amountCents: 4200,
         categoryId: null,
@@ -140,6 +143,7 @@ describeIfDb('the digest family', () => {
       // Outside the week — must not be counted.
       await transactionsRepo.create(handle.db, {
         userId: user.id,
+        householdId: null,
         direction: 'out',
         amountCents: 99999,
         categoryId: null,
@@ -158,6 +162,7 @@ describeIfDb('the digest family', () => {
       // Previous week (Mon 17 - Sun 23 Aug).
       await transactionsRepo.create(handle.db, {
         userId: user.id,
+        householdId: null,
         direction: 'out',
         amountCents: 10000,
         categoryId: null,
@@ -168,6 +173,7 @@ describeIfDb('the digest family', () => {
       // This week.
       await transactionsRepo.create(handle.db, {
         userId: user.id,
+        householdId: null,
         direction: 'out',
         amountCents: 5000,
         categoryId: null,
@@ -193,6 +199,7 @@ describeIfDb('the digest family', () => {
     it("names the month and totals what's inside it", async () => {
       await transactionsRepo.create(handle.db, {
         userId: user.id,
+        householdId: null,
         direction: 'out',
         amountCents: 15000,
         categoryId: null,
@@ -203,6 +210,7 @@ describeIfDb('the digest family', () => {
       // Spills into July — must not count toward August's total.
       await transactionsRepo.create(handle.db, {
         userId: user.id,
+        householdId: null,
         direction: 'out',
         amountCents: 88888,
         categoryId: null,

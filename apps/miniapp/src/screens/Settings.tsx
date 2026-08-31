@@ -1,5 +1,6 @@
 import { useState, type JSX } from 'react';
 import type { Cadence, Category, Direction, MeResponse, RecurringRule } from '@spendlygo/shared';
+import { HouseholdSection } from '../components/HouseholdSection';
 import { RecurringForm } from '../components/RecurringForm';
 import { formatMoney } from '../lib/format';
 import { haptics } from '../lib/telegram';
@@ -25,6 +26,11 @@ export interface SettingsScreenProps {
     dayOfMonth: number | null;
   }) => void;
   onDeleteRecurring: (id: string) => void;
+  householdInviteCode: string | null;
+  householdInviteBusy: boolean;
+  householdLeaveBusy: boolean;
+  onCreateHouseholdInvite: () => void;
+  onLeaveHousehold: () => void;
 }
 
 const CADENCE_LABEL: Record<Cadence, string> = {
@@ -47,6 +53,11 @@ export function SettingsScreen({
   recurringBusy,
   onAddRecurring,
   onDeleteRecurring,
+  householdInviteCode,
+  householdInviteBusy,
+  householdLeaveBusy,
+  onCreateHouseholdInvite,
+  onLeaveHousehold,
 }: SettingsScreenProps): JSX.Element {
   const { user } = me;
   const [draft, setDraft] = useState(
@@ -111,6 +122,16 @@ export function SettingsScreen({
           </div>
         )}
       </section>
+
+      <HouseholdSection
+        household={me.household}
+        loading={false}
+        inviteCode={householdInviteCode}
+        inviteBusy={householdInviteBusy}
+        leaveBusy={householdLeaveBusy}
+        onCreateInvite={onCreateHouseholdInvite}
+        onLeave={onLeaveHousehold}
+      />
 
       <section className="card">
         <div className="card__label">Daily digest</div>

@@ -15,6 +15,13 @@
       "when": 1788134961576,
       "tag": "0001_budget_alerts",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1788137328631,
+      "tag": "0002_households",
+      "breakpoints": true
     }
   ]
 }
