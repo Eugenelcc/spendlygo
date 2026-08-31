@@ -51,10 +51,10 @@ P2 mini app   ██████████ done
 P3 goals      ██████████ done
 P4 stats      ██████████ done
 P5 automation ██████████ done
-P6 polish     ░░░░░░░░░░  photos, CSV export
+P6 polish     █████░░░░░  photos done; receipt OCR and CSV export next
 ```
 
-378 tests, initial Mini App bundle 82 KB gzipped.
+389 tests, initial Mini App bundle 84 KB gzipped.
 
 ## Running it locally
 

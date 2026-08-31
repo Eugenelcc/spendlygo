@@ -8,12 +8,13 @@
 
 import { createHmac } from 'node:crypto';
 import { Bot } from 'grammy';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { fixedClock } from '@spendlygo/core';
 import { createDatabase, schema, type DatabaseHandle } from '@spendlygo/db';
 import { recapResponseSchema, statsResponseSchema, todayResponseSchema } from '@spendlygo/shared';
 import { createApp } from '../app.js';
+import type { SpendlygoBot } from '../bot/index.js';
 import type { Config } from '../config.js';
 import type { AppContext } from '../context.js';
 import { setLogLevel } from '../logger.js';
@@ -86,7 +87,13 @@ describeIfDb('transactions API', () => {
       dbHandle: handle,
       clock: fixedClock(NOW),
     };
-    app = createApp(ctx, new Bot(BOT_TOKEN, { botInfo: undefined as never }), {
+    const bot: SpendlygoBot = new Bot(BOT_TOKEN, { botInfo: undefined as never });
+    // No real Telegram connectivity in tests — getFile always "fails", which
+    // resolveFileUrl already treats as "not available" (apps/server/src/
+    // telegram/photos.ts). The photo tests below only assert on the
+    // ownership/auth layer in front of it, never on real bytes.
+    vi.spyOn(bot.api, 'getFile').mockRejectedValue(new Error('no network in tests'));
+    app = createApp(ctx, bot, {
       state: { bot: 'ready', webhook: 'registered' },
     });
   });
@@ -201,6 +208,74 @@ describeIfDb('transactions API', () => {
         headers: auth(OWNER),
       });
       expect(response.status).toBe(404);
+    });
+  });
+
+  describe('photo attachments (PRD F4)', () => {
+    it("lists a photo on the owner's transaction, empty for a stranger", async () => {
+      const created = await json(await post(OWNER, { direction: 'out', amountCents: 1500 }));
+      const { attachmentsRepo } = await import('@spendlygo/db');
+      await attachmentsRepo.create(handle.db, {
+        transactionId: created.transaction.id,
+        userId: (await json(await app.request('/api/me', { headers: auth(OWNER) }))).user.id,
+        tgFileId: 'test-file-id',
+        tgFileUniqueId: 'test-file-unique-id',
+        width: 400,
+        height: 300,
+        fileSize: 1000,
+      });
+
+      const ownerList = await json(
+        await app.request(`/api/transactions/${created.transaction.id}/photos`, {
+          headers: auth(OWNER),
+        }),
+      );
+      expect(ownerList.photos).toHaveLength(1);
+      expect(ownerList.photos[0].width).toBe(400);
+
+      const strangerList = await json(
+        await app.request(`/api/transactions/${created.transaction.id}/photos`, {
+          headers: auth(OTHER),
+        }),
+      );
+      expect(strangerList.photos).toHaveLength(0);
+    });
+
+    it("never distinguishes a stranger's photo from one that doesn't exist", async () => {
+      const created = await json(await post(OWNER, { direction: 'out', amountCents: 1500 }));
+      const { attachmentsRepo } = await import('@spendlygo/db');
+      const me = await json(await app.request('/api/me', { headers: auth(OWNER) }));
+      const attachment = await attachmentsRepo.create(handle.db, {
+        transactionId: created.transaction.id,
+        userId: me.user.id,
+        tgFileId: 'test-file-id-2',
+        tgFileUniqueId: 'test-file-unique-id-2',
+        width: 400,
+        height: 300,
+        fileSize: 1000,
+      });
+
+      const strangerResponse = await app.request(`/api/photos/${attachment.id}`, {
+        headers: auth(OTHER),
+      });
+      const missingResponse = await app.request(
+        '/api/photos/00000000-0000-4000-8000-000000000000',
+        { headers: auth(OTHER) },
+      );
+      expect(strangerResponse.status).toBe(404);
+      expect(missingResponse.status).toBe(404);
+      expect((await json(strangerResponse)).error.message).toBe(
+        (await json(missingResponse)).error.message,
+      );
+    });
+
+    it('rejects an unauthenticated request', async () => {
+      expect((await app.request('/api/photos/00000000-0000-4000-8000-000000000000')).status).toBe(
+        401,
+      );
+      expect(
+        (await app.request('/api/transactions/00000000-0000-4000-8000-000000000000/photos')).status,
+      ).toBe(401);
     });
   });
 

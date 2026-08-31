@@ -76,6 +76,7 @@ export function toApiTransaction(
     authorUserId: row.userId,
     authorName: row.authorFirstName ?? 'Someone',
     isOwn: row.userId === viewerUserId,
+    hasPhoto: row.hasPhoto,
   };
 }
 

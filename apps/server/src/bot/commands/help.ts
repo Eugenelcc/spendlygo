@@ -20,6 +20,10 @@ Type the amount first, then what it was for:
 If you leave the category out, I'll guess it from what you wrote.
 Every entry gets an *Undo* button for five minutes.
 
+*Receipts* — send a photo captioned with the amount
+
+\`12.50 lunch\` as the caption, same grammar as typing it.
+
 *Digests* — a daily check-in at your chosen hour, plus a Sunday wrap-up and
 an end-of-month summary. Turn them on or off in Settings.
 

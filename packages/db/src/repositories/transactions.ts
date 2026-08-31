@@ -26,7 +26,7 @@
 
 import { and, asc, desc, eq, gte, isNull, lte, or, sql } from 'drizzle-orm';
 import type { Database } from '../client.js';
-import { categories, transactions, users, type Transaction } from '../schema.js';
+import { attachments, categories, transactions, users, type Transaction } from '../schema.js';
 
 export type Direction = 'in' | 'out';
 export type TransactionSource = 'chat' | 'miniapp' | 'recurring';
@@ -61,6 +61,7 @@ export interface TransactionView {
   categoryEmoji: string | null;
   categoryColorToken: string | null;
   authorFirstName: string | null;
+  hasPhoto: boolean;
 }
 
 /** Rows this exact author may edit or delete. Never household-widened. */
@@ -102,6 +103,11 @@ const viewColumns = {
   categoryEmoji: categories.emoji,
   categoryColorToken: categories.colorToken,
   authorFirstName: users.firstName,
+  // A correlated EXISTS, not a join — a transaction with several photos must
+  // still be exactly one row (PRD F4.3 allows up to 5 per transaction).
+  hasPhoto: sql<boolean>`exists(
+    select 1 from ${attachments} where ${attachments.transactionId} = ${transactions.id}
+  )`,
 };
 
 /** Every view query joins the same two tables, in the same order. */

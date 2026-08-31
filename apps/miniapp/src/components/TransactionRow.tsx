@@ -33,7 +33,14 @@ export function TransactionRow({
         {transaction.categoryEmoji ?? '•'}
       </span>
       <span className="txn__body">
-        <span className="txn__label">{label}</span>
+        <span className="txn__label">
+          {label}
+          {transaction.hasPhoto && (
+            <span className="txn__photo-badge" aria-label="Has a photo" title="Has a photo">
+              📷
+            </span>
+          )}
+        </span>
         <span className="txn__meta">
           {transaction.categoryName ?? 'Uncategorised'}
           {transaction.source === 'recurring' && ' · repeating'}

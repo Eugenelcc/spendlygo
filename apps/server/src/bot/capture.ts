@@ -87,16 +87,20 @@ export function undoKeyboard(transactionId: string): InlineKeyboard {
   return new InlineKeyboard().text('↩️ Undo', `${UNDO_PREFIX}${transactionId}`);
 }
 
-/**
- * Handle a plain text message that might be a transaction.
- *
- * Returns false when the message was not a capture, so the caller can decide
- * what to say instead — silence would be worse than a hint.
- */
-export async function handleCapture(ctx: AppContext, botCtx: BotContext): Promise<boolean> {
-  const text = botCtx.message?.text;
-  if (!text) return false;
+export type CaptureOutcome =
+  { kind: 'not_a_capture' } | { kind: 'bad_date' } | { kind: 'saved'; transactionId: string };
 
+/**
+ * Parse `text` as a transaction, save it, and reply with the confirmation
+ * card — the shared core of both plain-text capture and a photo's caption
+ * (apps/server/src/bot/photo-capture.ts). Every reply happens in here, so a
+ * caller only needs to react to the outcome, not send its own message.
+ */
+export async function captureFromText(
+  ctx: AppContext,
+  botCtx: BotContext,
+  text: string,
+): Promise<CaptureOutcome> {
   const user = botCtx.appUser;
   const today = todayFor(ctx, user);
   const parsed = parseCapture(text, { today });
@@ -108,9 +112,9 @@ export async function handleCapture(ctx: AppContext, botCtx: BotContext): Promis
           'Try `@today`, `@yesterday`, or `@12/03`.',
         { parse_mode: 'Markdown' },
       );
-      return true;
+      return { kind: 'bad_date' };
     }
-    return false;
+    return { kind: 'not_a_capture' };
   }
 
   const kind = parsed.direction === 'in' ? 'income' : 'expense';
@@ -180,7 +184,21 @@ export async function handleCapture(ctx: AppContext, botCtx: BotContext): Promis
     reply_markup: undoKeyboard(created.id),
   });
 
-  return true;
+  return { kind: 'saved', transactionId: created.id };
+}
+
+/**
+ * Handle a plain text message that might be a transaction.
+ *
+ * Returns false when the message was not a capture, so the caller can decide
+ * what to say instead — silence would be worse than a hint.
+ */
+export async function handleCapture(ctx: AppContext, botCtx: BotContext): Promise<boolean> {
+  const text = botCtx.message?.text;
+  if (!text) return false;
+
+  const outcome = await captureFromText(ctx, botCtx, text);
+  return outcome.kind !== 'not_a_capture';
 }
 
 /**

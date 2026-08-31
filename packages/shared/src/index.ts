@@ -160,6 +160,8 @@ export const transactionSchema = z.object({
   authorName: z.string(),
   /** True when this is the viewer's own entry — lets the UI skip the label. */
   isOwn: z.boolean(),
+  /** Whether to show the photo badge — avoids a round trip per row to find out. */
+  hasPhoto: z.boolean(),
 });
 export type Transaction = z.infer<typeof transactionSchema>;
 
@@ -271,6 +273,19 @@ export const statsResponseSchema = z.object({
   previousOutCents: z.number().int().nonnegative(),
 });
 export type StatsResponse = z.infer<typeof statsResponseSchema>;
+
+// --- GET /api/transactions/:id/photos (PRD F4) -------------------------
+
+export const photosResponseSchema = z.object({
+  photos: z.array(
+    z.object({
+      id: z.string().uuid(),
+      width: z.number().int().positive().nullable(),
+      height: z.number().int().positive().nullable(),
+    }),
+  ),
+});
+export type PhotosResponse = z.infer<typeof photosResponseSchema>;
 
 // --- GET /api/recap -----------------------------------------------------
 
