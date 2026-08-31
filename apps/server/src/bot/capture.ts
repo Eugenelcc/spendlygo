@@ -136,6 +136,7 @@ export async function handleCapture(ctx: AppContext, botCtx: BotContext): Promis
 
   const created = await transactionsRepo.create(ctx.db, {
     userId: user.id,
+    householdId: user.householdId,
     direction: parsed.direction,
     amountCents: parsed.amountCents,
     categoryId: category?.id ?? null,

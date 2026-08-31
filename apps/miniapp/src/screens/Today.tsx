@@ -92,6 +92,13 @@ export function TodayScreen({
                   : `${money(sts.remainingCents)} remaining`}
               </span>
             </div>
+            {data.monthIn > 0 && (
+              // PRD F3.4: income and expense stay as distinct figures, never
+              // netted into a single signed total.
+              <div className="card__foot card__foot--tight">
+                <span>{money(data.monthIn)} received this month</span>
+              </div>
+            )}
           </section>
         </>
       ) : (

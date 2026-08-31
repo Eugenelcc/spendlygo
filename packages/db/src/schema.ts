@@ -28,6 +28,7 @@ import {
   uniqueIndex,
   uuid,
   varchar,
+  type AnyPgColumn,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 
@@ -57,6 +58,19 @@ export const users = pgTable(
     digestHour: smallint('digest_hour').notNull().default(21),
     digestEnabled: boolean('digest_enabled').notNull().default(true),
     nudgeEnabled: boolean('nudge_enabled').notNull().default(true),
+    /** PRD-adjacent: proactive budget-threshold warnings, independent of the digest. */
+    alertsEnabled: boolean('alerts_enabled').notNull().default(true),
+    /**
+     * A user belongs to at most one household at a time. Nullable — solo is
+     * the default and unaffected by any of this. `households` is declared
+     * below and itself references `users`, so this is a genuine circular
+     * reference; the `AnyPgColumn` return type is Drizzle's documented way to
+     * break the resulting circular type-inference, not a widening of the
+     * actual column type — the column is still `uuid`.
+     */
+    householdId: uuid('household_id').references((): AnyPgColumn => households.id, {
+      onDelete: 'set null',
+    }),
     onboardedAt: timestamp('onboarded_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
@@ -69,6 +83,62 @@ export const users = pgTable(
       sql`${t.monthlyBudgetCents} IS NULL OR ${t.monthlyBudgetCents} >= 0`,
     ),
   ],
+);
+
+/**
+ * A shared budget pool (PRD-adjacent: shared budget with a partner).
+ *
+ * Deliberately small: a household is just a budget and a member list. It owns
+ * `monthlyBudgetCents` once any member is in one — see
+ * `apps/server/src/api/service.ts#effectiveBudgetCents` for which figure a
+ * user actually sees.
+ */
+export const households = pgTable(
+  'households',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    createdBy: uuid('created_by')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    monthlyBudgetCents: integer('monthly_budget_cents'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    check(
+      'households_budget_ck',
+      sql`${t.monthlyBudgetCents} IS NULL OR ${t.monthlyBudgetCents} >= 0`,
+    ),
+  ],
+);
+
+/**
+ * One-time codes for joining a household.
+ *
+ * `code` is globally unique (not per-household), so `/join CODE` needs no
+ * other context to resolve it. `usedBy`/`usedAt` double as the idempotency
+ * guard: a code can be consumed exactly once, checked by the repository
+ * before granting membership, not relied on as a database constraint alone,
+ * since "already used" is a state a legitimate second attempt should be told
+ * about, not a silent no-op.
+ */
+export const householdInvites = pgTable(
+  'household_invites',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    householdId: uuid('household_id')
+      .notNull()
+      .references(() => households.id, { onDelete: 'cascade' }),
+    code: text('code').notNull(),
+    createdBy: uuid('created_by')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    usedBy: uuid('used_by').references(() => users.id, { onDelete: 'set null' }),
+    usedAt: timestamp('used_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex('household_invites_code_uq').on(t.code)],
 );
 
 // --- categories -------------------------------------------------------------
@@ -117,6 +187,15 @@ export const transactions = pgTable(
     userId: uuid('user_id')
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
+    /**
+     * A permanent snapshot of the author's household at the moment they logged
+     * this, NOT a live lookup of their current household. Leaving a household
+     * later must not rewrite what already happened, and a partner joining
+     * must not retroactively see entries from before they joined — see
+     * apps/server/src/api/service.ts for how this plays into what each screen
+     * shows versus what counts toward the shared safe-to-spend figure.
+     */
+    householdId: uuid('household_id').references(() => households.id, { onDelete: 'set null' }),
     direction: directionEnum('direction').notNull(),
     /** Always positive. Direction carries the sign. */
     amountCents: integer('amount_cents').notNull(),
@@ -128,6 +207,17 @@ export const transactions = pgTable(
     occurredAt: timestamp('occurred_at', { withTimezone: true }).notNull().defaultNow(),
     source: transactionSourceEnum('source').notNull().default('chat'),
     recurringRuleId: uuid('recurring_rule_id'),
+    /**
+     * Set only on a transfer tagged to a savings goal (PRD-adjacent). Funding
+     * a goal never touches the monthly budget — F6.7 already excludes
+     * transfers, and this column is how the goal's own progress is computed
+     * (out-tagged minus in-tagged, net contribution). `set null` on goal
+     * deletion, matching `categoryId`: the transaction itself is history and
+     * outlives the goal.
+     */
+    savingsGoalId: uuid('savings_goal_id').references((): AnyPgColumn => savingsGoals.id, {
+      onDelete: 'set null',
+    }),
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
@@ -139,6 +229,15 @@ export const transactions = pgTable(
       .where(sql`${t.deletedAt} IS NULL`),
     index('transactions_user_created_idx').on(t.userId, t.createdAt),
     index('transactions_category_idx').on(t.categoryId),
+    // Mirrors the user-scoped index above, for household-scoped safe-to-spend
+    // and stats queries (apps/server/src/api/service.ts).
+    index('transactions_household_date_idx')
+      .on(t.householdId, t.occurredOn)
+      .where(sql`${t.deletedAt} IS NULL AND ${t.householdId} IS NOT NULL`),
+    // Powers the goal-progress aggregate: sum by goal, live rows only.
+    index('transactions_savings_goal_idx')
+      .on(t.savingsGoalId)
+      .where(sql`${t.deletedAt} IS NULL AND ${t.savingsGoalId} IS NOT NULL`),
     check('transactions_amount_positive_ck', sql`${t.amountCents} > 0`),
   ],
 );
@@ -258,6 +357,69 @@ export const budgetPeriods = pgTable(
   ],
 );
 
+/**
+ * One row per (user, month, threshold) crossed, so a threshold is announced
+ * once per month no matter how many times the hourly tick re-checks it —
+ * the same idempotency shape as recurring_runs (GUARDRAILS.md section 3).
+ */
+export const budgetAlerts = pgTable(
+  'budget_alerts',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    year: smallint('year').notNull(),
+    month: smallint('month').notNull(),
+    /** 80 or 100 — percent of the monthly budget crossed. */
+    thresholdPct: smallint('threshold_pct').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('budget_alerts_user_period_threshold_uq').on(
+      t.userId,
+      t.year,
+      t.month,
+      t.thresholdPct,
+    ),
+  ],
+);
+
+// --- savings goals ------------------------------------------------------------
+
+/**
+ * A savings goal (PRD-adjacent), tracked separately from safe-to-spend.
+ *
+ * Personal, not household-shared — unlike the budget, a savings goal has one
+ * owner even inside a shared household. It is funded by tagging a transfer
+ * transaction to it (`transactions.savingsGoalId`); progress is the net of
+ * those tagged transactions, computed in `packages/core/src/savings.ts`, not
+ * stored here. See that file's header for the round-up-vs-round-down
+ * asymmetry with safe-to-spend.
+ */
+export const savingsGoals = pgTable(
+  'savings_goals',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    targetCents: integer('target_cents').notNull(),
+    targetDate: date('target_date', { mode: 'string' }),
+    /** Archive, never delete — matches categories.archivedAt (PRD F10.3). */
+    archivedAt: timestamp('archived_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('savings_goals_user_idx')
+      .on(t.userId)
+      .where(sql`${t.archivedAt} IS NULL`),
+    check('savings_goals_target_positive_ck', sql`${t.targetCents} > 0`),
+  ],
+);
+
 // --- audit ------------------------------------------------------------------
 
 /** Append-only audit log. Also what powers Undo (PRD F11.1). */
@@ -287,3 +449,9 @@ export type RecurringRule = typeof recurringRules.$inferSelect;
 export type NewRecurringRule = typeof recurringRules.$inferInsert;
 export type BudgetPeriod = typeof budgetPeriods.$inferSelect;
 export type EventRow = typeof events.$inferSelect;
+export type RecurringRun = typeof recurringRuns.$inferSelect;
+export type BudgetAlert = typeof budgetAlerts.$inferSelect;
+export type Household = typeof households.$inferSelect;
+export type HouseholdInvite = typeof householdInvites.$inferSelect;
+export type SavingsGoal = typeof savingsGoals.$inferSelect;
+export type NewSavingsGoal = typeof savingsGoals.$inferInsert;

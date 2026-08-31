@@ -1,12 +1,21 @@
 import type {
   CategoriesResponse,
+  ContributeToGoalBody,
+  CreateRecurringRuleBody,
+  CreateSavingsGoalBody,
   CreateTransactionBody,
+  HouseholdInviteResponse,
+  HouseholdResponse,
   MeResponse,
+  RecurringRulesResponse,
   SafeToSpend,
+  SavingsGoalResponse,
+  SavingsGoalsResponse,
   StatsResponse,
   TodayResponse,
   Transaction,
   TransactionsResponse,
+  UpdateSavingsGoalBody,
   UpdateSettingsBody,
 } from '@spendlygo/shared';
 
@@ -101,6 +110,49 @@ export const api = {
   updateSettings: (body: UpdateSettingsBody) =>
     request<{ user: Record<string, unknown> }>('/api/settings', {
       method: 'PATCH',
+      body: JSON.stringify(body),
+    }),
+
+  recurringRules: () => request<RecurringRulesResponse>('/api/recurring'),
+
+  createRecurringRule: (body: CreateRecurringRuleBody) =>
+    request<{ rule: RecurringRulesResponse['rules'][number] }>('/api/recurring', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  deleteRecurringRule: (id: string) =>
+    request<{ ok: true }>(`/api/recurring/${id}`, { method: 'DELETE' }),
+
+  household: () => request<HouseholdResponse>('/api/household'),
+
+  createHouseholdInvite: () =>
+    request<HouseholdInviteResponse>('/api/household/invite', { method: 'POST' }),
+
+  leaveHousehold: () => request<{ ok: true }>('/api/household/leave', { method: 'POST' }),
+
+  savingsGoals: () => request<SavingsGoalsResponse>('/api/goals'),
+
+  createSavingsGoal: (body: CreateSavingsGoalBody) =>
+    request<SavingsGoalResponse>('/api/goals', { method: 'POST', body: JSON.stringify(body) }),
+
+  updateSavingsGoal: (id: string, body: UpdateSavingsGoalBody) =>
+    request<SavingsGoalResponse>(`/api/goals/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    }),
+
+  archiveSavingsGoal: (id: string) =>
+    request<{ ok: true }>(`/api/goals/${id}`, { method: 'DELETE' }),
+
+  contributeToSavingsGoal: (
+    id: string,
+    body: Omit<ContributeToGoalBody, 'direction'> & {
+      direction?: ContributeToGoalBody['direction'];
+    },
+  ) =>
+    request<SavingsGoalResponse>(`/api/goals/${id}/contribute`, {
+      method: 'POST',
       body: JSON.stringify(body),
     }),
 };

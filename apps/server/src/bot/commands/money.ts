@@ -6,9 +6,9 @@
  */
 
 import { formatCents, parseAmountToCents, type AmountCents } from '@spendlygo/core';
-import { transactionsRepo, usersRepo } from '@spendlygo/db';
+import { householdsRepo, transactionsRepo, usersRepo } from '@spendlygo/db';
 import type { AppContext } from '../../context.js';
-import { computeSafeToSpend, todayFor } from '../../api/service.js';
+import { computeSafeToSpend, effectiveBudgetCents, todayFor } from '../../api/service.js';
 import { openAppKeyboard } from '../keyboards.js';
 import type { BotContext } from '../middleware.js';
 import { undoKeyboard, UNDO_WINDOW_MS } from '../capture.js';
@@ -65,13 +65,15 @@ export async function handleToday(ctx: AppContext, botCtx: BotContext): Promise<
 export async function handleBudget(ctx: AppContext, botCtx: BotContext): Promise<void> {
   const user = botCtx.appUser;
   const argument = botCtx.match?.toString().trim() ?? '';
+  const shared = user.householdId !== null;
 
   if (argument === '') {
-    const current = user.monthlyBudgetCents;
+    const current = await effectiveBudgetCents(ctx, user);
+    const suffix = shared ? ' (shared)' : '';
     await botCtx.reply(
       current === null
-        ? 'No monthly budget set yet.\nSet one with `/budget 1500`.'
-        : `Your monthly budget is *${escape(formatCents(current as AmountCents, { currency: user.currency, locale: user.locale }))}*.\n\nChange it with \`/budget 2000\`.`,
+        ? `No monthly budget set yet${suffix}.\nSet one with \`/budget 1500\`.`
+        : `${shared ? 'Your shared' : 'Your'} monthly budget is *${escape(formatCents(current, { currency: user.currency, locale: user.locale }))}*${suffix}.\n\nChange it with \`/budget 2000\`.`,
       { parse_mode: 'Markdown' },
     );
     return;
@@ -85,17 +87,25 @@ export async function handleBudget(ctx: AppContext, botCtx: BotContext): Promise
     return;
   }
 
-  await usersRepo.updateSettings(ctx.db, user.id, { monthlyBudgetCents: cents });
+  // A shared budget is written once, to the household — see the identical
+  // rule in apps/server/src/api/index.ts's PATCH /settings.
+  if (user.householdId !== null) {
+    await householdsRepo.updateBudget(ctx.db, user.householdId, cents);
+  } else {
+    await usersRepo.updateSettings(ctx.db, user.id, { monthlyBudgetCents: cents });
+  }
 
-  // Re-read so the figure reflects the budget just set, not the one before it.
-  const updated = await usersRepo.findById(ctx.db, user.id);
-  const result = await computeSafeToSpend(ctx, updated ?? user);
+  // Re-read so the solo path picks up the write above — effectiveBudgetCents
+  // reads user.monthlyBudgetCents straight from this object when there's no
+  // household, and the in-memory `user` is stale the moment we wrote to it.
+  const updated = (await usersRepo.findById(ctx.db, user.id)) ?? user;
+  const result = await computeSafeToSpend(ctx, updated);
   const money = (value: AmountCents) =>
     escape(formatCents(value, { currency: user.currency, locale: user.locale }));
 
   await botCtx.reply(
     [
-      `Monthly budget set to *${money(cents)}*.`,
+      `${shared ? 'Shared m' : 'M'}onthly budget set to *${money(cents)}*.`,
       '',
       `That is ${money(result.safeTodayCents)} a day for the ${result.daysRemaining} ${
         result.daysRemaining === 1 ? 'day' : 'days'
@@ -107,7 +117,7 @@ export async function handleBudget(ctx: AppContext, botCtx: BotContext): Promise
 
 export async function handleRecent(ctx: AppContext, botCtx: BotContext): Promise<void> {
   const user = botCtx.appUser;
-  const rows = await transactionsRepo.list(ctx.db, user.id, { limit: 10 });
+  const rows = await transactionsRepo.list(ctx.db, user.id, user.householdId, { limit: 10 });
 
   if (rows.length === 0) {
     await botCtx.reply(
@@ -134,7 +144,7 @@ export async function handleRecent(ctx: AppContext, botCtx: BotContext): Promise
 
 export async function handleUndoCommand(ctx: AppContext, botCtx: BotContext): Promise<void> {
   const user = botCtx.appUser;
-  const [latest] = await transactionsRepo.list(ctx.db, user.id, { limit: 1 });
+  const [latest] = await transactionsRepo.list(ctx.db, user.id, user.householdId, { limit: 1 });
 
   if (!latest) {
     await botCtx.reply('Nothing to undo.');

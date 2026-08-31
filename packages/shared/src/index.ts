@@ -63,6 +63,31 @@ export const healthResponseSchema = z.object({
 });
 export type HealthResponse = z.infer<typeof healthResponseSchema>;
 
+// --- households ---------------------------------------------------------
+
+export const householdMemberSchema = z.object({
+  userId: z.string().uuid(),
+  firstName: z.string().nullable(),
+  isSelf: z.boolean(),
+});
+
+export const householdSchema = z.object({
+  id: z.string().uuid(),
+  members: z.array(householdMemberSchema),
+});
+export type Household = z.infer<typeof householdSchema>;
+
+export const householdResponseSchema = z.object({
+  household: householdSchema.nullable(),
+});
+export type HouseholdResponse = z.infer<typeof householdResponseSchema>;
+
+export const householdInviteResponseSchema = z.object({
+  code: z.string(),
+  expiresAt: z.string().datetime(),
+});
+export type HouseholdInviteResponse = z.infer<typeof householdInviteResponseSchema>;
+
 // --- GET /api/me ------------------------------------------------------------
 
 export const meResponseSchema = z.object({
@@ -74,12 +99,19 @@ export const meResponseSchema = z.object({
     timezone: z.string(),
     currency: z.string(),
     locale: z.string(),
+    /**
+     * The budget governing this user RIGHT NOW — the household's once they're
+     * in one, never their own dormant personal figure. See
+     * apps/server/src/api/service.ts#effectiveBudgetCents.
+     */
     monthlyBudgetCents: z.number().int().nonnegative().nullable(),
     digestHour: z.number().int().min(0).max(23),
     digestEnabled: z.boolean(),
     nudgeEnabled: z.boolean(),
+    alertsEnabled: z.boolean(),
     onboardedAt: z.string().datetime().nullable(),
   }),
+  household: householdSchema.nullable(),
   /** Today's date in the user's timezone — the client must not compute this. */
   today: isoDateSchema,
 });
@@ -119,6 +151,15 @@ export const transactionSchema = z.object({
   categoryName: z.string().nullable(),
   categoryEmoji: z.string().nullable(),
   categoryColorToken: z.string().nullable(),
+  /**
+   * Who logged this. Always present, but the Mini App only needs to render it
+   * when viewing a shared household — that's the whole point of a shared
+   * budget being transparent rather than merely combined.
+   */
+  authorUserId: z.string().uuid(),
+  authorName: z.string(),
+  /** True when this is the viewer's own entry — lets the UI skip the label. */
+  isOwn: z.boolean(),
 });
 export type Transaction = z.infer<typeof transactionSchema>;
 
@@ -228,8 +269,113 @@ export const updateSettingsSchema = z.object({
   digestHour: z.number().int().min(0).max(23).optional(),
   digestEnabled: z.boolean().optional(),
   nudgeEnabled: z.boolean().optional(),
+  alertsEnabled: z.boolean().optional(),
 });
 export type UpdateSettingsBody = z.infer<typeof updateSettingsSchema>;
+
+// --- recurring rules (F5) ----------------------------------------------------
+
+export const recurringRuleSchema = z.object({
+  id: z.string().uuid(),
+  direction: directionSchema,
+  amountCents: z.number().int().positive(),
+  categoryId: z.string().uuid().nullable(),
+  categoryName: z.string().nullable(),
+  categoryEmoji: z.string().nullable(),
+  note: z.string().nullable(),
+  cadence: cadenceSchema,
+  anchorDate: isoDateSchema,
+  dayOfMonth: z.number().int().min(1).max(31).nullable(),
+  endDate: isoDateSchema.nullable(),
+  lastRunOn: isoDateSchema.nullable(),
+  active: z.boolean(),
+});
+export type RecurringRule = z.infer<typeof recurringRuleSchema>;
+
+export const createRecurringRuleSchema = z
+  .object({
+    direction: directionSchema,
+    amountCents: amountCentsSchema,
+    categoryId: z.string().uuid().nullable().optional(),
+    note: z.string().trim().max(280).nullable().optional(),
+    cadence: cadenceSchema,
+    anchorDate: isoDateSchema,
+    dayOfMonth: z.number().int().min(1).max(31).nullable().optional(),
+    endDate: isoDateSchema.nullable().optional(),
+  })
+  .refine(
+    (value) =>
+      value.cadence === 'monthly' || value.cadence === 'yearly'
+        ? value.dayOfMonth !== null && value.dayOfMonth !== undefined
+        : true,
+    { message: 'dayOfMonth is required for monthly and yearly rules', path: ['dayOfMonth'] },
+  );
+export type CreateRecurringRuleBody = z.infer<typeof createRecurringRuleSchema>;
+
+export const recurringRulesResponseSchema = z.object({
+  rules: z.array(recurringRuleSchema),
+});
+export type RecurringRulesResponse = z.infer<typeof recurringRulesResponseSchema>;
+
+// --- savings goals (PRD-adjacent) --------------------------------------------
+
+/**
+ * A goal's progress, computed server-side by
+ * `packages/core/src/savings.ts#calculateGoalProgress` — never derived on the
+ * client, same reasoning as `safeToSpendSchema`.
+ */
+export const savingsGoalSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string(),
+  targetCents: z.number().int().positive(),
+  targetDate: isoDateSchema.nullable(),
+  contributedCents: z.number().int().nonnegative(),
+  remainingCents: z.number().int().nonnegative(),
+  achieved: z.boolean(),
+  overdue: z.boolean(),
+  monthsRemaining: z.number().int().positive().nullable(),
+  suggestedMonthlyCents: z.number().int().positive().nullable(),
+  progressRatio: z.number().min(0).max(1),
+});
+export type SavingsGoal = z.infer<typeof savingsGoalSchema>;
+
+export const savingsGoalsResponseSchema = z.object({
+  goals: z.array(savingsGoalSchema),
+});
+export type SavingsGoalsResponse = z.infer<typeof savingsGoalsResponseSchema>;
+
+export const savingsGoalResponseSchema = z.object({
+  goal: savingsGoalSchema,
+});
+export type SavingsGoalResponse = z.infer<typeof savingsGoalResponseSchema>;
+
+export const createSavingsGoalSchema = z.object({
+  name: z.string().trim().min(1).max(80),
+  targetCents: amountCentsSchema,
+  targetDate: isoDateSchema.nullable().optional(),
+});
+export type CreateSavingsGoalBody = z.infer<typeof createSavingsGoalSchema>;
+
+export const updateSavingsGoalSchema = z.object({
+  name: z.string().trim().min(1).max(80).optional(),
+  targetCents: amountCentsSchema.optional(),
+  targetDate: isoDateSchema.nullable().optional(),
+});
+export type UpdateSavingsGoalBody = z.infer<typeof updateSavingsGoalSchema>;
+
+/**
+ * Funding a goal is a real transaction, tagged to it and auto-categorised as
+ * a transfer (PRD F6.7: excluded from budget). `direction: 'out'` moves money
+ * into the goal; `'in'` withdraws it — see the core module's file header for
+ * why net contribution, not a running total, is the right model.
+ */
+export const contributeToGoalSchema = z.object({
+  amountCents: amountCentsSchema,
+  direction: directionSchema.default('out'),
+  note: z.string().trim().max(280).nullable().optional(),
+  occurredOn: isoDateSchema.optional(),
+});
+export type ContributeToGoalBody = z.infer<typeof contributeToGoalSchema>;
 
 // --- POST /tasks/tick -------------------------------------------------------
 
@@ -238,5 +384,6 @@ export const tickResponseSchema = z.object({
   ranAt: z.string().datetime(),
   recurringMaterialised: z.number().int().nonnegative(),
   digestsSent: z.number().int().nonnegative(),
+  alertsSent: z.number().int().nonnegative(),
 });
 export type TickResponse = z.infer<typeof tickResponseSchema>;

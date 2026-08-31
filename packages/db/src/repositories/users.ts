@@ -59,6 +59,22 @@ export async function upsertByTelegramId(db: Database, input: UpsertUserInput): 
   return user;
 }
 
+/**
+ * Users with digests switched on, for the hourly tick to check.
+ *
+ * Not filtered by hour here — each user's digest hour is compared against the
+ * current time in THEIR OWN timezone (GUARDRAILS.md section 9), which only
+ * resolves per-user in application code, not in a single SQL WHERE clause.
+ */
+export async function listDigestEligible(db: Database): Promise<User[]> {
+  return db.select().from(users).where(eq(users.digestEnabled, true));
+}
+
+/** Users with proactive budget alerts switched on. */
+export async function listAlertEligible(db: Database): Promise<User[]> {
+  return db.select().from(users).where(eq(users.alertsEnabled, true));
+}
+
 export async function markOnboarded(db: Database, userId: string): Promise<void> {
   await db
     .update(users)
@@ -72,6 +88,7 @@ export interface UpdateSettingsInput {
   digestHour?: number;
   digestEnabled?: boolean;
   nudgeEnabled?: boolean;
+  alertsEnabled?: boolean;
 }
 
 export async function updateSettings(

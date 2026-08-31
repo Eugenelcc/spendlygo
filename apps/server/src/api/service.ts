@@ -8,24 +8,56 @@
 
 import {
   addDays,
+  calculateGoalProgress,
   calculateSafeToSpend,
   centsOf,
   isoDateOf,
   monthRange,
   parseIsoDate,
+  type AmountCents,
   type IsoDate,
   type SafeToSpendResult,
 } from '@spendlygo/core';
-import { transactionsRepo, type User } from '@spendlygo/db';
-import type { Transaction as ApiTransaction } from '@spendlygo/shared';
+import {
+  householdsRepo,
+  transactionsRepo,
+  type SavingsGoalWithContribution,
+  type User,
+} from '@spendlygo/db';
+import type {
+  SavingsGoal as ApiSavingsGoal,
+  Transaction as ApiTransaction,
+} from '@spendlygo/shared';
 import type { AppContext } from '../context.js';
 
 export function todayFor(ctx: AppContext, user: User): IsoDate {
   return isoDateOf(ctx.clock.now(), user.timezone);
 }
 
+/**
+ * The budget a user actually sees.
+ *
+ * Once in a household, the household's figure governs — set by whichever
+ * partner last changed it — and the user's own `monthlyBudgetCents` is simply
+ * not consulted. Leaving a household falls straight back to it, unedited.
+ */
+export async function effectiveBudgetCents(
+  ctx: AppContext,
+  user: User,
+): Promise<AmountCents | null> {
+  if (user.householdId === null) {
+    return user.monthlyBudgetCents === null ? null : centsOf(user.monthlyBudgetCents);
+  }
+  const household = await householdsRepo.findById(ctx.db, user.householdId);
+  if (household === null || household.monthlyBudgetCents === null) return null;
+  return centsOf(household.monthlyBudgetCents);
+}
+
 /** Serialise a repository row into the shape the Mini App compiles against. */
-export function toApiTransaction(row: transactionsRepo.TransactionView): ApiTransaction {
+export function toApiTransaction(
+  row: transactionsRepo.TransactionView,
+  viewerUserId: string,
+): ApiTransaction {
   return {
     id: row.id,
     direction: row.direction,
@@ -39,6 +71,9 @@ export function toApiTransaction(row: transactionsRepo.TransactionView): ApiTran
     categoryName: row.categoryName,
     categoryEmoji: row.categoryEmoji,
     categoryColorToken: row.categoryColorToken,
+    authorUserId: row.userId,
+    authorName: row.authorFirstName ?? 'Someone',
+    isOwn: row.userId === viewerUserId,
   };
 }
 
@@ -46,7 +81,11 @@ export function toApiTransaction(row: transactionsRepo.TransactionView): ApiTran
  * The safe-to-spend figure for a user, right now.
  *
  * Recomputed on every call and never cached across a day boundary
- * (PRD F6.1) — the number is only worth trusting if it is current.
+ * (PRD F6.1) — the number is only worth trusting if it is current. In a
+ * household, this is the one number both partners see identically — see
+ * packages/db/src/repositories/transactions.ts for why the underlying totals
+ * are scoped strictly to the household rather than including either
+ * partner's pre-sharing history.
  */
 export async function computeSafeToSpend(
   ctx: AppContext,
@@ -56,19 +95,47 @@ export async function computeSafeToSpend(
   const { year, month } = parseIsoDate(today);
   const period = monthRange(year, month);
 
-  const [monthTotals, todayTotals] = await Promise.all([
+  const [budgetCents, monthTotals, todayTotals] = await Promise.all([
+    effectiveBudgetCents(ctx, user),
     // Month-to-date, not the whole month: spending dated in the future must not
     // count against what is safe to spend today.
-    transactionsRepo.totalsForPeriod(ctx.db, user.id, period.start, today),
-    transactionsRepo.totalsForPeriod(ctx.db, user.id, today, today),
+    transactionsRepo.totalsForPeriod(ctx.db, user.id, user.householdId, period.start, today),
+    transactionsRepo.totalsForPeriod(ctx.db, user.id, user.householdId, today, today),
   ]);
 
   return calculateSafeToSpend({
-    budgetCents: user.monthlyBudgetCents === null ? null : centsOf(user.monthlyBudgetCents),
+    budgetCents,
     spentMonthToDateCents: centsOf(monthTotals.budgetedOutCents),
     spentTodayCents: centsOf(todayTotals.budgetedOutCents),
     today,
   });
+}
+
+/** Serialise a goal row plus its net contribution into the progress the client renders. */
+export function toApiSavingsGoal(
+  goal: SavingsGoalWithContribution,
+  today: IsoDate,
+): ApiSavingsGoal {
+  const progress = calculateGoalProgress({
+    targetCents: centsOf(goal.targetCents),
+    netContributedCents: goal.netContributedCents,
+    today,
+    targetDate: goal.targetDate as IsoDate | null,
+  });
+
+  return {
+    id: goal.id,
+    name: goal.name,
+    targetCents: progress.targetCents,
+    targetDate: goal.targetDate,
+    contributedCents: progress.contributedCents,
+    remainingCents: progress.remainingCents,
+    achieved: progress.achieved,
+    overdue: progress.overdue,
+    monthsRemaining: progress.monthsRemaining,
+    suggestedMonthlyCents: progress.suggestedMonthlyCents,
+    progressRatio: progress.progressRatio,
+  };
 }
 
 /** The last `days` days ending today, gaps filled with zero, oldest first. */
@@ -79,7 +146,7 @@ export async function recentDailySpend(
   days = 7,
 ): Promise<Array<{ day: IsoDate; outCents: number }>> {
   const from = addDays(today, -(days - 1));
-  const rows = await transactionsRepo.totalsByDay(ctx.db, user.id, from, today);
+  const rows = await transactionsRepo.totalsByDay(ctx.db, user.id, user.householdId, from, today);
   const byDay = new Map(rows.map((row) => [row.day, row.outCents]));
 
   const series: Array<{ day: IsoDate; outCents: number }> = [];
