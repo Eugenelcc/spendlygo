@@ -20,6 +20,9 @@ Type the amount first, then what it was for:
 If you leave the category out, I'll guess it from what you wrote.
 Every entry gets an *Undo* button for five minutes.
 
+*Digests* — a daily check-in at your chosen hour, plus a Sunday wrap-up and
+an end-of-month summary. Turn them on or off in Settings.
+
 *Recurring* — things that happen on their own
 
 \`/recurring add 1500 rent monthly\`
