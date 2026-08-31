@@ -317,6 +317,66 @@ export const recurringRulesResponseSchema = z.object({
 });
 export type RecurringRulesResponse = z.infer<typeof recurringRulesResponseSchema>;
 
+// --- savings goals (PRD-adjacent) --------------------------------------------
+
+/**
+ * A goal's progress, computed server-side by
+ * `packages/core/src/savings.ts#calculateGoalProgress` — never derived on the
+ * client, same reasoning as `safeToSpendSchema`.
+ */
+export const savingsGoalSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string(),
+  targetCents: z.number().int().positive(),
+  targetDate: isoDateSchema.nullable(),
+  contributedCents: z.number().int().nonnegative(),
+  remainingCents: z.number().int().nonnegative(),
+  achieved: z.boolean(),
+  overdue: z.boolean(),
+  monthsRemaining: z.number().int().positive().nullable(),
+  suggestedMonthlyCents: z.number().int().positive().nullable(),
+  progressRatio: z.number().min(0).max(1),
+});
+export type SavingsGoal = z.infer<typeof savingsGoalSchema>;
+
+export const savingsGoalsResponseSchema = z.object({
+  goals: z.array(savingsGoalSchema),
+});
+export type SavingsGoalsResponse = z.infer<typeof savingsGoalsResponseSchema>;
+
+export const savingsGoalResponseSchema = z.object({
+  goal: savingsGoalSchema,
+});
+export type SavingsGoalResponse = z.infer<typeof savingsGoalResponseSchema>;
+
+export const createSavingsGoalSchema = z.object({
+  name: z.string().trim().min(1).max(80),
+  targetCents: amountCentsSchema,
+  targetDate: isoDateSchema.nullable().optional(),
+});
+export type CreateSavingsGoalBody = z.infer<typeof createSavingsGoalSchema>;
+
+export const updateSavingsGoalSchema = z.object({
+  name: z.string().trim().min(1).max(80).optional(),
+  targetCents: amountCentsSchema.optional(),
+  targetDate: isoDateSchema.nullable().optional(),
+});
+export type UpdateSavingsGoalBody = z.infer<typeof updateSavingsGoalSchema>;
+
+/**
+ * Funding a goal is a real transaction, tagged to it and auto-categorised as
+ * a transfer (PRD F6.7: excluded from budget). `direction: 'out'` moves money
+ * into the goal; `'in'` withdraws it — see the core module's file header for
+ * why net contribution, not a running total, is the right model.
+ */
+export const contributeToGoalSchema = z.object({
+  amountCents: amountCentsSchema,
+  direction: directionSchema.default('out'),
+  note: z.string().trim().max(280).nullable().optional(),
+  occurredOn: isoDateSchema.optional(),
+});
+export type ContributeToGoalBody = z.infer<typeof contributeToGoalSchema>;
+
 // --- POST /tasks/tick -------------------------------------------------------
 
 export const tickResponseSchema = z.object({

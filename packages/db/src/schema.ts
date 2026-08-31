@@ -207,6 +207,17 @@ export const transactions = pgTable(
     occurredAt: timestamp('occurred_at', { withTimezone: true }).notNull().defaultNow(),
     source: transactionSourceEnum('source').notNull().default('chat'),
     recurringRuleId: uuid('recurring_rule_id'),
+    /**
+     * Set only on a transfer tagged to a savings goal (PRD-adjacent). Funding
+     * a goal never touches the monthly budget — F6.7 already excludes
+     * transfers, and this column is how the goal's own progress is computed
+     * (out-tagged minus in-tagged, net contribution). `set null` on goal
+     * deletion, matching `categoryId`: the transaction itself is history and
+     * outlives the goal.
+     */
+    savingsGoalId: uuid('savings_goal_id').references((): AnyPgColumn => savingsGoals.id, {
+      onDelete: 'set null',
+    }),
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
@@ -223,6 +234,10 @@ export const transactions = pgTable(
     index('transactions_household_date_idx')
       .on(t.householdId, t.occurredOn)
       .where(sql`${t.deletedAt} IS NULL AND ${t.householdId} IS NOT NULL`),
+    // Powers the goal-progress aggregate: sum by goal, live rows only.
+    index('transactions_savings_goal_idx')
+      .on(t.savingsGoalId)
+      .where(sql`${t.deletedAt} IS NULL AND ${t.savingsGoalId} IS NOT NULL`),
     check('transactions_amount_positive_ck', sql`${t.amountCents} > 0`),
   ],
 );
@@ -370,6 +385,41 @@ export const budgetAlerts = pgTable(
   ],
 );
 
+// --- savings goals ------------------------------------------------------------
+
+/**
+ * A savings goal (PRD-adjacent), tracked separately from safe-to-spend.
+ *
+ * Personal, not household-shared — unlike the budget, a savings goal has one
+ * owner even inside a shared household. It is funded by tagging a transfer
+ * transaction to it (`transactions.savingsGoalId`); progress is the net of
+ * those tagged transactions, computed in `packages/core/src/savings.ts`, not
+ * stored here. See that file's header for the round-up-vs-round-down
+ * asymmetry with safe-to-spend.
+ */
+export const savingsGoals = pgTable(
+  'savings_goals',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    targetCents: integer('target_cents').notNull(),
+    targetDate: date('target_date', { mode: 'string' }),
+    /** Archive, never delete — matches categories.archivedAt (PRD F10.3). */
+    archivedAt: timestamp('archived_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('savings_goals_user_idx')
+      .on(t.userId)
+      .where(sql`${t.archivedAt} IS NULL`),
+    check('savings_goals_target_positive_ck', sql`${t.targetCents} > 0`),
+  ],
+);
+
 // --- audit ------------------------------------------------------------------
 
 /** Append-only audit log. Also what powers Undo (PRD F11.1). */
@@ -403,3 +453,5 @@ export type RecurringRun = typeof recurringRuns.$inferSelect;
 export type BudgetAlert = typeof budgetAlerts.$inferSelect;
 export type Household = typeof households.$inferSelect;
 export type HouseholdInvite = typeof householdInvites.$inferSelect;
+export type SavingsGoal = typeof savingsGoals.$inferSelect;
+export type NewSavingsGoal = typeof savingsGoals.$inferInsert;

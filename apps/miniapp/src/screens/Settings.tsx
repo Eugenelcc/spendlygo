@@ -1,5 +1,13 @@
 import { useState, type JSX } from 'react';
-import type { Cadence, Category, Direction, MeResponse, RecurringRule } from '@spendlygo/shared';
+import type {
+  Cadence,
+  Category,
+  Direction,
+  MeResponse,
+  RecurringRule,
+  SavingsGoal,
+} from '@spendlygo/shared';
+import { GoalsSection } from '../components/GoalsSection';
 import { HouseholdSection } from '../components/HouseholdSection';
 import { RecurringForm } from '../components/RecurringForm';
 import { formatMoney } from '../lib/format';
@@ -31,6 +39,12 @@ export interface SettingsScreenProps {
   householdLeaveBusy: boolean;
   onCreateHouseholdInvite: () => void;
   onLeaveHousehold: () => void;
+  goals: SavingsGoal[];
+  goalsLoading: boolean;
+  goalsBusy: boolean;
+  onAddGoal: (input: { name: string; targetCents: number; targetDate: string | null }) => void;
+  onContributeGoal: (id: string, amountCents: number) => void;
+  onArchiveGoal: (id: string) => void;
 }
 
 const CADENCE_LABEL: Record<Cadence, string> = {
@@ -58,6 +72,12 @@ export function SettingsScreen({
   householdLeaveBusy,
   onCreateHouseholdInvite,
   onLeaveHousehold,
+  goals,
+  goalsLoading,
+  goalsBusy,
+  onAddGoal,
+  onContributeGoal,
+  onArchiveGoal,
 }: SettingsScreenProps): JSX.Element {
   const { user } = me;
   const [draft, setDraft] = useState(
@@ -131,6 +151,17 @@ export function SettingsScreen({
         leaveBusy={householdLeaveBusy}
         onCreateInvite={onCreateHouseholdInvite}
         onLeave={onLeaveHousehold}
+      />
+
+      <GoalsSection
+        goals={goals}
+        loading={goalsLoading}
+        currency={user.currency}
+        locale={user.locale}
+        busy={goalsBusy}
+        onAdd={onAddGoal}
+        onContribute={onContributeGoal}
+        onArchive={onArchiveGoal}
       />
 
       <section className="card">

@@ -106,6 +106,12 @@ function Shell(): JSX.Element {
     enabled: tab === 'settings',
   });
 
+  const goals = useQuery({
+    queryKey: ['goals'],
+    queryFn: api.savingsGoals,
+    enabled: tab === 'settings',
+  });
+
   /** Everything money-related is invalidated together — the figures interlock. */
   const refreshAll = () => {
     void queryClient.invalidateQueries({ queryKey: ['today'] });
@@ -209,6 +215,40 @@ function Shell(): JSX.Element {
     onError: () => haptics.error(),
   });
 
+  const addGoal = useMutation({
+    mutationFn: api.createSavingsGoal,
+    onSuccess: () => {
+      haptics.success();
+      void queryClient.invalidateQueries({ queryKey: ['goals'] });
+      showToast('Goal created');
+    },
+    onError: () => haptics.error(),
+  });
+
+  const contributeGoal = useMutation({
+    mutationFn: ({ id, amountCents }: { id: string; amountCents: number }) =>
+      api.contributeToSavingsGoal(id, { amountCents }),
+    onSuccess: () => {
+      haptics.success();
+      void queryClient.invalidateQueries({ queryKey: ['goals'] });
+      // A contribution is a real transaction, tagged as a transfer — it shows
+      // up in History and Stats even though it never moves safe-to-spend.
+      refreshAll();
+      showToast('Added to goal');
+    },
+    onError: () => haptics.error(),
+  });
+
+  const archiveGoal = useMutation({
+    mutationFn: api.archiveSavingsGoal,
+    onSuccess: () => {
+      haptics.rigid();
+      void queryClient.invalidateQueries({ queryKey: ['goals'] });
+      showToast('Goal archived');
+    },
+    onError: () => haptics.error(),
+  });
+
   if (me.isPending || today.isPending) {
     return (
       <main className="screen">
@@ -305,6 +345,12 @@ function Shell(): JSX.Element {
             householdLeaveBusy={leaveHousehold.isPending}
             onCreateHouseholdInvite={() => createHouseholdInvite.mutate()}
             onLeaveHousehold={() => leaveHousehold.mutate()}
+            goals={goals.data?.goals ?? []}
+            goalsLoading={goals.isPending}
+            goalsBusy={addGoal.isPending || contributeGoal.isPending || archiveGoal.isPending}
+            onAddGoal={(input) => addGoal.mutate(input)}
+            onContributeGoal={(id, amountCents) => contributeGoal.mutate({ id, amountCents })}
+            onArchiveGoal={(id) => archiveGoal.mutate(id)}
           />
         )}
       </main>

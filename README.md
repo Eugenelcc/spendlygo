@@ -16,7 +16,12 @@ without blowing the month.
 - **Income & net cashflow** — not just what goes out
 - **Receipt photos** — attached to any transaction, stored free inside Telegram
 - **Recurring transactions** — rent, salary, and subscriptions log themselves
-- **CSV export & daily digest** — your data, and a nightly nudge
+- **Shared budgets** — a partner joins with a code; both of you see every entry
+- **Spending alerts & digests** — proactive 80%/over-budget warnings, plus a
+  nightly, weekly, and end-of-month wrap-up
+- **Savings goals** — tracked separately from the monthly budget, funded by
+  tagging a transfer to them
+- **CSV export** — your data, on the way
 
 ## Documentation
 
@@ -47,7 +52,7 @@ P5 automation ██████████ done
 P6 polish     ░░░░░░░░░░  photos, CSV export
 ```
 
-331 tests, initial Mini App bundle 79 KB gzipped.
+356 tests, initial Mini App bundle 82 KB gzipped.
 
 ## Running it locally
 

@@ -7,6 +7,8 @@ export * as recurringRepo from './repositories/recurring.js';
 export * as alertsRepo from './repositories/alerts.js';
 export * as householdsRepo from './repositories/households.js';
 export { JoinHouseholdError, type JoinFailureReason } from './repositories/households.js';
+export * as savingsRepo from './repositories/savings.js';
+export type { SavingsGoalWithContribution } from './repositories/savings.js';
 export type {
   User,
   NewUser,
@@ -24,4 +26,6 @@ export type {
   BudgetAlert,
   Household,
   HouseholdInvite,
+  SavingsGoal,
+  NewSavingsGoal,
 } from './schema.js';

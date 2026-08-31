@@ -41,6 +41,8 @@ export interface CreateTransactionInput {
   note: string | null;
   occurredOn: string;
   source: TransactionSource;
+  /** Set to fund a savings goal — see `packages/db/src/schema.ts`. */
+  savingsGoalId?: string | null;
 }
 
 /** A transaction with its category and author joined — what every screen shows. */
@@ -123,6 +125,7 @@ export async function create(db: Database, input: CreateTransactionInput): Promi
       note: input.note,
       occurredOn: input.occurredOn,
       source: input.source,
+      savingsGoalId: input.savingsGoalId ?? null,
     })
     .returning();
 

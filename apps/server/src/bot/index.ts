@@ -13,6 +13,7 @@ import { handleStart } from './commands/start.js';
 import { handleBudget, handleRecent, handleToday, handleUndoCommand } from './commands/money.js';
 import { handleRecurring } from './commands/recurring.js';
 import { handleHousehold, handleJoin } from './commands/household.js';
+import { handleGoals } from './commands/goals.js';
 import { handleCapture, handleUndo, UNDO_PREFIX } from './capture.js';
 import { canLaunchMiniApp, openAppKeyboard } from './keyboards.js';
 import { allowlist, timing, withUser, type BotContext } from './middleware.js';
@@ -45,6 +46,7 @@ export function createBot(ctx: AppContext): SpendlygoBot {
   bot.command('recurring', (botCtx) => handleRecurring(ctx, botCtx));
   bot.command('household', (botCtx) => handleHousehold(ctx, botCtx));
   bot.command('join', (botCtx) => handleJoin(ctx, botCtx));
+  bot.command('goals', (botCtx) => handleGoals(ctx, botCtx));
 
   bot.callbackQuery(new RegExp(`^${UNDO_PREFIX}`), (botCtx) => handleUndo(ctx, botCtx));
 
@@ -165,6 +167,7 @@ export async function configureBotMenu(bot: SpendlygoBot, ctx: AppContext): Prom
     { command: 'undo', description: 'Undo the last entry' },
     { command: 'recurring', description: 'Rent, salary and subscriptions' },
     { command: 'household', description: 'Share a budget with a partner' },
+    { command: 'goals', description: 'Savings goals and progress' },
     { command: 'help', description: 'How to log a spend' },
     { command: 'start', description: 'Start over' },
   ]);

@@ -8,6 +8,7 @@
 
 import {
   addDays,
+  calculateGoalProgress,
   calculateSafeToSpend,
   centsOf,
   isoDateOf,
@@ -17,8 +18,16 @@ import {
   type IsoDate,
   type SafeToSpendResult,
 } from '@spendlygo/core';
-import { householdsRepo, transactionsRepo, type User } from '@spendlygo/db';
-import type { Transaction as ApiTransaction } from '@spendlygo/shared';
+import {
+  householdsRepo,
+  transactionsRepo,
+  type SavingsGoalWithContribution,
+  type User,
+} from '@spendlygo/db';
+import type {
+  SavingsGoal as ApiSavingsGoal,
+  Transaction as ApiTransaction,
+} from '@spendlygo/shared';
 import type { AppContext } from '../context.js';
 
 export function todayFor(ctx: AppContext, user: User): IsoDate {
@@ -100,6 +109,33 @@ export async function computeSafeToSpend(
     spentTodayCents: centsOf(todayTotals.budgetedOutCents),
     today,
   });
+}
+
+/** Serialise a goal row plus its net contribution into the progress the client renders. */
+export function toApiSavingsGoal(
+  goal: SavingsGoalWithContribution,
+  today: IsoDate,
+): ApiSavingsGoal {
+  const progress = calculateGoalProgress({
+    targetCents: centsOf(goal.targetCents),
+    netContributedCents: goal.netContributedCents,
+    today,
+    targetDate: goal.targetDate as IsoDate | null,
+  });
+
+  return {
+    id: goal.id,
+    name: goal.name,
+    targetCents: progress.targetCents,
+    targetDate: goal.targetDate,
+    contributedCents: progress.contributedCents,
+    remainingCents: progress.remainingCents,
+    achieved: progress.achieved,
+    overdue: progress.overdue,
+    monthsRemaining: progress.monthsRemaining,
+    suggestedMonthlyCents: progress.suggestedMonthlyCents,
+    progressRatio: progress.progressRatio,
+  };
 }
 
 /** The last `days` days ending today, gaps filled with zero, oldest first. */

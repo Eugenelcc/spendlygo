@@ -16,15 +16,19 @@ import {
   categoriesRepo,
   householdsRepo,
   recurringRepo,
+  savingsRepo,
   transactionsRepo,
   usersRepo,
   type RecurringRule as DbRecurringRule,
   type User,
 } from '@spendlygo/db';
 import {
+  contributeToGoalSchema,
   createRecurringRuleSchema,
+  createSavingsGoalSchema,
   createTransactionSchema,
   statsPeriodSchema,
+  updateSavingsGoalSchema,
   updateSettingsSchema,
   updateTransactionSchema,
   type CategoriesResponse,
@@ -34,6 +38,8 @@ import {
   type MeResponse,
   type RecurringRulesResponse,
   type SafeToSpend,
+  type SavingsGoalResponse,
+  type SavingsGoalsResponse,
   type StatsResponse,
   type TodayResponse,
   type TransactionsResponse,
@@ -45,6 +51,7 @@ import {
   computeSafeToSpend,
   effectiveBudgetCents,
   recentDailySpend,
+  toApiSavingsGoal,
   toApiTransaction,
   todayFor,
 } from './service.js';
@@ -394,6 +401,96 @@ export function createApiRouter(ctx: AppContext): Hono<ApiEnv> {
     const deleted = await recurringRepo.deactivate(ctx.db, user.id, c.req.param('id'));
     if (!deleted) throw new NotFoundError('No such recurring rule');
     return c.json({ ok: true });
+  });
+
+  // --- savings goals (PRD-adjacent) ------------------------------------------
+  // Personal, not household-shared — see packages/db/src/schema.ts.
+
+  api.get('/goals', async (c) => {
+    const user = c.get('user');
+    const today = todayFor(ctx, user);
+    const rows = await savingsRepo.listForUser(ctx.db, user.id);
+
+    const body: SavingsGoalsResponse = {
+      goals: rows.map((row) => toApiSavingsGoal(row, today)),
+    };
+    return c.json(body);
+  });
+
+  api.post('/goals', async (c) => {
+    const user = c.get('user');
+    const today = todayFor(ctx, user);
+    const input = await parseBody(c, createSavingsGoalSchema);
+
+    const created = await savingsRepo.create(ctx.db, {
+      userId: user.id,
+      name: input.name,
+      targetCents: input.targetCents,
+      targetDate: input.targetDate ?? null,
+    });
+
+    const body: SavingsGoalResponse = {
+      goal: toApiSavingsGoal({ ...created, netContributedCents: 0 }, today),
+    };
+    return c.json(body, 201);
+  });
+
+  api.patch('/goals/:id', async (c) => {
+    const user = c.get('user');
+    const today = todayFor(ctx, user);
+    const input = await parseBody(c, updateSavingsGoalSchema);
+
+    const updated = await savingsRepo.update(ctx.db, user.id, c.req.param('id'), {
+      ...(input.name !== undefined && { name: input.name }),
+      ...(input.targetCents !== undefined && { targetCents: input.targetCents }),
+      ...(input.targetDate !== undefined && { targetDate: input.targetDate }),
+    });
+    if (!updated) throw new NotFoundError('No such savings goal');
+
+    const goal = await savingsRepo.findById(ctx.db, user.id, c.req.param('id'));
+    if (!goal) throw new NotFoundError('No such savings goal');
+
+    const body: SavingsGoalResponse = { goal: toApiSavingsGoal(goal, today) };
+    return c.json(body);
+  });
+
+  api.delete('/goals/:id', async (c) => {
+    const user = c.get('user');
+    const archived = await savingsRepo.archive(ctx.db, user.id, c.req.param('id'));
+    if (!archived) throw new NotFoundError('No such savings goal');
+    return c.json({ ok: true });
+  });
+
+  api.post('/goals/:id/contribute', async (c) => {
+    const user = c.get('user');
+    const today = todayFor(ctx, user);
+    const input = await parseBody(c, contributeToGoalSchema);
+    const goalId = c.req.param('id');
+
+    const goal = await savingsRepo.findById(ctx.db, user.id, goalId);
+    if (!goal) throw new NotFoundError('No such savings goal');
+
+    // Funding (or withdrawing from) a goal is a transfer — excluded from the
+    // budget by default (PRD F6.7) — so it never moves safe-to-spend.
+    const transferCategory = await categoriesRepo.findBySlug(ctx.db, user.id, 'transfers');
+
+    await transactionsRepo.create(ctx.db, {
+      userId: user.id,
+      householdId: user.householdId,
+      direction: input.direction,
+      amountCents: input.amountCents,
+      categoryId: transferCategory?.id ?? null,
+      note: input.note ?? null,
+      occurredOn: input.occurredOn ?? today,
+      source: 'miniapp',
+      savingsGoalId: goalId,
+    });
+
+    const refreshed = await savingsRepo.findById(ctx.db, user.id, goalId);
+    if (!refreshed) throw new NotFoundError('No such savings goal');
+
+    const body: SavingsGoalResponse = { goal: toApiSavingsGoal(refreshed, today) };
+    return c.json(body, 201);
   });
 
   return api;

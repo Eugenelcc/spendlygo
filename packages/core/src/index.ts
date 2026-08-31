@@ -6,3 +6,4 @@ export * from './categories.js';
 export * from './parser.js';
 export * from './safe-to-spend.js';
 export * from './recurrence.js';
+export * from './savings.js';
