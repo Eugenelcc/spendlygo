@@ -8,3 +8,4 @@ export * from './safe-to-spend.js';
 export * from './recurrence.js';
 export * from './savings.js';
 export * from './streaks.js';
+export * from './receipt-text.js';

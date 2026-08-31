@@ -15,6 +15,8 @@ import { and, eq, isNull, or } from 'drizzle-orm';
 import type { Database } from '../client.js';
 import { attachments, transactions, type Attachment } from '../schema.js';
 
+export type OcrStatus = 'none' | 'pending' | 'done' | 'failed';
+
 export interface CreateAttachmentInput {
   transactionId: string;
   userId: string;
@@ -23,6 +25,9 @@ export interface CreateAttachmentInput {
   width: number | null;
   height: number | null;
   fileSize: number | null;
+  /** Defaults to 'none' — set once OCR has actually run (PRD F4.6). */
+  ocrStatus?: OcrStatus;
+  ocrPayload?: unknown;
 }
 
 export async function create(db: Database, input: CreateAttachmentInput): Promise<Attachment> {

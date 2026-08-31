@@ -8,7 +8,7 @@
  * it rather than handing the URL out.
  */
 
-import type { SpendlygoBot } from '../bot/index.js';
+import type { Api } from 'grammy';
 import { describeError, logger } from '../logger.js';
 
 // Telegram's own URL lasts ~60 minutes; re-resolving a little early avoids a
@@ -24,7 +24,7 @@ const cache = new Map<string, CachedUrl>();
 
 /** Null on any failure — an expired or invalid `file_id`, a Telegram outage. */
 export async function resolveFileUrl(
-  bot: SpendlygoBot,
+  api: Api,
   botToken: string,
   fileId: string,
 ): Promise<string | null> {
@@ -32,7 +32,7 @@ export async function resolveFileUrl(
   if (cached && cached.expiresAt > Date.now()) return cached.url;
 
   try {
-    const file = await bot.api.getFile(fileId);
+    const file = await api.getFile(fileId);
     if (!file.file_path) return null;
 
     const url = `https://api.telegram.org/file/bot${botToken}/${file.file_path}`;

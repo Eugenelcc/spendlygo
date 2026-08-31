@@ -64,6 +64,7 @@ describeIfDb('savings goals API', () => {
     miniappUrl: 'https://app.example.test',
     serverUrl: undefined,
     cronSecret: 'cron-secret-for-tests-000',
+    ocrSpaceApiKey: undefined,
     allowedTelegramIds: new Set<bigint>(),
     defaultTimezone: 'Asia/Singapore',
     autoSetWebhook: false,

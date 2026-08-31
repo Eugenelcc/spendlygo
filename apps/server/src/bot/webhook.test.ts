@@ -15,6 +15,7 @@ function contextWith(overrides: Partial<Config>): AppContext {
     miniappUrl: 'https://spendlygo-app.onrender.com',
     serverUrl: 'https://spendlygo-api.onrender.com',
     cronSecret: 'cron-cron-cron-cron',
+    ocrSpaceApiKey: undefined,
     allowedTelegramIds: new Set<bigint>(),
     defaultTimezone: 'Asia/Singapore',
     autoSetWebhook: true,

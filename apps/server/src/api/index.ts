@@ -372,7 +372,7 @@ export function createApiRouter(ctx: AppContext, bot: SpendlygoBot): Hono<ApiEnv
     );
     if (!attachment) throw new NotFoundError('No such photo');
 
-    const url = await resolveFileUrl(bot, ctx.config.botToken, attachment.tgFileId);
+    const url = await resolveFileUrl(bot.api, ctx.config.botToken, attachment.tgFileId);
     if (!url) throw new NotFoundError('Photo is no longer available');
 
     const upstream = await fetch(url);

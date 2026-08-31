@@ -14,7 +14,8 @@ without blowing the month.
 - **Safe-to-spend** — a daily allowance that recalculates from what you actually spent
 - **Statistics** — daily, monthly, and yearly views with drill-through charts
 - **Income & net cashflow** — not just what goes out
-- **Receipt photos** — attached to any transaction, stored free inside Telegram
+- **Receipt photos** — attached to any transaction, stored free inside Telegram,
+  with an optional OCR pre-fill of the amount (needs a free OCR.space key)
 - **Recurring transactions** — rent, salary, and subscriptions log themselves
 - **Shared budgets** — a partner joins with a code; both of you see every entry
 - **Spending alerts & digests** — proactive 80%/over-budget warnings, plus a
@@ -51,10 +52,10 @@ P2 mini app   ██████████ done
 P3 goals      ██████████ done
 P4 stats      ██████████ done
 P5 automation ██████████ done
-P6 polish     █████░░░░░  photos done; receipt OCR and CSV export next
+P6 polish     ████████░░  photos + OCR done; CSV export next
 ```
 
-389 tests, initial Mini App bundle 84 KB gzipped.
+412 tests, initial Mini App bundle 84 KB gzipped.
 
 ## Running it locally
 

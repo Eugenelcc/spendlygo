@@ -25,6 +25,10 @@ const envSchema = z.object({
 
   CRON_SECRET: z.string().min(16, 'CRON_SECRET must be at least 16 characters'),
 
+  // Optional (PRD F4.6, ADR 0005): without it, photo attachments still work,
+  // just without an amount pre-fill.
+  OCR_SPACE_API_KEY: z.string().min(1).optional(),
+
   ALLOWED_TELEGRAM_IDS: z.string().default(''),
 
   DEFAULT_TIMEZONE: z.string().default('Asia/Singapore'),
@@ -55,6 +59,8 @@ export interface Config {
   miniappUrl: string;
   serverUrl: string | undefined;
   cronSecret: string;
+  /** Undefined when unset — see `OCR_SPACE_API_KEY` above. */
+  ocrSpaceApiKey: string | undefined;
   /** Empty means "no allowlist". GUARDRAILS.md section 4 wants this populated. */
   allowedTelegramIds: ReadonlySet<bigint>;
   defaultTimezone: string;
@@ -146,6 +152,7 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): Config {
     miniappUrl: normaliseOrigin(env.MINIAPP_URL),
     serverUrl: env.SERVER_URL ? normaliseOrigin(env.SERVER_URL) : undefined,
     cronSecret: env.CRON_SECRET,
+    ocrSpaceApiKey: env.OCR_SPACE_API_KEY,
     allowedTelegramIds,
     defaultTimezone: env.DEFAULT_TIMEZONE,
     autoSetWebhook: env.AUTO_SET_WEBHOOK,

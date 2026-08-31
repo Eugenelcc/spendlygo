@@ -49,4 +49,13 @@ describe('loadConfig', () => {
   it('defaults the timezone to Singapore', () => {
     expect(loadConfig(base).defaultTimezone).toBe('Asia/Singapore');
   });
+
+  it('is undefined when OCR_SPACE_API_KEY is unset — photos still work, no pre-fill', () => {
+    expect(loadConfig(base).ocrSpaceApiKey).toBeUndefined();
+  });
+
+  it('reads OCR_SPACE_API_KEY through when set', () => {
+    const config = loadConfig({ ...base, OCR_SPACE_API_KEY: 'test-key-123' });
+    expect(config.ocrSpaceApiKey).toBe('test-key-123');
+  });
 });

@@ -138,10 +138,12 @@ Legend: 🔴 **NEVER** — violating this is a defect, no exceptions.
 - 🔴 **NEVER** send user financial data to any third party. There is no
   "just for debugging" exception. The one named carve-out: a receipt photo may
   be forwarded to OCR.space for text extraction (PRD F4.6, ADR 0005) —
-  nothing else about the user or their account goes with it, the response is
-  used to pre-fill a field the user still confirms, and it is never logged
-  (previous bullet still applies). No other third party, and no other kind of
-  financial data, is covered by this exception.
+  nothing else about the user or their account goes with it, the resulting
+  guess is never treated as more certain than a typed amount (same
+  confirmation-card-plus-undo path, always visibly flagged as a guess), and
+  the receipt's actual text is never logged or stored — only the guessed
+  amount, in `ocr_payload` (previous bullet still applies). No other third
+  party, and no other kind of financial data, is covered by this exception.
 - 🟢 **ALWAYS** log with structured, redacted fields: `user_id`, event kind,
   duration, outcome. Never the payload.
 - 🟢 **ALWAYS** honour export (PRD F8) and full deletion on request.

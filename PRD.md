@@ -207,15 +207,20 @@ Launched from the chat via a `web_app` keyboard button or the bot menu button.
   Telegram file is not ours to delete.
 - **F4.5** In the Mini App, a transaction with an attachment shows a thumbnail
   badge; tapping opens a full-screen pinch-zoom viewer.
-- **F4.6** Uploading a receipt photo sends its bytes (not the `file_id`, not any
-  other user data) to **OCR.space**'s free API for text extraction — see
+- **F4.6** A captionless receipt photo sends its bytes (not the `file_id`, not
+  any other user data) to **OCR.space**'s free API for text extraction — see
   GUARDRAILS.md section 6 for the exact, narrow scope of that exception, and
-  ADR 0005 for why. The extracted total is a **suggestion only**: it pre-fills
-  the amount field, the user reviews and confirms before anything is saved,
-  and OCR ever failing or mis-reading a receipt degrades to today's manual
-  entry, not an error. `attachments.ocr_status` (`none` / `pending` / `done` /
-  `failed`) and `ocr_payload` (the raw OCR.space response, for debugging a bad
-  read) track this per photo.
+  ADR 0005 for why. The extracted total is a **suggestion, never authoritative
+  input**: it is saved through the same confirmation-card-plus-five-minute-undo
+  path every other capture in this app already uses (F1.5, F11.1) — not a
+  stricter pre-save confirm step, since that would be the one capture flow in
+  the app that behaves differently, for a source no less correctable than a
+  typed guess. The confirmation card says the amount was guessed and where to
+  fix it. A failed or mis-read receipt degrades to asking for a caption, the
+  same request a captionless photo always got. `attachments.ocr_status`
+  (`none` / `pending` / `done` / `failed`) and `ocr_payload` (the guessed
+  amount, for debugging a bad read — never the raw receipt text) track this
+  per photo.
 
 ---
 
@@ -509,4 +514,4 @@ in the same hour must be a no-op.
 | Cold start makes the bot feel dead | Medium | Medium | 10-min keep-alive; Telegram retries webhooks; `/healthz` stays dependency-free so it answers instantly |
 | Parser mis-reads amounts | Medium | High | Confirmation card on every capture + 5-minute undo; never silently save an ambiguous parse |
 | Free-tier DB fills up (500 MB) | Low | Medium | Photos live in Telegram, not the DB. Text rows are tiny — 500 MB is ~10 years of daily use |
-| Scope creep into voice/multi-currency, or OCR becoming authoritative instead of a suggestion | **High** | High | This document. Deferred means deferred; F4.6 pre-fills, never auto-saves. |
+| Scope creep into voice/multi-currency, or OCR becoming authoritative instead of a suggestion | **High** | High | This document. Deferred means deferred; F4.6's guess is always visibly flagged and undoable, same as any other capture — never presented or treated as more certain than that. |

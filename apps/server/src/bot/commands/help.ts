@@ -2,7 +2,22 @@ import type { AppContext } from '../../context.js';
 import { openAppKeyboard } from '../keyboards.js';
 import type { BotContext } from '../middleware.js';
 
-const HELP = `*Logging money*
+function receiptsSection(ocrEnabled: boolean): string {
+  if (ocrEnabled) {
+    return [
+      '*Receipts* — send a photo',
+      '',
+      "Captioned with the amount (`12.50 lunch`), same as typing it — or with no caption at all and I'll try to read the total off the receipt myself. Always double-check the guess.",
+    ].join('\n');
+  }
+  return [
+    '*Receipts* — send a photo captioned with the amount',
+    '',
+    '`12.50 lunch` as the caption, same grammar as typing it.',
+  ].join('\n');
+}
+
+const HELP_HEAD = `*Logging money*
 
 Type the amount first, then what it was for:
 
@@ -18,13 +33,9 @@ Type the amount first, then what it was for:
 \`k\` — thousands, so \`2.5k rent\` is 2,500
 
 If you leave the category out, I'll guess it from what you wrote.
-Every entry gets an *Undo* button for five minutes.
+Every entry gets an *Undo* button for five minutes.`;
 
-*Receipts* — send a photo captioned with the amount
-
-\`12.50 lunch\` as the caption, same grammar as typing it.
-
-*Digests* — a daily check-in at your chosen hour, plus a Sunday wrap-up and
+const HELP_TAIL = `*Digests* — a daily check-in at your chosen hour, plus a Sunday wrap-up and
 an end-of-month summary. Turn them on or off in Settings.
 
 *Recurring* — things that happen on their own
@@ -59,7 +70,13 @@ can then change the budget, and you'll both see everything either of you logs.
 /help — this message`;
 
 export async function handleHelp(ctx: AppContext, botCtx: BotContext): Promise<void> {
-  await botCtx.reply(HELP, {
+  const help = [
+    HELP_HEAD,
+    receiptsSection(ctx.config.ocrSpaceApiKey !== undefined),
+    HELP_TAIL,
+  ].join('\n\n');
+
+  await botCtx.reply(help, {
     parse_mode: 'Markdown',
     reply_markup: openAppKeyboard(ctx.config),
   });
