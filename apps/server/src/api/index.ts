@@ -14,6 +14,7 @@ import {
   type IsoDate,
 } from '@spendlygo/core';
 import {
+  attachmentsRepo,
   categoriesRepo,
   householdsRepo,
   recurringRepo,
@@ -38,6 +39,7 @@ import {
   type HouseholdInviteResponse,
   type HouseholdResponse,
   type MeResponse,
+  type PhotosResponse,
   type RecapResponse,
   type RecurringRulesResponse,
   type SafeToSpend,
@@ -48,8 +50,10 @@ import {
   type TransactionsResponse,
 } from '@spendlygo/shared';
 import { NotFoundError } from '@spendlygo/core';
+import type { SpendlygoBot } from '../bot/index.js';
 import type { AppContext } from '../context.js';
 import { requireInitData, type ApiEnv } from '../middleware/auth.js';
+import { resolveFileUrl } from '../telegram/photos.js';
 import { buildRecap } from './recap.js';
 import {
   computeSafeToSpend,
@@ -103,7 +107,7 @@ function serialiseSafeToSpend(result: Awaited<ReturnType<typeof computeSafeToSpe
   };
 }
 
-export function createApiRouter(ctx: AppContext): Hono<ApiEnv> {
+export function createApiRouter(ctx: AppContext, bot: SpendlygoBot): Hono<ApiEnv> {
   const api = new Hono<ApiEnv>();
 
   api.use('*', requireInitData(ctx));
@@ -336,6 +340,52 @@ export function createApiRouter(ctx: AppContext): Hono<ApiEnv> {
 
     const safeToSpend = await computeSafeToSpend(ctx, user);
     return c.json({ ok: true, safeToSpend: serialiseSafeToSpend(safeToSpend) });
+  });
+
+  // --- photo attachments (F4) -------------------------------------------------
+  // The photo itself never leaves Telegram (ADR 0003) — this proxies bytes on
+  // demand rather than storing or redirecting to them. A redirect would leak
+  // the resolved URL, which embeds the bot token (GUARDRAILS.md section 5).
+
+  api.get('/transactions/:id/photos', async (c) => {
+    const user = c.get('user');
+    const rows = await attachmentsRepo.listForTransaction(
+      ctx.db,
+      user.id,
+      user.householdId,
+      c.req.param('id'),
+    );
+
+    const body: PhotosResponse = {
+      photos: rows.map((row) => ({ id: row.id, width: row.width, height: row.height })),
+    };
+    return c.json(body);
+  });
+
+  api.get('/photos/:id', async (c) => {
+    const user = c.get('user');
+    const attachment = await attachmentsRepo.findViewable(
+      ctx.db,
+      user.id,
+      user.householdId,
+      c.req.param('id'),
+    );
+    if (!attachment) throw new NotFoundError('No such photo');
+
+    const url = await resolveFileUrl(bot.api, ctx.config.botToken, attachment.tgFileId);
+    if (!url) throw new NotFoundError('Photo is no longer available');
+
+    const upstream = await fetch(url);
+    if (!upstream.ok || !upstream.body) throw new NotFoundError('Photo is no longer available');
+
+    // Telegram photos are always JPEG. Streamed straight through rather than
+    // buffered — GUARDRAILS.md section 7 rules out holding a full image in
+    // memory when the upstream response is already a stream.
+    return c.body(upstream.body, 200, {
+      'Content-Type': 'image/jpeg',
+      // Private: this is one user's receipt, never a shared CDN-cacheable asset.
+      'Cache-Control': 'private, max-age=3000',
+    });
   });
 
   // --- statistics -----------------------------------------------------------

@@ -87,7 +87,7 @@ export function createApp(ctx: AppContext, bot: SpendlygoBot, options: CreateApp
     return handleUpdate(c);
   });
 
-  app.route('/api', createApiRouter(ctx));
+  app.route('/api', createApiRouter(ctx, bot));
   app.route('/tasks', createTasksRouter(ctx, bot));
 
   app.get('/', (c) =>

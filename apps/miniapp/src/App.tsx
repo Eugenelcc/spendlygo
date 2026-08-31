@@ -17,6 +17,8 @@ import {
   type LaunchParams,
 } from './lib/telegram';
 import { Capture } from './components/Capture';
+import { PhotoThumbnail } from './components/PhotoThumbnail';
+import { PhotoViewer } from './components/PhotoViewer';
 import { RecapCard } from './components/RecapCard';
 import { Sheet } from './components/Sheet';
 import { TodayScreen } from './screens/Today';
@@ -86,6 +88,7 @@ function Shell(): JSX.Element {
   const [toast, setToast] = useState<string | null>(null);
   const [recapOpen, setRecapOpen] = useState(false);
   const [recapPeriod, setRecapPeriod] = useState<RecapPeriod>('month');
+  const [openPhotoId, setOpenPhotoId] = useState<string | null>(null);
 
   const me = useQuery({ queryKey: ['me'], queryFn: api.me });
   const categories = useQuery({ queryKey: ['categories'], queryFn: api.categories });
@@ -113,6 +116,12 @@ function Shell(): JSX.Element {
     queryKey: ['recap', recapPeriod],
     queryFn: () => api.recap(recapPeriod),
     enabled: recapOpen,
+  });
+
+  const photos = useQuery({
+    queryKey: ['photos', selected?.id],
+    queryFn: () => api.transactionPhotos(selected?.id as string),
+    enabled: selected !== null && selected.hasPhoto,
   });
 
   const goals = useQuery({
@@ -430,6 +439,13 @@ function Shell(): JSX.Element {
               {selected.occurredOn}
             </div>
             {selected.note && <p className="detail__note">{selected.note}</p>}
+            {selected.hasPhoto && (
+              <div className="detail__photos">
+                {photos.data?.photos.map((photo) => (
+                  <PhotoThumbnail key={photo.id} photoId={photo.id} onOpen={setOpenPhotoId} />
+                ))}
+              </div>
+            )}
             <button
               type="button"
               className="danger"
@@ -444,6 +460,8 @@ function Shell(): JSX.Element {
           </div>
         )}
       </Sheet>
+
+      {openPhotoId && <PhotoViewer photoId={openPhotoId} onClose={() => setOpenPhotoId(null)} />}
 
       <Sheet open={recapOpen} onClose={() => setRecapOpen(false)} title="Recap">
         <RecapCard

@@ -7,6 +7,7 @@ import type {
   HouseholdInviteResponse,
   HouseholdResponse,
   MeResponse,
+  PhotosResponse,
   RecapPeriod,
   RecapResponse,
   RecurringRulesResponse,
@@ -70,6 +71,22 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   return (await response.json()) as T;
 }
 
+/**
+ * A receipt photo, authenticated. `<img src>` can't set an Authorization
+ * header, so this fetches the bytes itself and hands back a local blob URL —
+ * `URL.revokeObjectURL` it once the viewer using it unmounts.
+ */
+async function fetchPhotoBlobUrl(id: string): Promise<string> {
+  const response = await fetch(`${BASE_URL}/api/photos/${id}`, {
+    headers: { Authorization: `tma ${initData}` },
+  });
+  if (!response.ok) {
+    throw new ApiRequestError(response.status, 'photo_unavailable', 'Photo is not available.');
+  }
+  const blob = await response.blob();
+  return URL.createObjectURL(blob);
+}
+
 export interface MutationResult {
   transaction: Transaction;
   safeToSpend: SafeToSpend;
@@ -85,6 +102,11 @@ export const api = {
 
   recap: (period: RecapPeriod, anchor?: string) =>
     request<RecapResponse>(`/api/recap?period=${period}${anchor ? `&anchor=${anchor}` : ''}`),
+
+  transactionPhotos: (transactionId: string) =>
+    request<PhotosResponse>(`/api/transactions/${transactionId}/photos`),
+
+  photoBlobUrl: fetchPhotoBlobUrl,
 
   transactions: (params: { from?: string; to?: string; limit?: number; offset?: number } = {}) => {
     const query = new URLSearchParams();

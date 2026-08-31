@@ -63,6 +63,7 @@ function makeConfig(overrides: Partial<Config> = {}): Config {
     miniappUrl: MINIAPP_URL,
     serverUrl: undefined,
     cronSecret: CRON_SECRET,
+    ocrSpaceApiKey: undefined,
     allowedTelegramIds: new Set<bigint>(),
     defaultTimezone: 'Asia/Singapore',
     // Tests must never reach out and re-point a real bot's webhook.

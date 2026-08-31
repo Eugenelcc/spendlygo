@@ -16,6 +16,7 @@ import { handleHousehold, handleJoin } from './commands/household.js';
 import { handleGoals } from './commands/goals.js';
 import { handleRecap } from './commands/recap.js';
 import { handleCapture, handleUndo, UNDO_PREFIX } from './capture.js';
+import { handlePhotoCapture } from './photo-capture.js';
 import { canLaunchMiniApp, openAppKeyboard } from './keyboards.js';
 import { allowlist, timing, withUser, type BotContext } from './middleware.js';
 
@@ -56,14 +57,16 @@ export function createBot(ctx: AppContext): SpendlygoBot {
   // ones nothing above claimed, or the client spins forever.
   bot.on('callback_query', (botCtx) => botCtx.answerCallbackQuery());
 
-  /**
-   * Receipts are phase P6. Until then say so: a silent non-response would let
-   * someone believe their receipt was filed.
-   */
-  bot.on([':photo', ':document'], async (botCtx) => {
+  // PRD F4: a captioned photo is captured exactly like a text message, plus
+  // the photo attached. See bot/photo-capture.ts for why a caption (not OCR,
+  // not yet) is what supplies the amount in v1.
+  bot.on(':photo', (botCtx) => handlePhotoCapture(ctx, botCtx));
+
+  /** Receipt PDFs are a later pass. A silent non-response would let someone
+   * believe their document was filed. */
+  bot.on(':document', async (botCtx) => {
     await botCtx.reply(
-      "I can't store receipts yet — that's still being built.\n\n" +
-        'You can log the amount though: `12.50 lunch`',
+      "I can't read documents yet — send a photo instead, captioned with the amount: `12.50 lunch`",
       { parse_mode: 'Markdown' },
     );
   });

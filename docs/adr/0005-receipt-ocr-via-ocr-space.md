@@ -39,13 +39,20 @@ to two guardrails, not a reopening of either:
 - GUARDRAILS.md section 6 ("never send user financial data to any third
   party") — a receipt photo is financial data. The exception is scoped as
   tightly as it can be: only the image bytes, nothing else about the user or
-  their account; used once for text extraction; the result pre-fills a field
-  the user still confirms before it's saved; never logged.
+  their account; used once for text extraction; the receipt's actual text is
+  never logged or stored, only the resulting guessed amount.
 
-The extracted amount is **never authoritative**. It fills the amount field in
-the confirmation flow; the user reviews and can overwrite it before anything
-is saved. A failed or wrong OCR read degrades to exactly what F1/F2 already
-do — manual entry — never an error state.
+The extracted amount is **never authoritative** — meaning never presented or
+treated with more confidence than a typed amount gets, not that it needs a
+stricter save gate typed capture doesn't have. It goes through the exact
+same path every other capture in this app already uses: saved immediately,
+shown on a confirmation card that says the amount was guessed and where to
+fix it, undoable for five minutes (PRD F1.5, F11.1). A separate pre-save
+confirm step was considered and rejected — it would make OCR the one capture
+flow in the app that behaves differently, for a source no less correctable
+after the fact than a typed guess. A failed or wrong OCR read degrades to
+exactly what a captionless photo already asked for — a caption — never an
+error state.
 
 ## Consequences
 
@@ -60,9 +67,11 @@ do — manual entry — never an error state.
 - The request happens after the photo is already safely on Telegram's
   servers (ADR 0003 is unaffected — the photo itself still never gets copied
   into our storage, only sent once, transiently, for OCR).
-- `ocr_status` moves from `none`/unused to `pending` → `done`/`failed`,
-  driven by whether the OCR.space call succeeded, timed out, or wasn't
-  configured at all.
+- `ocr_status` moves from `none`/unused to `done`/`failed`, set once the
+  OCR.space call has already resolved — the whole round trip happens inline
+  in the webhook handler, so there is no separate `pending` window to
+  observe from outside it. `pending` stays reserved on the enum for if OCR
+  ever needs to move off the request path (e.g. a queued retry).
 - This is now the second approved third-party data processor (Telegram is the
   first, and is unavoidable — it's the whole platform). No third is added
   without going back through GUARDRAILS.md section 1's "ask first" rule.
