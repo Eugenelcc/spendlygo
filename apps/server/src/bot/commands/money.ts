@@ -8,7 +8,12 @@
 import { formatCents, parseAmountToCents, type AmountCents } from '@spendlygo/core';
 import { householdsRepo, transactionsRepo, usersRepo } from '@spendlygo/db';
 import type { AppContext } from '../../context.js';
-import { computeSafeToSpend, effectiveBudgetCents, todayFor } from '../../api/service.js';
+import {
+  computeSafeToSpend,
+  computeStreak,
+  effectiveBudgetCents,
+  todayFor,
+} from '../../api/service.js';
 import { openAppKeyboard } from '../keyboards.js';
 import type { BotContext } from '../middleware.js';
 import { undoKeyboard, UNDO_WINDOW_MS } from '../capture.js';
@@ -23,9 +28,14 @@ const PACE_LABEL = {
 export async function handleToday(ctx: AppContext, botCtx: BotContext): Promise<void> {
   const user = botCtx.appUser;
   const today = todayFor(ctx, user);
-  const result = await computeSafeToSpend(ctx, user, today);
+  const [result, streak] = await Promise.all([
+    computeSafeToSpend(ctx, user, today),
+    computeStreak(ctx, user, today),
+  ]);
   const money = (cents: AmountCents) =>
     escape(formatCents(cents, { currency: user.currency, locale: user.locale }));
+  // A 1-day "streak" isn't a streak yet — only worth a line once it means something.
+  const streakLine = streak.current >= 2 ? `🔥 ${streak.current}-day streak` : null;
 
   if (!result.hasBudget) {
     await botCtx.reply(
@@ -34,6 +44,7 @@ export async function handleToday(ctx: AppContext, botCtx: BotContext): Promise<
         '',
         `Spent today: ${money(result.spentTodayCents)}`,
         `Spent this month: ${money(result.spentMonthToDateCents)}`,
+        ...(streakLine ? ['', streakLine] : []),
         '',
         'Set a monthly budget to see what is safe to spend:',
         '`/budget 1500`',
@@ -51,6 +62,8 @@ export async function handleToday(ctx: AppContext, botCtx: BotContext): Promise<
     `This month: ${money(result.spentMonthToDateCents)} of ${money(result.budgetCents ?? (0 as AmountCents))}`,
     `${result.daysRemaining} ${result.daysRemaining === 1 ? 'day' : 'days'} left`,
   ];
+
+  if (streakLine) lines.push(streakLine);
 
   if (result.overspentCents > 0) {
     lines.splice(1, 0, '', `Over budget by ${money(result.overspentCents)}`);

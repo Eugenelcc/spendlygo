@@ -21,6 +21,8 @@ without blowing the month.
   nightly, weekly, and end-of-month wrap-up
 - **Savings goals** — tracked separately from the monthly budget, funded by
   tagging a transfer to them
+- **Logging streaks** — a 🔥 nudge for consecutive days logged
+- **Recap** — an on-demand, shareable month or year wrap-up (`/recap`)
 - **CSV export** — your data, on the way
 
 ## Documentation
@@ -52,7 +54,7 @@ P5 automation ██████████ done
 P6 polish     ░░░░░░░░░░  photos, CSV export
 ```
 
-356 tests, initial Mini App bundle 82 KB gzipped.
+378 tests, initial Mini App bundle 82 KB gzipped.
 
 ## Running it locally
 
