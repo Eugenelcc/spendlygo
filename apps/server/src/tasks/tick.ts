@@ -21,6 +21,7 @@ import { UnauthorizedError } from '@spendlygo/core';
 import type { AppContext } from '../context.js';
 import type { SpendlygoBot } from '../bot/index.js';
 import { describeError, logger } from '../logger.js';
+import { checkBudgetAlerts } from './alerts.js';
 import { materialiseRecurring } from './recurring.js';
 import { sendDueDigests } from './send-digests.js';
 
@@ -68,17 +69,26 @@ export function createTasksRouter(ctx: AppContext, bot: SpendlygoBot): Hono {
       logger.error('tick.digest_batch_failed', describeError(error));
     }
 
+    let alertsSent = 0;
+    try {
+      alertsSent = await checkBudgetAlerts(ctx, bot);
+    } catch (error) {
+      logger.error('tick.alert_batch_failed', describeError(error));
+    }
+
     const body: TickResponse = {
       ok: true,
       ranAt: ctx.clock.now().toISOString(),
       recurringMaterialised,
       digestsSent,
+      alertsSent,
     };
 
     logger.info('tick.done', {
       durationMs: Date.now() - startedAt,
       recurringMaterialised,
       digestsSent,
+      alertsSent,
     });
     return c.json(body);
   });

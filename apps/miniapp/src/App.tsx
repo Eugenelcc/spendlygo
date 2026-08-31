@@ -265,6 +265,7 @@ function Shell(): JSX.Element {
             busy={settings.isPending}
             onSaveBudget={(cents) => settings.mutate({ monthlyBudgetCents: cents })}
             onToggleDigest={(enabled) => settings.mutate({ digestEnabled: enabled })}
+            onToggleAlerts={(enabled) => settings.mutate({ alertsEnabled: enabled })}
             categories={categories.data?.categories ?? []}
             today={today.data.today}
             recurringRules={recurring.data?.rules ?? []}

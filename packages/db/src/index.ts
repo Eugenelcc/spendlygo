@@ -4,6 +4,7 @@ export * as usersRepo from './repositories/users.js';
 export * as categoriesRepo from './repositories/categories.js';
 export * as transactionsRepo from './repositories/transactions.js';
 export * as recurringRepo from './repositories/recurring.js';
+export * as alertsRepo from './repositories/alerts.js';
 export type {
   User,
   NewUser,
@@ -18,4 +19,5 @@ export type {
   BudgetPeriod,
   EventRow,
   RecurringRun,
+  BudgetAlert,
 } from './schema.js';

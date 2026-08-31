@@ -117,6 +117,7 @@ export function createApiRouter(ctx: AppContext): Hono<ApiEnv> {
         digestHour: user.digestHour,
         digestEnabled: user.digestEnabled,
         nudgeEnabled: user.nudgeEnabled,
+        alertsEnabled: user.alertsEnabled,
         onboardedAt: user.onboardedAt?.toISOString() ?? null,
       },
       // PRD F7.2: the client must never derive a period boundary from the
@@ -138,6 +139,7 @@ export function createApiRouter(ctx: AppContext): Hono<ApiEnv> {
         digestHour: updated.digestHour,
         digestEnabled: updated.digestEnabled,
         nudgeEnabled: updated.nudgeEnabled,
+        alertsEnabled: updated.alertsEnabled,
       },
     });
   });

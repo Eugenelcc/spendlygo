@@ -57,6 +57,8 @@ export const users = pgTable(
     digestHour: smallint('digest_hour').notNull().default(21),
     digestEnabled: boolean('digest_enabled').notNull().default(true),
     nudgeEnabled: boolean('nudge_enabled').notNull().default(true),
+    /** PRD-adjacent: proactive budget-threshold warnings, independent of the digest. */
+    alertsEnabled: boolean('alerts_enabled').notNull().default(true),
     onboardedAt: timestamp('onboarded_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
@@ -258,6 +260,34 @@ export const budgetPeriods = pgTable(
   ],
 );
 
+/**
+ * One row per (user, month, threshold) crossed, so a threshold is announced
+ * once per month no matter how many times the hourly tick re-checks it —
+ * the same idempotency shape as recurring_runs (GUARDRAILS.md section 3).
+ */
+export const budgetAlerts = pgTable(
+  'budget_alerts',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    year: smallint('year').notNull(),
+    month: smallint('month').notNull(),
+    /** 80 or 100 — percent of the monthly budget crossed. */
+    thresholdPct: smallint('threshold_pct').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('budget_alerts_user_period_threshold_uq').on(
+      t.userId,
+      t.year,
+      t.month,
+      t.thresholdPct,
+    ),
+  ],
+);
+
 // --- audit ------------------------------------------------------------------
 
 /** Append-only audit log. Also what powers Undo (PRD F11.1). */
@@ -288,3 +318,4 @@ export type NewRecurringRule = typeof recurringRules.$inferInsert;
 export type BudgetPeriod = typeof budgetPeriods.$inferSelect;
 export type EventRow = typeof events.$inferSelect;
 export type RecurringRun = typeof recurringRuns.$inferSelect;
+export type BudgetAlert = typeof budgetAlerts.$inferSelect;

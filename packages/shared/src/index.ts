@@ -78,6 +78,7 @@ export const meResponseSchema = z.object({
     digestHour: z.number().int().min(0).max(23),
     digestEnabled: z.boolean(),
     nudgeEnabled: z.boolean(),
+    alertsEnabled: z.boolean(),
     onboardedAt: z.string().datetime().nullable(),
   }),
   /** Today's date in the user's timezone — the client must not compute this. */
@@ -228,6 +229,7 @@ export const updateSettingsSchema = z.object({
   digestHour: z.number().int().min(0).max(23).optional(),
   digestEnabled: z.boolean().optional(),
   nudgeEnabled: z.boolean().optional(),
+  alertsEnabled: z.boolean().optional(),
 });
 export type UpdateSettingsBody = z.infer<typeof updateSettingsSchema>;
 
@@ -282,5 +284,6 @@ export const tickResponseSchema = z.object({
   ranAt: z.string().datetime(),
   recurringMaterialised: z.number().int().nonnegative(),
   digestsSent: z.number().int().nonnegative(),
+  alertsSent: z.number().int().nonnegative(),
 });
 export type TickResponse = z.infer<typeof tickResponseSchema>;

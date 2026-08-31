@@ -9,6 +9,7 @@ export interface SettingsScreenProps {
   busy: boolean;
   onSaveBudget: (cents: number | null) => void;
   onToggleDigest: (enabled: boolean) => void;
+  onToggleAlerts: (enabled: boolean) => void;
   categories: Category[];
   today: string;
   recurringRules: RecurringRule[];
@@ -38,6 +39,7 @@ export function SettingsScreen({
   busy,
   onSaveBudget,
   onToggleDigest,
+  onToggleAlerts,
   categories,
   today,
   recurringRules,
@@ -115,9 +117,7 @@ export function SettingsScreen({
         <label className="toggle">
           <span>
             Nightly summary at {String(user.digestHour).padStart(2, '0')}:00
-            <span className="toggle__hint">
-              Saves your preference — the message itself isn't sending yet
-            </span>
+            <span className="toggle__hint">Plus a Sunday and end-of-month wrap-up</span>
           </span>
           <input
             type="checkbox"
@@ -125,6 +125,27 @@ export function SettingsScreen({
             onChange={(event) => {
               haptics.select();
               onToggleDigest(event.target.checked);
+            }}
+          />
+          <span className="toggle__track" aria-hidden="true" />
+        </label>
+      </section>
+
+      <section className="card">
+        <div className="card__label">Budget alerts</div>
+        <label className="toggle">
+          <span>
+            Warn me at 80% and over budget
+            <span className="toggle__hint">
+              Sent the moment it happens, not just at digest time
+            </span>
+          </span>
+          <input
+            type="checkbox"
+            checked={user.alertsEnabled}
+            onChange={(event) => {
+              haptics.select();
+              onToggleAlerts(event.target.checked);
             }}
           />
           <span className="toggle__track" aria-hidden="true" />

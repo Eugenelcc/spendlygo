@@ -70,6 +70,11 @@ export async function listDigestEligible(db: Database): Promise<User[]> {
   return db.select().from(users).where(eq(users.digestEnabled, true));
 }
 
+/** Users with proactive budget alerts switched on. */
+export async function listAlertEligible(db: Database): Promise<User[]> {
+  return db.select().from(users).where(eq(users.alertsEnabled, true));
+}
+
 export async function markOnboarded(db: Database, userId: string): Promise<void> {
   await db
     .update(users)
@@ -83,6 +88,7 @@ export interface UpdateSettingsInput {
   digestHour?: number;
   digestEnabled?: boolean;
   nudgeEnabled?: boolean;
+  alertsEnabled?: boolean;
 }
 
 export async function updateSettings(
