@@ -87,6 +87,34 @@ async function fetchPhotoBlobUrl(id: string): Promise<string> {
   return URL.createObjectURL(blob);
 }
 
+/**
+ * Downloads the CSV export (PRD F8) and saves it. A plain `<a href>` can't
+ * carry the Authorization header, so this fetches the bytes itself and
+ * triggers the save through a throwaway anchor, exactly like the photo
+ * viewer fetches its own blob URL above.
+ */
+async function downloadExportCsv(range?: string): Promise<void> {
+  const suffix = range ? `?range=${encodeURIComponent(range)}` : '';
+  const response = await fetch(`${BASE_URL}/api/export${suffix}`, {
+    headers: { Authorization: `tma ${initData}` },
+  });
+  if (!response.ok) {
+    throw new ApiRequestError(response.status, 'export_unavailable', 'Export is not available.');
+  }
+  const disposition = response.headers.get('content-disposition') ?? '';
+  const filename = /filename="([^"]+)"/.exec(disposition)?.[1] ?? 'spendlygo-export.csv';
+
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
 export interface MutationResult {
   transaction: Transaction;
   safeToSpend: SafeToSpend;
@@ -107,6 +135,8 @@ export const api = {
     request<PhotosResponse>(`/api/transactions/${transactionId}/photos`),
 
   photoBlobUrl: fetchPhotoBlobUrl,
+
+  exportCsv: downloadExportCsv,
 
   transactions: (params: { from?: string; to?: string; limit?: number; offset?: number } = {}) => {
     const query = new URLSearchParams();

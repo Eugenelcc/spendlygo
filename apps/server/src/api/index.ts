@@ -54,6 +54,7 @@ import type { SpendlygoBot } from '../bot/index.js';
 import type { AppContext } from '../context.js';
 import { requireInitData, type ApiEnv } from '../middleware/auth.js';
 import { resolveFileUrl } from '../telegram/photos.js';
+import { buildExportCsv, exportFilename, parseExportRange } from './export.js';
 import { buildRecap } from './recap.js';
 import {
   computeSafeToSpend,
@@ -385,6 +386,20 @@ export function createApiRouter(ctx: AppContext, bot: SpendlygoBot): Hono<ApiEnv
       'Content-Type': 'image/jpeg',
       // Private: this is one user's receipt, never a shared CDN-cacheable asset.
       'Cache-Control': 'private, max-age=3000',
+    });
+  });
+
+  // --- CSV export (F8) --------------------------------------------------------
+
+  api.get('/export', async (c) => {
+    const user = c.get('user');
+    const range = parseExportRange(c.req.query('range') ?? '');
+    if (!range) throw new ValidationError('range must be YYYY, YYYY-MM, YYYY-MM-DD, or omitted');
+
+    const csv = await buildExportCsv(ctx, user, range);
+    return c.body(csv, 200, {
+      'Content-Type': 'text/csv; charset=utf-8',
+      'Content-Disposition': `attachment; filename="${exportFilename(range)}"`,
     });
   });
 

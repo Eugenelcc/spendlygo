@@ -180,6 +180,33 @@ export async function list(
   return rows as TransactionView[];
 }
 
+/**
+ * Every visible row for a CSV export (PRD F8), oldest first — natural
+ * reading order for a spreadsheet, the opposite of the History feed. Capped
+ * as a typo/sanity guard, not a real limit: this app's realistic scale is
+ * thousands of rows, comfortably within the 512 MB runtime budget for one
+ * query and one in-memory CSV string (GUARDRAILS.md section 7, PRD F8.6).
+ */
+const EXPORT_ROW_CAP = 100_000;
+
+export async function listForExport(
+  db: Database,
+  userId: string,
+  householdId: string | null,
+  options: Pick<ListOptions, 'from' | 'to'> = {},
+): Promise<TransactionView[]> {
+  const filters = [visibleTo(userId, householdId)];
+  if (options.from) filters.push(gte(transactions.occurredOn, options.from));
+  if (options.to) filters.push(lte(transactions.occurredOn, options.to));
+
+  const rows = await baseViewQuery(db)
+    .where(and(...filters))
+    .orderBy(asc(transactions.occurredOn), asc(transactions.createdAt))
+    .limit(EXPORT_ROW_CAP);
+
+  return rows as TransactionView[];
+}
+
 /** Soft delete (PRD F11.3). Author-only — see the file header. */
 export async function softDelete(db: Database, userId: string, id: string): Promise<boolean> {
   const rows = await db

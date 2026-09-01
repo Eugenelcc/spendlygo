@@ -45,6 +45,8 @@ export interface SettingsScreenProps {
   onAddGoal: (input: { name: string; targetCents: number; targetDate: string | null }) => void;
   onContributeGoal: (id: string, amountCents: number) => void;
   onArchiveGoal: (id: string) => void;
+  exportBusy: boolean;
+  onExportCsv: () => void;
 }
 
 const CADENCE_LABEL: Record<Cadence, string> = {
@@ -78,6 +80,8 @@ export function SettingsScreen({
   onAddGoal,
   onContributeGoal,
   onArchiveGoal,
+  exportBusy,
+  onExportCsv,
 }: SettingsScreenProps): JSX.Element {
   const { user } = me;
   const [budgetMode, setBudgetMode] = useState<'monthly' | 'daily'>('monthly');
@@ -359,9 +363,20 @@ export function SettingsScreen({
           <span className="row__key">Currency</span>
           <span className="row__value">{user.currency}</span>
         </div>
+        <button
+          type="button"
+          className="primary primary--inline"
+          disabled={exportBusy}
+          onClick={() => {
+            haptics.select();
+            onExportCsv();
+          }}
+        >
+          {exportBusy ? 'Preparing…' : 'Export CSV'}
+        </button>
       </section>
 
-      <p className="footnote">Your data is yours — CSV export is on the way.</p>
+      <p className="footnote">Your data is yours — export everything as a CSV, any time.</p>
     </div>
   );
 }
