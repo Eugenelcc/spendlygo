@@ -71,6 +71,18 @@ export function daysInMonth(isoDate: string): number {
   return new Date(Date.UTC(year, month, 0)).getUTCDate();
 }
 
+/** 0 = Sunday … 6 = Saturday, for laying the calendar heatmap out into weeks. */
+export function isoWeekday(isoDate: string): number {
+  const { year, month, day } = parts(isoDate);
+  return new Date(Date.UTC(year, month - 1, day)).getUTCDay();
+}
+
+/** "Jan", "Feb", … — the heatmap's month ticks. */
+export function monthAbbrev(isoDate: string): string {
+  const { month } = parts(isoDate);
+  return MONTH_NAMES[month - 1]?.slice(0, 3) ?? '';
+}
+
 export function formatLongDate(isoDate: string): string {
   const { year, month, day } = parts(isoDate);
   const weekday = DAY_NAMES[new Date(Date.UTC(year, month - 1, day)).getUTCDay()] ?? '';

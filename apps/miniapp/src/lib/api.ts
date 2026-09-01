@@ -4,6 +4,7 @@ import type {
   CreateRecurringRuleBody,
   CreateSavingsGoalBody,
   CreateTransactionBody,
+  HeatmapResponse,
   HouseholdInviteResponse,
   HouseholdResponse,
   MeResponse,
@@ -128,6 +129,8 @@ export const api = {
 
   stats: (period: 'day' | 'month' | 'year', anchor?: string) =>
     request<StatsResponse>(`/api/stats?period=${period}${anchor ? `&anchor=${anchor}` : ''}`),
+
+  heatmap: () => request<HeatmapResponse>('/api/stats/heatmap'),
 
   recap: (period: RecapPeriod, anchor?: string) =>
     request<RecapResponse>(`/api/recap?period=${period}${anchor ? `&anchor=${anchor}` : ''}`),
