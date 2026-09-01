@@ -56,7 +56,7 @@ P5 automation ██████████ done
 P6 polish     █████████░  photos + OCR + CSV export done
 ```
 
-436 tests, initial Mini App bundle 84 KB gzipped.
+442 tests, initial Mini App bundle 85 KB gzipped.
 
 ## Running it locally
 

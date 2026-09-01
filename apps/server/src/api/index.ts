@@ -17,6 +17,7 @@ import {
   attachmentsRepo,
   categoriesRepo,
   householdsRepo,
+  JoinHouseholdError,
   recurringRepo,
   savingsRepo,
   transactionsRepo,
@@ -31,6 +32,7 @@ import {
   createTransactionSchema,
   recapPeriodSchema,
   statsPeriodSchema,
+  switchSpaceBodySchema,
   updateSavingsGoalSchema,
   updateSettingsSchema,
   updateTransactionSchema,
@@ -45,6 +47,8 @@ import {
   type SafeToSpend,
   type SavingsGoalResponse,
   type SavingsGoalsResponse,
+  type Space as ApiSpace,
+  type SpacesResponse,
   type StatsResponse,
   type TodayResponse,
   type TransactionsResponse,
@@ -203,6 +207,49 @@ export function createApiRouter(ctx: AppContext, bot: SpendlygoBot): Hono<ApiEnv
   api.post('/household/leave', async (c) => {
     const user = c.get('user');
     await householdsRepo.leave(ctx.db, user.id, activeHouseholdId(user));
+    return c.json({ ok: true });
+  });
+
+  // --- spaces (PRD F12): the switcher --------------------------------------
+
+  api.get('/spaces', async (c) => {
+    const user = c.get('user');
+    const active = activeHouseholdId(user);
+    const mySpaces = await householdsRepo.mySpaces(ctx.db, user.id);
+
+    const spaces: ApiSpace[] = await Promise.all(
+      mySpaces.map(async (space) => {
+        const members = await householdsRepo.membersOf(ctx.db, space.id);
+        return {
+          id: space.id,
+          isPersonal: space.isPersonal,
+          isActive: space.id === active,
+          members: members.map((member) => ({
+            userId: member.id,
+            firstName: member.firstName,
+            isSelf: member.id === user.id,
+          })),
+        };
+      }),
+    );
+
+    const body: SpacesResponse = { spaces };
+    return c.json(body);
+  });
+
+  api.post('/spaces/switch', async (c) => {
+    const user = c.get('user');
+    const input = await parseBody(c, switchSpaceBodySchema);
+
+    try {
+      await householdsRepo.switchActive(ctx.db, user.id, input.householdId);
+    } catch (error) {
+      if (error instanceof JoinHouseholdError) {
+        throw new ValidationError("That isn't one of your spaces.");
+      }
+      throw error;
+    }
+
     return c.json({ ok: true });
   });
 

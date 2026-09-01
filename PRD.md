@@ -371,8 +371,8 @@ they behave identically everywhere: capture, safe-to-spend, stats, export.
 - **F12.1** `/household invite` gives a 24-hour code; `/join CODE` joins that
   space and switches into it. Joining never drops you from any other space.
 - **F12.2** `/switch` lists every space you belong to and lets you move
-  between them — in the bot and, separately, a switcher in the Mini App
-  (PRD-adjacent, not yet built — see the working notes for phase status).
+  between them — in the bot, and as a profile-style pill in the Mini App
+  header (visible on every screen) that opens a sheet to switch.
 - **F12.3** Only one space is **active** at a time. Every capture, and every
   screen, acts on the active space alone — there is no combined view across
   spaces.

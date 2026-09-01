@@ -88,6 +88,26 @@ export const householdInviteResponseSchema = z.object({
 });
 export type HouseholdInviteResponse = z.infer<typeof householdInviteResponseSchema>;
 
+// --- spaces (PRD F12): every space a user belongs to, for the switcher -----
+
+export const spaceSchema = z.object({
+  id: z.string().uuid(),
+  isPersonal: z.boolean(),
+  isActive: z.boolean(),
+  members: z.array(householdMemberSchema),
+});
+export type Space = z.infer<typeof spaceSchema>;
+
+export const spacesResponseSchema = z.object({
+  spaces: z.array(spaceSchema),
+});
+export type SpacesResponse = z.infer<typeof spacesResponseSchema>;
+
+export const switchSpaceBodySchema = z.object({
+  householdId: z.string().uuid(),
+});
+export type SwitchSpaceBody = z.infer<typeof switchSpaceBodySchema>;
+
 // --- GET /api/me ------------------------------------------------------------
 
 export const meResponseSchema = z.object({

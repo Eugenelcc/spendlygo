@@ -14,6 +14,7 @@ import type {
   SafeToSpend,
   SavingsGoalResponse,
   SavingsGoalsResponse,
+  SpacesResponse,
   StatsResponse,
   TodayResponse,
   Transaction,
@@ -187,6 +188,14 @@ export const api = {
     request<HouseholdInviteResponse>('/api/household/invite', { method: 'POST' }),
 
   leaveHousehold: () => request<{ ok: true }>('/api/household/leave', { method: 'POST' }),
+
+  spaces: () => request<SpacesResponse>('/api/spaces'),
+
+  switchSpace: (householdId: string) =>
+    request<{ ok: true }>('/api/spaces/switch', {
+      method: 'POST',
+      body: JSON.stringify({ householdId }),
+    }),
 
   savingsGoals: () => request<SavingsGoalsResponse>('/api/goals'),
 
