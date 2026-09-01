@@ -14,7 +14,7 @@ import {
   occurrencesInRange,
   type IsoDate,
 } from '@spendlygo/core';
-import { recurringRepo, usersRepo, type RecurringRule } from '@spendlygo/db';
+import { householdsRepo, recurringRepo, usersRepo, type RecurringRule } from '@spendlygo/db';
 import type { AppContext } from '../context.js';
 import { describeError, logger } from '../logger.js';
 
@@ -41,11 +41,19 @@ export async function materialiseRecurring(ctx: AppContext): Promise<number> {
   const rules = await recurringRepo.listAllActive(ctx.db);
   if (rules.length === 0) return 0;
 
-  // One user lookup per distinct user, not per rule — most users have more
-  // than one rule (rent AND salary), and this runs every hour.
+  // One user (and personal-space) lookup per distinct user, not per rule —
+  // most users have more than one rule (rent AND salary), and this runs
+  // every hour.
   const userIds = [...new Set(rules.map((rule) => rule.userId))];
   const users = await Promise.all(userIds.map((id) => usersRepo.findById(ctx.db, id)));
   const userById = new Map(users.filter((u) => u !== null).map((u) => [u.id, u]));
+  const personalSpaceByUserId = new Map(
+    await Promise.all(
+      [...userById.keys()].map(
+        async (id) => [id, await householdsRepo.personalSpaceOf(ctx.db, id)] as const,
+      ),
+    ),
+  );
 
   let materialised = 0;
 
@@ -65,9 +73,17 @@ export async function materialiseRecurring(ctx: AppContext): Promise<number> {
     const due = occurrencesInRange(toEngineRule(rule), from, today);
     if (due.length === 0) continue;
 
+    const personalSpace = personalSpaceByUserId.get(rule.userId);
+    if (!personalSpace) continue; // Same orphaned-rule case as the user lookup above.
+
     for (const occurrence of due) {
       try {
-        const created = await recurringRepo.materialiseOccurrence(ctx.db, rule, occurrence);
+        const created = await recurringRepo.materialiseOccurrence(
+          ctx.db,
+          rule,
+          occurrence,
+          personalSpace.id,
+        );
         if (created) materialised += 1;
       } catch (error) {
         // One bad occurrence must not stop the rest of this rule, or every

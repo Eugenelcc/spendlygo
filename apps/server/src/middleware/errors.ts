@@ -7,6 +7,7 @@ import {
   UnauthorizedError,
   ValidationError,
 } from '@spendlygo/core';
+import { JoinHouseholdError } from '@spendlygo/db';
 import { describeError, logger } from '../logger.js';
 
 function statusFor(error: DomainError): 400 | 401 | 403 | 404 {
@@ -27,6 +28,12 @@ export const onError: ErrorHandler = (error, c) => {
     const status = statusFor(error);
     if (status >= 500) logger.error('api.error', describeError(error));
     return c.json({ error: { code: error.code, message: error.message } }, status);
+  }
+
+  // Not a DomainError (packages/db has no dependency on @spendlygo/core's
+  // error hierarchy), but the same "bad request, not our bug" shape.
+  if (error instanceof JoinHouseholdError) {
+    return c.json({ error: { code: error.reason, message: error.message } }, 400);
   }
 
   if (error instanceof HTTPException) {

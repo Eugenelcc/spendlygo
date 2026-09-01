@@ -5,13 +5,13 @@
  * here is for the server's own use resolving a photo through
  * apps/server/src/api's `/photos/:id` proxy, never returned directly.
  *
- * Visibility mirrors `transactionsRepo`'s `visibleTo`: a household partner
- * can see a shared transaction's photo, same as they can see the transaction
- * itself — the whole point of a shared budget being transparent rather than
- * merely combined (packages/db/src/repositories/transactions.ts).
+ * Visibility mirrors `transactionsRepo`'s `scopedTo`: a space-mate can see a
+ * shared transaction's photo, same as they can see the transaction itself —
+ * the whole point of a shared budget being transparent rather than merely
+ * combined (packages/db/src/repositories/transactions.ts).
  */
 
-import { and, eq, isNull, or } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 import type { Database } from '../client.js';
 import { attachments, transactions, type Attachment } from '../schema.js';
 
@@ -38,29 +38,27 @@ export async function create(db: Database, input: CreateAttachmentInput): Promis
 }
 
 /**
- * A single attachment, only if `viewerId` can see the transaction it belongs
- * to — see the file header. Returns null for a stranger's photo just as
- * readily as for a missing id, so a proxy route can't distinguish "not
- * found" from "not yours" by response shape.
+ * A single attachment, only if it's on a transaction in `viewerHouseholdId` —
+ * see the file header. Returns null for a stranger's photo just as readily
+ * as for a missing id, so a proxy route can't distinguish "not found" from
+ * "not yours" by response shape.
  */
 export async function findViewable(
   db: Database,
-  viewerId: string,
-  viewerHouseholdId: string | null,
+  viewerHouseholdId: string,
   attachmentId: string,
 ): Promise<Attachment | null> {
-  const ownership = viewerHouseholdId
-    ? or(
-        eq(transactions.householdId, viewerHouseholdId),
-        and(eq(transactions.userId, viewerId), isNull(transactions.householdId)),
-      )
-    : eq(transactions.userId, viewerId);
-
   const rows = await db
     .select({ attachment: attachments })
     .from(attachments)
     .innerJoin(transactions, eq(attachments.transactionId, transactions.id))
-    .where(and(eq(attachments.id, attachmentId), ownership, isNull(transactions.deletedAt)))
+    .where(
+      and(
+        eq(attachments.id, attachmentId),
+        eq(transactions.householdId, viewerHouseholdId),
+        isNull(transactions.deletedAt),
+      ),
+    )
     .limit(1);
 
   return rows[0]?.attachment ?? null;
@@ -69,23 +67,19 @@ export async function findViewable(
 /** Every visible attachment on one transaction, for the Mini App detail sheet. */
 export async function listForTransaction(
   db: Database,
-  viewerId: string,
-  viewerHouseholdId: string | null,
+  viewerHouseholdId: string,
   transactionId: string,
 ): Promise<Attachment[]> {
-  const ownership = viewerHouseholdId
-    ? or(
-        eq(transactions.householdId, viewerHouseholdId),
-        and(eq(transactions.userId, viewerId), isNull(transactions.householdId)),
-      )
-    : eq(transactions.userId, viewerId);
-
   const rows = await db
     .select({ attachment: attachments })
     .from(attachments)
     .innerJoin(transactions, eq(attachments.transactionId, transactions.id))
     .where(
-      and(eq(attachments.transactionId, transactionId), ownership, isNull(transactions.deletedAt)),
+      and(
+        eq(attachments.transactionId, transactionId),
+        eq(transactions.householdId, viewerHouseholdId),
+        isNull(transactions.deletedAt),
+      ),
     );
 
   return rows.map((row) => row.attachment);

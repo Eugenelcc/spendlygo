@@ -17,7 +17,8 @@ without blowing the month.
 - **Receipt photos** — attached to any transaction, stored free inside Telegram,
   with an optional OCR pre-fill of the amount (needs a free OCR.space key)
 - **Recurring transactions** — rent, salary, and subscriptions log themselves
-- **Shared budgets** — a partner joins with a code; both of you see every entry
+- **Shared spaces** — a personal budget plus any number of shared ones, joined
+  by code and switched between freely (`/switch`) without leaving any of them
 - **Spending alerts & digests** — proactive 80%/over-budget warnings, plus a
   nightly, weekly, and end-of-month wrap-up
 - **Savings goals** — tracked separately from the monthly budget, funded by
@@ -55,7 +56,7 @@ P5 automation ██████████ done
 P6 polish     █████████░  photos + OCR + CSV export done
 ```
 
-430 tests, initial Mini App bundle 84 KB gzipped.
+436 tests, initial Mini App bundle 84 KB gzipped.
 
 ## Running it locally
 

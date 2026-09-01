@@ -13,6 +13,7 @@ import { fixedClock } from '@spendlygo/core';
 import {
   alertsRepo,
   createDatabase,
+  householdsRepo,
   schema,
   transactionsRepo,
   usersRepo,
@@ -49,8 +50,20 @@ describeIfDb('checkBudgetAlerts', () => {
     Object.assign(ctx, { db: handle.db, dbHandle: handle });
   });
 
-  beforeEach(async () => {
+  async function cleanUp(): Promise<void> {
+    const rows = await handle.db
+      .select({ id: schema.users.id })
+      .from(schema.users)
+      .where(eq(schema.users.telegramId, TELEGRAM_ID));
+    for (const row of rows) {
+      await handle.db.delete(schema.transactions).where(eq(schema.transactions.userId, row.id));
+      await handle.db.delete(schema.households).where(eq(schema.households.createdBy, row.id));
+    }
     await handle.db.delete(schema.users).where(eq(schema.users.telegramId, TELEGRAM_ID));
+  }
+
+  beforeEach(async () => {
+    await cleanUp();
     user = await usersRepo.upsertByTelegramId(handle.db, {
       telegramId: TELEGRAM_ID,
       timezone: 'Asia/Singapore',
@@ -62,9 +75,13 @@ describeIfDb('checkBudgetAlerts', () => {
   });
 
   afterAll(async () => {
-    await handle.db.delete(schema.users).where(eq(schema.users.telegramId, TELEGRAM_ID));
+    await cleanUp();
     await handle.close();
   });
+
+  async function setBudget(cents: number): Promise<void> {
+    await householdsRepo.updateBudget(handle.db, user.activeHouseholdId as string, cents);
+  }
 
   it('does nothing for a user with no budget', async () => {
     const sent = await checkBudgetAlerts(ctx, bot);
@@ -73,10 +90,10 @@ describeIfDb('checkBudgetAlerts', () => {
   });
 
   it('does not alert under 80% spent', async () => {
-    await usersRepo.updateSettings(handle.db, user.id, { monthlyBudgetCents: 100_000 });
+    await setBudget(100_000);
     await transactionsRepo.create(handle.db, {
       userId: user.id,
-      householdId: null,
+      householdId: user.activeHouseholdId as string,
       direction: 'out',
       amountCents: 70_000,
       categoryId: null,
@@ -90,10 +107,10 @@ describeIfDb('checkBudgetAlerts', () => {
   });
 
   it('fires the 80% warning once spend crosses it', async () => {
-    await usersRepo.updateSettings(handle.db, user.id, { monthlyBudgetCents: 100_000 });
+    await setBudget(100_000);
     await transactionsRepo.create(handle.db, {
       userId: user.id,
-      householdId: null,
+      householdId: user.activeHouseholdId as string,
       direction: 'out',
       amountCents: 85_000,
       categoryId: null,
@@ -110,10 +127,10 @@ describeIfDb('checkBudgetAlerts', () => {
   });
 
   it('fires both 80% and 100% in the same run when spend is already over', async () => {
-    await usersRepo.updateSettings(handle.db, user.id, { monthlyBudgetCents: 100_000 });
+    await setBudget(100_000);
     await transactionsRepo.create(handle.db, {
       userId: user.id,
-      householdId: null,
+      householdId: user.activeHouseholdId as string,
       direction: 'out',
       amountCents: 120_000,
       categoryId: null,
@@ -127,10 +144,10 @@ describeIfDb('checkBudgetAlerts', () => {
   });
 
   it('GUARDRAILS section 3: never re-announces a threshold already sent this month', async () => {
-    await usersRepo.updateSettings(handle.db, user.id, { monthlyBudgetCents: 100_000 });
+    await setBudget(100_000);
     await transactionsRepo.create(handle.db, {
       userId: user.id,
-      householdId: null,
+      householdId: user.activeHouseholdId as string,
       direction: 'out',
       amountCents: 90_000,
       categoryId: null,
@@ -148,10 +165,10 @@ describeIfDb('checkBudgetAlerts', () => {
   });
 
   it('does not re-alert 80% once past it, only the next threshold', async () => {
-    await usersRepo.updateSettings(handle.db, user.id, { monthlyBudgetCents: 100_000 });
+    await setBudget(100_000);
     await transactionsRepo.create(handle.db, {
       userId: user.id,
-      householdId: null,
+      householdId: user.activeHouseholdId as string,
       direction: 'out',
       amountCents: 85_000,
       categoryId: null,
@@ -163,7 +180,7 @@ describeIfDb('checkBudgetAlerts', () => {
 
     await transactionsRepo.create(handle.db, {
       userId: user.id,
-      householdId: null,
+      householdId: user.activeHouseholdId as string,
       direction: 'out',
       amountCents: 20_000,
       categoryId: null,
@@ -180,13 +197,11 @@ describeIfDb('checkBudgetAlerts', () => {
   });
 
   it('does nothing when alerts are switched off', async () => {
-    await usersRepo.updateSettings(handle.db, user.id, {
-      monthlyBudgetCents: 100_000,
-      alertsEnabled: false,
-    });
+    await setBudget(100_000);
+    await usersRepo.updateSettings(handle.db, user.id, { alertsEnabled: false });
     await transactionsRepo.create(handle.db, {
       userId: user.id,
-      householdId: null,
+      householdId: user.activeHouseholdId as string,
       direction: 'out',
       amountCents: 120_000,
       categoryId: null,
@@ -220,10 +235,10 @@ describeIfDb('checkBudgetAlerts', () => {
     // The exact sequence that surfaced this: recordIfNew succeeds, then
     // sendMessage throws. Without releasing the reservation, this threshold
     // would never be retried and the user would never be told.
-    await usersRepo.updateSettings(handle.db, user.id, { monthlyBudgetCents: 100_000 });
+    await setBudget(100_000);
     await transactionsRepo.create(handle.db, {
       userId: user.id,
-      householdId: null,
+      householdId: user.activeHouseholdId as string,
       direction: 'out',
       amountCents: 85_000,
       categoryId: null,

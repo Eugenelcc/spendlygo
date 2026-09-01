@@ -14,6 +14,7 @@ import {
 } from '@spendlygo/core';
 import { transactionsRepo, type User } from '@spendlygo/db';
 import type { AppContext } from '../context.js';
+import { activeHouseholdId } from './service.js';
 
 export interface ExportRange {
   from?: IsoDate;
@@ -27,7 +28,7 @@ export async function buildExportCsv(
   user: User,
   range: ExportRange = { label: 'all-time' },
 ): Promise<string> {
-  const rows = await transactionsRepo.listForExport(ctx.db, user.id, user.householdId, {
+  const rows = await transactionsRepo.listForExport(ctx.db, activeHouseholdId(user), {
     from: range.from,
     to: range.to,
   });

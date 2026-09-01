@@ -13,6 +13,7 @@ import { handleStart } from './commands/start.js';
 import { handleBudget, handleRecent, handleToday, handleUndoCommand } from './commands/money.js';
 import { handleRecurring } from './commands/recurring.js';
 import { handleHousehold, handleJoin } from './commands/household.js';
+import { handleSwitch } from './commands/switch.js';
 import { handleGoals } from './commands/goals.js';
 import { handleRecap } from './commands/recap.js';
 import { handleExport } from './commands/export.js';
@@ -49,6 +50,7 @@ export function createBot(ctx: AppContext): SpendlygoBot {
   bot.command('recurring', (botCtx) => handleRecurring(ctx, botCtx));
   bot.command('household', (botCtx) => handleHousehold(ctx, botCtx));
   bot.command('join', (botCtx) => handleJoin(ctx, botCtx));
+  bot.command('switch', (botCtx) => handleSwitch(ctx, botCtx));
   bot.command('goals', (botCtx) => handleGoals(ctx, botCtx));
   bot.command('recap', (botCtx) => handleRecap(ctx, botCtx));
   bot.command('export', (botCtx) => handleExport(ctx, botCtx));
@@ -174,6 +176,7 @@ export async function configureBotMenu(bot: SpendlygoBot, ctx: AppContext): Prom
     { command: 'undo', description: 'Undo the last entry' },
     { command: 'recurring', description: 'Rent, salary and subscriptions' },
     { command: 'household', description: 'Share a budget with a partner' },
+    { command: 'switch', description: 'Move between your spaces' },
     { command: 'goals', description: 'Savings goals and progress' },
     { command: 'recap', description: 'Your month or year at a glance' },
     { command: 'export', description: 'Download your data as CSV' },

@@ -29,6 +29,13 @@
       "when": 1788152496289,
       "tag": "0003_savings_goals",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1788169200000,
+      "tag": "0004_multi_space_households",
+      "breakpoints": true
     }
   ]
 }

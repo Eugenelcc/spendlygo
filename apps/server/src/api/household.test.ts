@@ -77,6 +77,7 @@ describeIfDb('household API', () => {
         .from(schema.users)
         .where(eq(schema.users.telegramId, id));
       for (const row of rows) {
+        await handle.db.delete(schema.transactions).where(eq(schema.transactions.userId, row.id));
         await handle.db.delete(schema.households).where(eq(schema.households.createdBy, row.id));
       }
       await handle.db.delete(schema.users).where(eq(schema.users.telegramId, id));
@@ -176,12 +177,12 @@ describeIfDb('household API', () => {
   });
 
   describe('POST /api/household/leave', () => {
-    it('is a harmless no-op for someone not in a household', async () => {
+    it('refuses to leave the personal space — there is no "not in a household" state anymore', async () => {
       const response = await app.request('/api/household/leave', {
         method: 'POST',
         headers: auth(CREATOR),
       });
-      expect(response.status).toBe(200);
+      expect(response.status).toBe(400);
     });
 
     it('removes the caller from the household without affecting other members', async () => {

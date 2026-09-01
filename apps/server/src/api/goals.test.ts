@@ -78,6 +78,7 @@ describeIfDb('savings goals API', () => {
         .from(schema.users)
         .where(eq(schema.users.telegramId, id));
       for (const row of rows) {
+        await handle.db.delete(schema.transactions).where(eq(schema.transactions.userId, row.id));
         await handle.db.delete(schema.households).where(eq(schema.households.createdBy, row.id));
       }
       await handle.db.delete(schema.users).where(eq(schema.users.telegramId, id));

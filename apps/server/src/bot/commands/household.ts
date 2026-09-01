@@ -1,5 +1,7 @@
 /**
- * Shared budgets (PRD-adjacent feature): /household, /invite, /join, /leave.
+ * Shared budgets: /household, /join, /leave. Switching between spaces you
+ * already belong to is /switch (bot/commands/switch.ts) — this file is about
+ * membership, that one is about which membership is currently in effect.
  *
  * GUARDRAILS.md section 4: an invite code carries no authority beyond "which
  * household to join" — the caller's identity always comes from the verified
@@ -10,6 +12,7 @@
 
 import { formatCents, type AmountCents } from '@spendlygo/core';
 import { householdsRepo, JoinHouseholdError } from '@spendlygo/db';
+import { activeHouseholdId } from '../../api/service.js';
 import type { AppContext } from '../../context.js';
 import { escapeMarkdown as escape } from '../markdown.js';
 import type { BotContext } from '../middleware.js';
@@ -19,7 +22,7 @@ const JOIN_FAILURE_MESSAGE: Record<string, string> = {
   expired:
     'That invite has expired — invites last 24 hours. Ask for a new one with `/household invite`.',
   already_used: 'That invite has already been used.',
-  already_in_household: "You're already sharing a budget. Leave it first with `/household leave`.",
+  already_a_member: "You're already in that space.",
   own_invite: "That's your own invite code — send it to your partner instead.",
 };
 
@@ -36,19 +39,22 @@ export async function handleHousehold(ctx: AppContext, botCtx: BotContext): Prom
     return;
   }
 
-  if (user.householdId === null) {
+  const active = await householdsRepo.findById(ctx.db, activeHouseholdId(user));
+
+  if (active === null || active.isPersonal) {
     await botCtx.reply(
       [
-        "You're tracking solo — safe-to-spend is just yours.",
+        "You're tracking solo here — safe-to-spend is just yours.",
         '',
         'Share a budget with a partner: `/household invite` gives you a code to send them.',
+        'Already belong to more than one space? `/switch` moves between them.',
       ].join('\n'),
       { parse_mode: 'Markdown' },
     );
     return;
   }
 
-  const members = await householdsRepo.membersOf(ctx.db, user.householdId);
+  const members = await householdsRepo.membersOf(ctx.db, active.id);
   const names = members.map((member) =>
     member.id === user.id ? 'you' : escape(member.firstName ?? 'a partner'),
   );
@@ -57,10 +63,11 @@ export async function handleHousehold(ctx: AppContext, botCtx: BotContext): Prom
     [
       `*Shared budget* — ${names.join(' and ')}`,
       '',
-      'Both of you see every entry either of you logs, and either of you can change the budget with `/budget`.',
+      'Everyone here sees every entry anyone logs, and anyone can change the budget with `/budget`.',
       '',
       '`/household invite` — add another person',
-      '`/household leave` — stop sharing',
+      '`/household leave` — stop sharing this one',
+      '`/switch` — move between your spaces',
     ].join('\n'),
     { parse_mode: 'Markdown' },
   );
@@ -69,7 +76,13 @@ export async function handleHousehold(ctx: AppContext, botCtx: BotContext): Prom
 async function handleInvite(ctx: AppContext, botCtx: BotContext): Promise<void> {
   const user = botCtx.appUser;
 
-  const householdId = user.householdId ?? (await householdsRepo.create(ctx.db, user.id)).id;
+  // Invite into whatever's already active if it's a real shared space;
+  // otherwise (active is personal) start a new one and switch into it.
+  const active = await householdsRepo.findById(ctx.db, activeHouseholdId(user));
+  const householdId =
+    active !== null && !active.isPersonal
+      ? active.id
+      : (await householdsRepo.create(ctx.db, user.id)).id;
   const invite = await householdsRepo.createInvite(ctx.db, householdId, user.id);
 
   await botCtx.reply(
@@ -86,15 +99,16 @@ async function handleInvite(ctx: AppContext, botCtx: BotContext): Promise<void> 
 
 async function handleLeave(ctx: AppContext, botCtx: BotContext): Promise<void> {
   const user = botCtx.appUser;
+  const active = await householdsRepo.findById(ctx.db, activeHouseholdId(user));
 
-  if (user.householdId === null) {
-    await botCtx.reply("You're not sharing a budget with anyone.");
+  if (active === null || active.isPersonal) {
+    await botCtx.reply("You're not sharing a budget with anyone right now — nothing to leave.");
     return;
   }
 
-  await householdsRepo.leave(ctx.db, user.id);
+  await householdsRepo.leave(ctx.db, user.id, active.id);
   await botCtx.reply(
-    "You're back to tracking solo. Your own budget is whatever it was before you shared one — check with `/budget`.",
+    "You're back to tracking solo here. Your personal budget is whatever it was before you shared one — check with `/budget`.",
   );
 }
 

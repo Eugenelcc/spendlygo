@@ -73,6 +73,11 @@ export async function updateLastRunOn(
 /**
  * Materialise one occurrence, atomically.
  *
+ * Recurring rules are personal — never shared (there is no `household_id` on
+ * `recurring_rules`) — so every occurrence posts to the rule owner's personal
+ * space regardless of which space they currently have active. The caller
+ * resolves and passes that space's id.
+ *
  * Returns null when the (ruleId, occurrenceDate) pair already has a run —
  * the idempotent no-op path a double-fired tick takes.
  */
@@ -80,12 +85,14 @@ export async function materialiseOccurrence(
   db: Database,
   rule: RecurringRule,
   occurrenceDate: string,
+  personalHouseholdId: string,
 ): Promise<string | null> {
   return db.transaction(async (tx) => {
     const inserted = await tx
       .insert(transactions)
       .values({
         userId: rule.userId,
+        householdId: personalHouseholdId,
         direction: rule.direction,
         amountCents: rule.amountCents,
         categoryId: rule.categoryId,

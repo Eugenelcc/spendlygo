@@ -90,18 +90,28 @@ describeIfDb('HTTP surface', () => {
     });
   };
 
+  async function cleanUsers(): Promise<void> {
+    for (const telegramId of [OWNER_TELEGRAM_ID, STRANGER_TELEGRAM_ID]) {
+      const rows = await handle.db
+        .select({ id: schema.users.id })
+        .from(schema.users)
+        .where(eq(schema.users.telegramId, telegramId));
+      for (const row of rows) {
+        await handle.db.delete(schema.transactions).where(eq(schema.transactions.userId, row.id));
+        await handle.db.delete(schema.households).where(eq(schema.households.createdBy, row.id));
+      }
+      await handle.db.delete(schema.users).where(eq(schema.users.telegramId, telegramId));
+    }
+  }
+
   beforeAll(async () => {
     setLogLevel('error');
     handle = createDatabase(TEST_DATABASE_URL as string, { maxConnections: 2 });
-    for (const id of [OWNER_TELEGRAM_ID, STRANGER_TELEGRAM_ID]) {
-      await handle.db.delete(schema.users).where(eq(schema.users.telegramId, id));
-    }
+    await cleanUsers();
   });
 
   afterAll(async () => {
-    for (const id of [OWNER_TELEGRAM_ID, STRANGER_TELEGRAM_ID]) {
-      await handle.db.delete(schema.users).where(eq(schema.users.telegramId, id));
-    }
+    await cleanUsers();
     await handle.close();
   });
 

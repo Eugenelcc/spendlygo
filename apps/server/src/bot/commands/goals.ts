@@ -19,7 +19,7 @@ import {
 } from '@spendlygo/core';
 import { categoriesRepo, savingsRepo, transactionsRepo } from '@spendlygo/db';
 import type { AppContext } from '../../context.js';
-import { todayFor } from '../../api/service.js';
+import { activeHouseholdId, todayFor } from '../../api/service.js';
 import { openAppKeyboard } from '../keyboards.js';
 import { escapeMarkdown as escape } from '../markdown.js';
 import type { BotContext } from '../middleware.js';
@@ -179,7 +179,7 @@ async function handlePut(
 
   await transactionsRepo.create(ctx.db, {
     userId: user.id,
-    householdId: user.householdId,
+    householdId: activeHouseholdId(user),
     direction: 'out',
     amountCents,
     categoryId: transferCategory?.id ?? null,

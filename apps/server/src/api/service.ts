@@ -37,20 +37,30 @@ export function todayFor(ctx: AppContext, user: User): IsoDate {
 }
 
 /**
- * The budget a user actually sees.
- *
- * Once in a household, the household's figure governs — set by whichever
- * partner last changed it — and the user's own `monthlyBudgetCents` is simply
- * not consulted. Leaving a household falls straight back to it, unedited.
+ * Every user always has an active space (`users.active_household_id` —
+ * schema.ts). This just turns that invariant into a plain `string` instead of
+ * scattering non-null assertions across every call site below.
+ */
+export function activeHouseholdId(user: User): string {
+  if (user.activeHouseholdId === null) {
+    throw new Error(`User ${user.id} has no active household — should never happen`);
+  }
+  return user.activeHouseholdId;
+}
+
+/**
+ * The budget a user actually sees: their active space's figure, whether
+ * that's their own personal space or one shared with others — the two work
+ * identically (packages/db/src/schema.ts). Switching spaces changes which
+ * figure this is; leaving a shared space falls back to the personal one,
+ * unedited.
  */
 export async function effectiveBudgetCents(
   ctx: AppContext,
   user: User,
 ): Promise<AmountCents | null> {
-  if (user.householdId === null) {
-    return user.monthlyBudgetCents === null ? null : centsOf(user.monthlyBudgetCents);
-  }
-  const household = await householdsRepo.findById(ctx.db, user.householdId);
+  if (user.activeHouseholdId === null) return null; // Should never happen — see schema.ts.
+  const household = await householdsRepo.findById(ctx.db, user.activeHouseholdId);
   if (household === null || household.monthlyBudgetCents === null) return null;
   return centsOf(household.monthlyBudgetCents);
 }
@@ -98,12 +108,13 @@ export async function computeSafeToSpend(
   const { year, month } = parseIsoDate(today);
   const period = monthRange(year, month);
 
+  const spaceId = activeHouseholdId(user);
   const [budgetCents, monthTotals, todayTotals] = await Promise.all([
     effectiveBudgetCents(ctx, user),
     // Month-to-date, not the whole month: spending dated in the future must not
     // count against what is safe to spend today.
-    transactionsRepo.totalsForPeriod(ctx.db, user.id, user.householdId, period.start, today),
-    transactionsRepo.totalsForPeriod(ctx.db, user.id, user.householdId, today, today),
+    transactionsRepo.totalsForPeriod(ctx.db, spaceId, period.start, today),
+    transactionsRepo.totalsForPeriod(ctx.db, spaceId, today, today),
   ]);
 
   return calculateSafeToSpend({
@@ -193,12 +204,13 @@ export async function computePeriodStats(
   options: PeriodStatsOptions,
 ): Promise<PeriodStats> {
   const { from, to, previousFrom, previousTo } = options;
+  const spaceId = activeHouseholdId(user);
 
   const [totals, previous, byCategory, byDay, safeToSpend] = await Promise.all([
-    transactionsRepo.totalsForPeriod(ctx.db, user.id, user.householdId, from, to),
-    transactionsRepo.totalsForPeriod(ctx.db, user.id, user.householdId, previousFrom, previousTo),
-    transactionsRepo.totalsByCategory(ctx.db, user.id, user.householdId, from, to),
-    transactionsRepo.totalsByDay(ctx.db, user.id, user.householdId, from, to),
+    transactionsRepo.totalsForPeriod(ctx.db, spaceId, from, to),
+    transactionsRepo.totalsForPeriod(ctx.db, spaceId, previousFrom, previousTo),
+    transactionsRepo.totalsByCategory(ctx.db, spaceId, from, to),
+    transactionsRepo.totalsByDay(ctx.db, spaceId, from, to),
     computeSafeToSpend(ctx, user, to),
   ]);
 
@@ -249,7 +261,7 @@ export async function recentDailySpend(
   days = 7,
 ): Promise<Array<{ day: IsoDate; outCents: number }>> {
   const from = addDays(today, -(days - 1));
-  const rows = await transactionsRepo.totalsByDay(ctx.db, user.id, user.householdId, from, today);
+  const rows = await transactionsRepo.totalsByDay(ctx.db, activeHouseholdId(user), from, today);
   const byDay = new Map(rows.map((row) => [row.day, row.outCents]));
 
   const series: Array<{ day: IsoDate; outCents: number }> = [];
