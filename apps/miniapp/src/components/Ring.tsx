@@ -1,7 +1,11 @@
 import type { JSX } from 'react';
 
 export interface RingProps {
-  /** 0-1. Values above 1 are clamped; the colour carries "over budget". */
+  /**
+   * 0-1, the fraction REMAINING — a full ring means nothing spent yet, an
+   * empty one means it's gone. Values outside 0-1 are clamped; the colour
+   * carries "over budget", not the fill amount.
+   */
   progress: number;
   /** A DESIGN.md section 2.2 pace token. */
   tone: 'ahead' | 'ontrack' | 'behind' | 'over' | 'idle';
@@ -29,7 +33,7 @@ export function Ring({ progress, tone, size = 210, children, label }: RingProps)
         height={size}
         viewBox={`0 0 ${size} ${size}`}
         role="img"
-        aria-label={label ?? `${Math.round(clamped * 100)}% of budget used`}
+        aria-label={label ?? `${Math.round(clamped * 100)}% of today's budget remaining`}
       >
         <circle
           className="ring__track"

@@ -1,6 +1,7 @@
 import { useState, type JSX } from 'react';
 import type { StatsPeriod, StatsResponse } from '@spendlygo/shared';
 import { BarChart } from '../components/BarChart';
+import { LineChart } from '../components/LineChart';
 import { formatMoney } from '../lib/format';
 import { haptics } from '../lib/telegram';
 
@@ -122,6 +123,12 @@ export function StatsScreen({
                 locale={locale}
                 highlightKey={highlightKey}
               />
+            </section>
+          )}
+
+          {period !== 'day' && (
+            <section className="card">
+              <LineChart data={data.series} currency={currency} locale={locale} />
             </section>
           )}
 

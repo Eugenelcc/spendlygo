@@ -407,25 +407,66 @@ button {
 
 /* ---------- sparkline & bars ---------- */
 
+.spark-wrap {
+  margin-top: 12px;
+}
+
 .spark {
   display: flex;
   align-items: flex-end;
   gap: 5px;
   height: 48px;
-  margin-top: 12px;
 }
 
 .spark__bar {
   flex: 1;
+  min-width: 0;
+  border: 0;
+  padding: 0;
   border-radius: 3px;
   background: var(--text-hint);
   opacity: 0.32;
   animation: grow 420ms var(--ease) both;
+  cursor: pointer;
+  transition:
+    opacity var(--fast) var(--ease),
+    transform var(--fast) var(--ease);
+}
+
+.spark__bar:active {
+  transform: scaleX(0.9);
 }
 
 .spark__bar--now {
   background: var(--accent);
   opacity: 1;
+}
+
+.spark__bar--on {
+  background: var(--accent);
+  opacity: 1;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 40%, transparent);
+}
+
+.spark__detail {
+  display: flex;
+  justify-content: space-between;
+  margin: 8px 0 0;
+  padding: 8px 10px;
+  border-radius: var(--r-sm);
+  background: var(--bg-secondary);
+  font-size: 13px;
+  animation: rise 180ms var(--ease) both;
+}
+
+.spark__detail-day {
+  color: var(--text-subtle);
+  font-weight: 500;
+}
+
+.spark__detail-amount {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
 }
 
 .bars {
@@ -480,6 +521,90 @@ button {
   }
   to {
     transform: scaleY(1);
+  }
+}
+
+/* ---------- line chart (net trend) ---------- */
+
+.linechart__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.linechart__value {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 15px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.linechart__value--up {
+  color: var(--money-in);
+}
+
+.linechart__value--down {
+  color: var(--destructive);
+}
+
+.linechart__svg {
+  width: 100%;
+  height: 100px;
+  margin-top: 10px;
+  overflow: visible;
+}
+
+.linechart__zero {
+  stroke: var(--text-hint);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+  opacity: 0.5;
+}
+
+.linechart__line {
+  stroke-width: 2.5;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  animation: draw-line 520ms var(--ease) both;
+}
+
+.linechart__line--up {
+  stroke: var(--money-in);
+}
+
+.linechart__line--down {
+  stroke: var(--destructive);
+}
+
+.linechart__area {
+  stroke: none;
+  opacity: 0.14;
+}
+
+.linechart__area--up {
+  fill: var(--money-in);
+}
+
+.linechart__area--down {
+  fill: var(--destructive);
+}
+
+.linechart__foot {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--text-hint);
+}
+
+@keyframes draw-line {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
   }
 }
 
