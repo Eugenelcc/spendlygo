@@ -53,22 +53,23 @@ export const users = pgTable(
     timezone: text('timezone').notNull().default('Asia/Singapore'),
     currency: varchar('currency', { length: 3 }).notNull().default('SGD'),
     locale: text('locale').notNull().default('en-SG'),
-    /** Null until the user sets one. PRD F6.6: never fabricate a budget. */
-    monthlyBudgetCents: integer('monthly_budget_cents'),
     digestHour: smallint('digest_hour').notNull().default(21),
     digestEnabled: boolean('digest_enabled').notNull().default(true),
     nudgeEnabled: boolean('nudge_enabled').notNull().default(true),
     /** PRD-adjacent: proactive budget-threshold warnings, independent of the digest. */
     alertsEnabled: boolean('alerts_enabled').notNull().default(true),
     /**
-     * A user belongs to at most one household at a time. Nullable — solo is
-     * the default and unaffected by any of this. `households` is declared
-     * below and itself references `users`, so this is a genuine circular
-     * reference; the `AnyPgColumn` return type is Drizzle's documented way to
-     * break the resulting circular type-inference, not a widening of the
-     * actual column type — the column is still `uuid`.
+     * Which space (household) this user is currently acting in — not which
+     * ones they belong to. Membership is `household_members`, many-to-many;
+     * every user is always a member of at least their own personal space
+     * (created alongside them in `usersRepo.upsertByTelegramId`) and may also
+     * belong to any number of shared ones, switching between them with
+     * `/switch`. Nullable only for the same circular-reference reason as
+     * `households` below (`AnyPgColumn` breaks the type cycle, it does not
+     * widen the column) — in practice the application never leaves this null
+     * once a user has been created.
      */
-    householdId: uuid('household_id').references((): AnyPgColumn => households.id, {
+    activeHouseholdId: uuid('active_household_id').references((): AnyPgColumn => households.id, {
       onDelete: 'set null',
     }),
     onboardedAt: timestamp('onboarded_at', { withTimezone: true }),
@@ -78,20 +79,16 @@ export const users = pgTable(
   (t) => [
     uniqueIndex('users_telegram_id_uq').on(t.telegramId),
     check('users_digest_hour_ck', sql`${t.digestHour} BETWEEN 0 AND 23`),
-    check(
-      'users_monthly_budget_ck',
-      sql`${t.monthlyBudgetCents} IS NULL OR ${t.monthlyBudgetCents} >= 0`,
-    ),
   ],
 );
 
 /**
- * A shared budget pool (PRD-adjacent: shared budget with a partner).
- *
- * Deliberately small: a household is just a budget and a member list. It owns
- * `monthlyBudgetCents` once any member is in one — see
- * `apps/server/src/api/service.ts#effectiveBudgetCents` for which figure a
- * user actually sees.
+ * A budget pool: either one user's personal space (`isPersonal`, created
+ * automatically for every user and never invited into, left, or shared) or a
+ * space shared with others via an invite code. Deliberately the same shape
+ * either way — a budget and a member list — so personal and shared spaces
+ * work identically everywhere else in the app; only `isPersonal` gates the
+ * few things that must never happen to your own space (an invite, `/leave`).
  */
 export const households = pgTable(
   'households',
@@ -100,6 +97,7 @@ export const households = pgTable(
     createdBy: uuid('created_by')
       .notNull()
       .references(() => users.id, { onDelete: 'restrict' }),
+    isPersonal: boolean('is_personal').notNull().default(false),
     monthlyBudgetCents: integer('monthly_budget_cents'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
@@ -109,6 +107,30 @@ export const households = pgTable(
       'households_budget_ck',
       sql`${t.monthlyBudgetCents} IS NULL OR ${t.monthlyBudgetCents} >= 0`,
     ),
+  ],
+);
+
+/**
+ * Membership — many-to-many. A user stays a member of every space they've
+ * ever joined (including their own personal one) until they explicitly
+ * `/leave` a shared one; `active_household_id` on `users` is just which of
+ * their memberships is currently in effect for capture and every screen.
+ */
+export const householdMembers = pgTable(
+  'household_members',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    householdId: uuid('household_id')
+      .notNull()
+      .references(() => households.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    joinedAt: timestamp('joined_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('household_members_household_user_uq').on(t.householdId, t.userId),
+    index('household_members_user_idx').on(t.userId),
   ],
 );
 
@@ -188,14 +210,16 @@ export const transactions = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
     /**
-     * A permanent snapshot of the author's household at the moment they logged
-     * this, NOT a live lookup of their current household. Leaving a household
-     * later must not rewrite what already happened, and a partner joining
-     * must not retroactively see entries from before they joined — see
-     * apps/server/src/api/service.ts for how this plays into what each screen
-     * shows versus what counts toward the shared safe-to-spend figure.
+     * The space (household — personal or shared, see `households` above)
+     * this was logged into: a permanent snapshot of the author's ACTIVE space
+     * at that moment, not a live lookup. Switching spaces later, or a partner
+     * joining a shared one later, never moves or exposes an entry logged
+     * before that point — every screen and every aggregate simply filters by
+     * this column, with no other visibility rule layered on top.
      */
-    householdId: uuid('household_id').references(() => households.id, { onDelete: 'set null' }),
+    householdId: uuid('household_id')
+      .notNull()
+      .references(() => households.id, { onDelete: 'restrict' }),
     direction: directionEnum('direction').notNull(),
     /** Always positive. Direction carries the sign. */
     amountCents: integer('amount_cents').notNull(),
@@ -229,11 +253,11 @@ export const transactions = pgTable(
       .where(sql`${t.deletedAt} IS NULL`),
     index('transactions_user_created_idx').on(t.userId, t.createdAt),
     index('transactions_category_idx').on(t.categoryId),
-    // Mirrors the user-scoped index above, for household-scoped safe-to-spend
-    // and stats queries (apps/server/src/api/service.ts).
+    // Mirrors the user-scoped index above — the shape every space-scoped
+    // safe-to-spend and stats query uses (apps/server/src/api/service.ts).
     index('transactions_household_date_idx')
       .on(t.householdId, t.occurredOn)
-      .where(sql`${t.deletedAt} IS NULL AND ${t.householdId} IS NOT NULL`),
+      .where(sql`${t.deletedAt} IS NULL`),
     // Powers the goal-progress aggregate: sum by goal, live rows only.
     index('transactions_savings_goal_idx')
       .on(t.savingsGoalId)
@@ -452,6 +476,7 @@ export type EventRow = typeof events.$inferSelect;
 export type RecurringRun = typeof recurringRuns.$inferSelect;
 export type BudgetAlert = typeof budgetAlerts.$inferSelect;
 export type Household = typeof households.$inferSelect;
+export type HouseholdMember = typeof householdMembers.$inferSelect;
 export type HouseholdInvite = typeof householdInvites.$inferSelect;
 export type SavingsGoal = typeof savingsGoals.$inferSelect;
 export type NewSavingsGoal = typeof savingsGoals.$inferInsert;

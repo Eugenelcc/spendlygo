@@ -21,6 +21,7 @@ import { PhotoThumbnail } from './components/PhotoThumbnail';
 import { PhotoViewer } from './components/PhotoViewer';
 import { RecapCard } from './components/RecapCard';
 import { Sheet } from './components/Sheet';
+import { SpaceSwitcher } from './components/SpaceSwitcher';
 import { TodayScreen } from './screens/Today';
 import { StatsScreen } from './screens/Stats';
 import { HistoryScreen } from './screens/History';
@@ -130,6 +131,8 @@ function Shell(): JSX.Element {
     enabled: tab === 'settings',
   });
 
+  const spaces = useQuery({ queryKey: ['spaces'], queryFn: api.spaces });
+
   /** Everything money-related is invalidated together — the figures interlock. */
   const refreshAll = () => {
     void queryClient.invalidateQueries({ queryKey: ['today'] });
@@ -138,10 +141,32 @@ function Shell(): JSX.Element {
     void queryClient.invalidateQueries({ queryKey: ['me'] });
   };
 
+  /**
+   * Switching spaces changes every scoped screen at once — refresh
+   * everything. `refreshAll` already covers `me`, which is where household
+   * info lives (`me.data.household`), not a query of its own.
+   */
+  const refreshEverything = () => {
+    refreshAll();
+    void queryClient.invalidateQueries({ queryKey: ['recurring'] });
+    void queryClient.invalidateQueries({ queryKey: ['goals'] });
+    void queryClient.invalidateQueries({ queryKey: ['spaces'] });
+  };
+
   const showToast = (message: string) => {
     setToast(message);
     window.setTimeout(() => setToast(null), 2600);
   };
+
+  const switchSpace = useMutation({
+    mutationFn: api.switchSpace,
+    onSuccess: () => {
+      haptics.success();
+      refreshEverything();
+      showToast('Switched');
+    },
+    onError: () => haptics.error(),
+  });
 
   const create = useMutation({
     mutationFn: api.createTransaction,
@@ -321,6 +346,13 @@ function Shell(): JSX.Element {
 
   return (
     <>
+      <SpaceSwitcher
+        spaces={spaces.data?.spaces ?? []}
+        loading={spaces.isPending}
+        switching={switchSpace.isPending}
+        onSwitch={(householdId) => switchSpace.mutate(householdId)}
+      />
+
       <main className="app">
         {tab === 'today' && (
           <TodayScreen

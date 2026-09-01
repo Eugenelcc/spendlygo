@@ -26,10 +26,15 @@ const describeIfDb = TEST_DATABASE_URL ? describe : describe.skip;
 const TELEGRAM_ID = 940000000001n;
 const TODAY = '2026-08-27' as IsoDate;
 
-async function logOn(db: DatabaseHandle['db'], userId: string, occurredOn: string) {
+async function logOn(
+  db: DatabaseHandle['db'],
+  userId: string,
+  householdId: string,
+  occurredOn: string,
+) {
   await transactionsRepo.create(db, {
     userId,
-    householdId: null,
+    householdId,
     direction: 'out',
     amountCents: 500,
     categoryId: null,
@@ -56,8 +61,20 @@ describeIfDb('computeStreak and buildRecap', () => {
     Object.assign(ctx, { db: handle.db, dbHandle: handle });
   });
 
-  beforeEach(async () => {
+  async function cleanUp(): Promise<void> {
+    const rows = await handle.db
+      .select({ id: schema.users.id })
+      .from(schema.users)
+      .where(eq(schema.users.telegramId, TELEGRAM_ID));
+    for (const row of rows) {
+      await handle.db.delete(schema.transactions).where(eq(schema.transactions.userId, row.id));
+      await handle.db.delete(schema.households).where(eq(schema.households.createdBy, row.id));
+    }
     await handle.db.delete(schema.users).where(eq(schema.users.telegramId, TELEGRAM_ID));
+  }
+
+  beforeEach(async () => {
+    await cleanUp();
     user = await usersRepo.upsertByTelegramId(handle.db, {
       telegramId: TELEGRAM_ID,
       timezone: 'Asia/Singapore',
@@ -65,7 +82,7 @@ describeIfDb('computeStreak and buildRecap', () => {
   });
 
   afterAll(async () => {
-    await handle.db.delete(schema.users).where(eq(schema.users.telegramId, TELEGRAM_ID));
+    await cleanUp();
     await handle.close();
   });
 
@@ -76,9 +93,9 @@ describeIfDb('computeStreak and buildRecap', () => {
     });
 
     it('counts real consecutive rows from the database', async () => {
-      await logOn(handle.db, user.id, '2026-08-25');
-      await logOn(handle.db, user.id, '2026-08-26');
-      await logOn(handle.db, user.id, '2026-08-27');
+      await logOn(handle.db, user.id, user.activeHouseholdId as string, '2026-08-25');
+      await logOn(handle.db, user.id, user.activeHouseholdId as string, '2026-08-26');
+      await logOn(handle.db, user.id, user.activeHouseholdId as string, '2026-08-27');
 
       const streak = await computeStreak(ctx, user, TODAY);
       expect(streak.current).toBe(3);
@@ -86,8 +103,8 @@ describeIfDb('computeStreak and buildRecap', () => {
     });
 
     it('collapses two entries on the same day to one streak day, not two', async () => {
-      await logOn(handle.db, user.id, TODAY);
-      await logOn(handle.db, user.id, TODAY);
+      await logOn(handle.db, user.id, user.activeHouseholdId as string, TODAY);
+      await logOn(handle.db, user.id, user.activeHouseholdId as string, TODAY);
 
       const streak = await computeStreak(ctx, user, TODAY);
       expect(streak.current).toBe(1);
@@ -96,7 +113,7 @@ describeIfDb('computeStreak and buildRecap', () => {
     it('ignores a soft-deleted entry — deleting your only entry for a day breaks the streak', async () => {
       const created = await transactionsRepo.create(handle.db, {
         userId: user.id,
-        householdId: null,
+        householdId: user.activeHouseholdId as string,
         direction: 'out',
         amountCents: 500,
         categoryId: null,
@@ -119,8 +136,8 @@ describeIfDb('computeStreak and buildRecap', () => {
     });
 
     it('summarises real spend, the top category, and the streak together', async () => {
-      await logOn(handle.db, user.id, '2026-08-26');
-      await logOn(handle.db, user.id, TODAY);
+      await logOn(handle.db, user.id, user.activeHouseholdId as string, '2026-08-26');
+      await logOn(handle.db, user.id, user.activeHouseholdId as string, TODAY);
 
       const recap = await buildRecap(ctx, user, 'month', TODAY, TODAY);
       expect(recap.label).toBe('August 2026');
@@ -129,7 +146,7 @@ describeIfDb('computeStreak and buildRecap', () => {
     });
 
     it('never reads past `today`, even for a year period ending in the future', async () => {
-      await logOn(handle.db, user.id, TODAY);
+      await logOn(handle.db, user.id, user.activeHouseholdId as string, TODAY);
 
       const recap = await buildRecap(ctx, user, 'year', TODAY, TODAY);
       // The year technically runs to 31 Dec — the recap must not claim a
@@ -138,7 +155,7 @@ describeIfDb('computeStreak and buildRecap', () => {
     });
 
     it('a year recap and a month recap agree on total spend for August alone', async () => {
-      await logOn(handle.db, user.id, TODAY);
+      await logOn(handle.db, user.id, user.activeHouseholdId as string, TODAY);
       const monthRecap = await buildRecap(ctx, user, 'month', TODAY, TODAY);
       const yearRecap = await buildRecap(ctx, user, 'year', TODAY, TODAY);
       expect(yearRecap.stats.totals.outCents).toBe(monthRecap.stats.totals.outCents);

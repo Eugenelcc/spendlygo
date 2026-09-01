@@ -5,26 +5,19 @@
  * soft-delete on user action. Section 4: every query filters by ownership
  * here, in the repository, so no call site can forget it.
  *
- * Households complicate "ownership" into two distinct questions, answered by
- * two distinct filters below:
- *
- *  - `visibleTo` (used by `list`, the personal/History feed): a household's
- *    shared entries, UNION the caller's own entries from before they had a
- *    household. A household's creator keeps seeing their carried-over
- *    history; a joining partner does not inherit it.
- *
- *  - `sharedScope` (used by every aggregate — safe-to-spend, Stats): STRICTLY
- *    the household's entries once in one, nothing from before it existed. Two
- *    partners must compute the identical shared number, and a creator's
- *    un-shared past spending would otherwise silently count against a
- *    partner who never logged it and never agreed to it.
+ * Every transaction belongs to exactly one space (`household_id`, NOT NULL —
+ * see `packages/db/src/schema.ts`), the one active when it was logged.
+ * `scopedTo` is that one filter, used by every read below: the History feed,
+ * every aggregate (safe-to-spend, Stats), all of it. There is no separate
+ * "personal vs shared" visibility rule to keep in sync — a personal space is
+ * just a space with one member.
  *
  * Mutations (`findById`, `update`, `softDelete`) stay author-only regardless
- * of household — full visibility, not full control. Nobody edits or deletes
- * a household-mate's entry.
+ * of space — full visibility, not full control. Nobody edits or deletes a
+ * space-mate's entry.
  */
 
-import { and, asc, desc, eq, gte, isNull, lte, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, isNull, lte, sql } from 'drizzle-orm';
 import type { Database } from '../client.js';
 import { attachments, categories, transactions, users, type Transaction } from '../schema.js';
 
@@ -33,8 +26,8 @@ export type TransactionSource = 'chat' | 'miniapp' | 'recurring';
 
 export interface CreateTransactionInput {
   userId: string;
-  /** The author's household at the moment of logging — see the file header. */
-  householdId: string | null;
+  /** The author's active space at the moment of logging — see the file header. */
+  householdId: string;
   direction: Direction;
   amountCents: number;
   categoryId: string | null;
@@ -64,28 +57,14 @@ export interface TransactionView {
   hasPhoto: boolean;
 }
 
-/** Rows this exact author may edit or delete. Never household-widened. */
+/** Rows this exact author may edit or delete. Never space-widened. */
 function ownedByAuthor(userId: string) {
   return and(eq(transactions.userId, userId), isNull(transactions.deletedAt));
 }
 
-/** Rows this user should see in their personal feed — see the file header. */
-function visibleTo(userId: string, householdId: string | null) {
-  const ownership = householdId
-    ? or(
-        eq(transactions.householdId, householdId),
-        and(eq(transactions.userId, userId), isNull(transactions.householdId)),
-      )
-    : eq(transactions.userId, userId);
-  return and(ownership, isNull(transactions.deletedAt));
-}
-
-/** Rows that count toward the shared budget — see the file header. */
-function sharedScope(userId: string, householdId: string | null) {
-  const ownership = householdId
-    ? eq(transactions.householdId, householdId)
-    : eq(transactions.userId, userId);
-  return and(ownership, isNull(transactions.deletedAt));
+/** Every live row in this space — see the file header. */
+function scopedTo(householdId: string) {
+  return and(eq(transactions.householdId, householdId), isNull(transactions.deletedAt));
 }
 
 const viewColumns = {
@@ -163,11 +142,10 @@ export interface ListOptions {
 
 export async function list(
   db: Database,
-  userId: string,
-  householdId: string | null,
+  householdId: string,
   options: ListOptions = {},
 ): Promise<TransactionView[]> {
-  const filters = [visibleTo(userId, householdId)];
+  const filters = [scopedTo(householdId)];
   if (options.from) filters.push(gte(transactions.occurredOn, options.from));
   if (options.to) filters.push(lte(transactions.occurredOn, options.to));
 
@@ -191,11 +169,10 @@ const EXPORT_ROW_CAP = 100_000;
 
 export async function listForExport(
   db: Database,
-  userId: string,
-  householdId: string | null,
+  householdId: string,
   options: Pick<ListOptions, 'from' | 'to'> = {},
 ): Promise<TransactionView[]> {
-  const filters = [visibleTo(userId, householdId)];
+  const filters = [scopedTo(householdId)];
   if (options.from) filters.push(gte(transactions.occurredOn, options.from));
   if (options.to) filters.push(lte(transactions.occurredOn, options.to));
 
@@ -258,8 +235,7 @@ export interface PeriodTotals {
 
 export async function totalsForPeriod(
   db: Database,
-  userId: string,
-  householdId: string | null,
+  householdId: string,
   from: string,
   to: string,
 ): Promise<PeriodTotals> {
@@ -275,7 +251,7 @@ export async function totalsForPeriod(
     .leftJoin(categories, eq(transactions.categoryId, categories.id))
     .where(
       and(
-        sharedScope(userId, householdId),
+        scopedTo(householdId),
         gte(transactions.occurredOn, from),
         lte(transactions.occurredOn, to),
       ),
@@ -296,8 +272,7 @@ export interface CategoryTotal {
 
 export async function totalsByCategory(
   db: Database,
-  userId: string,
-  householdId: string | null,
+  householdId: string,
   from: string,
   to: string,
 ): Promise<CategoryTotal[]> {
@@ -315,7 +290,7 @@ export async function totalsByCategory(
     .leftJoin(categories, eq(transactions.categoryId, categories.id))
     .where(
       and(
-        sharedScope(userId, householdId),
+        scopedTo(householdId),
         eq(transactions.direction, 'out'),
         gte(transactions.occurredOn, from),
         lte(transactions.occurredOn, to),
@@ -342,8 +317,7 @@ export interface DailyTotal {
 /** One row per day that has activity. Gaps are filled by the caller. */
 export async function totalsByDay(
   db: Database,
-  userId: string,
-  householdId: string | null,
+  householdId: string,
   from: string,
   to: string,
 ): Promise<DailyTotal[]> {
@@ -356,7 +330,7 @@ export async function totalsByDay(
     .from(transactions)
     .where(
       and(
-        sharedScope(userId, householdId),
+        scopedTo(householdId),
         gte(transactions.occurredOn, from),
         lte(transactions.occurredOn, to),
       ),
@@ -375,8 +349,7 @@ export interface MonthlyTotal {
 
 export async function totalsByMonth(
   db: Database,
-  userId: string,
-  householdId: string | null,
+  householdId: string,
   from: string,
   to: string,
 ): Promise<MonthlyTotal[]> {
@@ -391,7 +364,7 @@ export async function totalsByMonth(
     .from(transactions)
     .where(
       and(
-        sharedScope(userId, householdId),
+        scopedTo(householdId),
         gte(transactions.occurredOn, from),
         lte(transactions.occurredOn, to),
       ),
@@ -430,14 +403,13 @@ export async function distinctLoggedDates(
 /** Category ids ordered by how recently and often they were used (PRD F2.3). */
 export async function frequentCategoryIds(
   db: Database,
-  userId: string,
-  householdId: string | null,
+  householdId: string,
   limit = 8,
 ): Promise<string[]> {
   const rows = await db
     .select({ categoryId: transactions.categoryId })
     .from(transactions)
-    .where(and(sharedScope(userId, householdId), sql`${transactions.categoryId} is not null`))
+    .where(and(scopedTo(householdId), sql`${transactions.categoryId} is not null`))
     // Recency-weighted: a category used once yesterday outranks one used
     // twice six months ago.
     .groupBy(transactions.categoryId)

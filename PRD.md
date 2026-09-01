@@ -81,6 +81,7 @@ is typed into, capture friction has regressed and we've built the wrong thing.
 - **F9** Daily digest message
 - **F10** Categories (seeded defaults, user-editable)
 - **F11** Edit / delete / undo a transaction
+- **F12** Shared spaces (personal + any number of shared, switch between them)
 
 ### 5.2 Out of scope — deferred
 
@@ -88,7 +89,6 @@ is typed into, capture friction has regressed and we've built the wrong thing.
 |---|---|---|
 | Voice-note capture | v2 | Free speech-to-text is hard; Telegram gives us no transcript. |
 | Multi-currency + FX | v3 | User spends in SGD. Adds conversion, rate caching, historical rates. |
-| Shared households | v2 | Schema is ready; invite flow + permissions are real work. |
 | Bank / card import | ✗ | Requires paid aggregators (Plaid etc). Violates the zero-cost rule. |
 | Debt & investment tracking | ✗ | Different product. |
 
@@ -360,6 +360,32 @@ sequence, `Σ safeToSpend` over the month never exceeds `budget`.
 
 ---
 
+### F12 — Shared spaces
+
+Every user always has exactly one **personal space** — a solo budget, created
+alongside them, never invited into and never left — plus any number of
+**shared** ones joined by invite code. Personal and shared spaces are the same
+underlying thing (a budget and a member list, `packages/db/src/schema.ts`), so
+they behave identically everywhere: capture, safe-to-spend, stats, export.
+
+- **F12.1** `/household invite` gives a 24-hour code; `/join CODE` joins that
+  space and switches into it. Joining never drops you from any other space.
+- **F12.2** `/switch` lists every space you belong to and lets you move
+  between them — in the bot, and as a profile-style pill in the Mini App
+  header (visible on every screen) that opens a sheet to switch.
+- **F12.3** Only one space is **active** at a time. Every capture, and every
+  screen, acts on the active space alone — there is no combined view across
+  spaces.
+- **F12.4** An entry is permanently tagged to whichever space was active when
+  it was logged. Switching spaces, or someone else joining a shared space
+  later, never moves or exposes an entry logged before that point.
+- **F12.5** The budget lives on the space, not the user — either member of a
+  shared space can change it, and every member sees the identical figure.
+- **F12.6** `/household leave` leaves the active shared space (never the
+  personal one) and falls back to personal.
+
+---
+
 ## 8. Bot command surface
 
 | Command | Behaviour |
@@ -368,11 +394,14 @@ sequence, `Σ safeToSpend` over the month never exceeds `budget`.
 | `/app` | Opens the Mini App |
 | `/today` | Spent today + safe-to-spend + pace |
 | `/month` | Month summary |
-| `/budget [amount]` | Show or set the monthly budget |
+| `/budget [amount]` | Show or set the active space's monthly budget |
 | `/recent` | Last 10 transactions with edit buttons |
 | `/undo` | Undo the most recent transaction |
 | `/export [range]` | CSV export |
 | `/recurring` | List and manage rules |
+| `/household [invite\|leave]` | Show, share, or stop sharing the active space |
+| `/join CODE` | Join a shared space and switch into it |
+| `/switch [n]` | List your spaces, or switch to space `n` |
 | `/settings` | Timezone, digest time, notification toggles |
 | `/help` | Grammar cheat-sheet with examples |
 

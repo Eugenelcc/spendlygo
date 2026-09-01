@@ -7,7 +7,7 @@
 
 import { eq } from 'drizzle-orm';
 import type { Database } from '../client.js';
-import { users, type NewUser, type User } from '../schema.js';
+import { households, householdMembers, users, type NewUser, type User } from '../schema.js';
 
 export interface UpsertUserInput {
   telegramId: bigint;
@@ -27,11 +27,14 @@ export async function findById(db: Database, id: string): Promise<User | null> {
 }
 
 /**
- * Look the user up, creating them on first contact.
+ * Look the user up, creating them — and their personal space — on first
+ * contact.
  *
  * Idempotent by construction: Telegram redelivers webhooks, so two concurrent
- * `/start` messages must not create two users. The unique index on
- * `telegram_id` plus `onConflictDoUpdate` makes the race harmless.
+ * `/start` messages must not create two users, or two personal spaces for
+ * one. `onConflictDoNothing` distinguishes a genuine first contact (a row
+ * comes back) from a repeat one (it doesn't) — only the former gets a
+ * personal space; the latter just refreshes the profile fields.
  */
 export async function upsertByTelegramId(db: Database, input: UpsertUserInput): Promise<User> {
   const values: NewUser = {
@@ -41,22 +44,40 @@ export async function upsertByTelegramId(db: Database, input: UpsertUserInput): 
     timezone: input.timezone,
   };
 
-  const rows = await db
-    .insert(users)
-    .values(values)
-    .onConflictDoUpdate({
-      target: users.telegramId,
-      set: {
-        firstName: values.firstName,
-        username: values.username,
-        updatedAt: new Date(),
-      },
-    })
-    .returning();
+  return db.transaction(async (tx) => {
+    const inserted = await tx
+      .insert(users)
+      .values(values)
+      .onConflictDoNothing({ target: users.telegramId })
+      .returning();
 
-  const user = rows[0];
-  if (!user) throw new Error('upsertByTelegramId returned no row');
-  return user;
+    const freshUser = inserted[0];
+    if (freshUser) {
+      const [space] = await tx
+        .insert(households)
+        .values({ createdBy: freshUser.id, isPersonal: true })
+        .returning();
+      if (!space) throw new Error('Insert returned no personal space');
+
+      await tx.insert(householdMembers).values({ householdId: space.id, userId: freshUser.id });
+
+      const [user] = await tx
+        .update(users)
+        .set({ activeHouseholdId: space.id, updatedAt: new Date() })
+        .where(eq(users.id, freshUser.id))
+        .returning();
+      if (!user) throw new Error('Update returned no user');
+      return user;
+    }
+
+    const [user] = await tx
+      .update(users)
+      .set({ firstName: values.firstName, username: values.username, updatedAt: new Date() })
+      .where(eq(users.telegramId, input.telegramId))
+      .returning();
+    if (!user) throw new Error('upsertByTelegramId returned no row');
+    return user;
+  });
 }
 
 /**
@@ -84,7 +105,6 @@ export async function markOnboarded(db: Database, userId: string): Promise<void>
 
 export interface UpdateSettingsInput {
   timezone?: string;
-  monthlyBudgetCents?: number | null;
   digestHour?: number;
   digestEnabled?: boolean;
   nudgeEnabled?: boolean;

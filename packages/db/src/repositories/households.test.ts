@@ -1,5 +1,7 @@
 /**
- * Integration tests for household membership and invites.
+ * Integration tests for spaces: personal (auto-created, never left or
+ * invited into), shared (joined by invite code), membership, and switching
+ * which one is active.
  *
  * GUARDRAILS.md section 4: an invite code is authorisation to join a
  * household, nothing more — and it must be usable exactly once, even under a
@@ -46,6 +48,7 @@ describeIfDb('households', () => {
       );
     const ids = testUsers.map((u) => u.id);
     if (ids.length > 0) {
+      await handle.db.delete(schema.transactions).where(inArray(schema.transactions.userId, ids));
       await handle.db.delete(schema.households).where(inArray(schema.households.createdBy, ids));
     }
     for (const id of [CREATOR_TELEGRAM_ID, PARTNER_TELEGRAM_ID, STRANGER_TELEGRAM_ID]) {
@@ -60,40 +63,58 @@ describeIfDb('households', () => {
     await handle.close();
   });
 
-  async function makeUser(telegramId: bigint, monthlyBudgetCents: number | null = null) {
+  async function makeUser(telegramId: bigint) {
     const user = await usersRepo.upsertByTelegramId(handle.db, {
       telegramId,
       timezone: 'Asia/Singapore',
     });
-    if (monthlyBudgetCents !== null) {
-      await usersRepo.updateSettings(handle.db, user.id, { monthlyBudgetCents });
-    }
     return (await usersRepo.findById(handle.db, user.id))!;
   }
 
+  describe('personal spaces', () => {
+    it('every new user gets one automatically, active from the start', async () => {
+      const user = await makeUser(CREATOR_TELEGRAM_ID);
+      const personal = await householdsRepo.personalSpaceOf(handle.db, user.id);
+
+      expect(personal.isPersonal).toBe(true);
+      expect(personal.createdBy).toBe(user.id);
+      expect(user.activeHouseholdId).toBe(personal.id);
+
+      const spaces = await householdsRepo.mySpaces(handle.db, user.id);
+      expect(spaces.map((s) => s.id)).toEqual([personal.id]);
+    });
+  });
+
   describe('create', () => {
-    it('seeds the household budget from the creator personal budget', async () => {
-      const creator = await makeUser(CREATOR_TELEGRAM_ID, 150_000);
+    it('starts a new shared space with no budget set', async () => {
+      const creator = await makeUser(CREATOR_TELEGRAM_ID);
       const household = await householdsRepo.create(handle.db, creator.id);
-      expect(household.monthlyBudgetCents).toBe(150_000);
+
+      expect(household.isPersonal).toBe(false);
+      expect(household.monthlyBudgetCents).toBeNull();
       expect(household.createdBy).toBe(creator.id);
     });
 
-    it('moves the creator into the household immediately', async () => {
+    it('moves the creator into it as active, without dropping their personal space', async () => {
       const creator = await makeUser(CREATOR_TELEGRAM_ID);
+      const personal = await householdsRepo.personalSpaceOf(handle.db, creator.id);
       const household = await householdsRepo.create(handle.db, creator.id);
 
       const refreshed = await usersRepo.findById(handle.db, creator.id);
-      expect(refreshed?.householdId).toBe(household.id);
+      expect(refreshed?.activeHouseholdId).toBe(household.id);
+
+      const spaces = await householdsRepo.mySpaces(handle.db, creator.id);
+      expect(spaces.map((s) => s.id).sort()).toEqual([household.id, personal.id].sort());
     });
 
-    it('refuses to create a second household for someone already in one', async () => {
+    it('lets someone create more than one shared space', async () => {
       const creator = await makeUser(CREATOR_TELEGRAM_ID);
-      await householdsRepo.create(handle.db, creator.id);
+      const first = await householdsRepo.create(handle.db, creator.id);
+      const second = await householdsRepo.create(handle.db, creator.id);
 
-      await expect(householdsRepo.create(handle.db, creator.id)).rejects.toThrow(
-        JoinHouseholdError,
-      );
+      expect(first.id).not.toBe(second.id);
+      const spaces = await householdsRepo.mySpaces(handle.db, creator.id);
+      expect(spaces.map((s) => s.id)).toEqual(expect.arrayContaining([first.id, second.id]));
     });
   });
 
@@ -109,6 +130,26 @@ describeIfDb('households', () => {
 
       const members = await householdsRepo.membersOf(handle.db, household.id);
       expect(members.map((m) => m.id).sort()).toEqual([creator.id, partner.id].sort());
+
+      const refreshedPartner = await usersRepo.findById(handle.db, partner.id);
+      expect(refreshedPartner?.activeHouseholdId).toBe(household.id);
+    });
+
+    it('lets someone already in a different shared space join another one too', async () => {
+      const creator = await makeUser(CREATOR_TELEGRAM_ID);
+      const partner = await makeUser(PARTNER_TELEGRAM_ID);
+      const partnerOwnSpace = await householdsRepo.create(handle.db, partner.id);
+      const household = await householdsRepo.create(handle.db, creator.id);
+      const invite = await householdsRepo.createInvite(handle.db, household.id, creator.id);
+
+      await expect(
+        householdsRepo.joinByCode(handle.db, invite.code, partner.id),
+      ).resolves.toMatchObject({ id: household.id });
+
+      const spaces = await householdsRepo.mySpaces(handle.db, partner.id);
+      expect(spaces.map((s) => s.id)).toEqual(
+        expect.arrayContaining([partnerOwnSpace.id, household.id]),
+      );
     });
 
     it('is case-insensitive, since people retype codes by hand', async () => {
@@ -153,21 +194,17 @@ describeIfDb('households', () => {
       );
     });
 
-    it('rejects someone who already belongs to a household', async () => {
+    it('rejects someone already a member of that exact space', async () => {
       const creator = await makeUser(CREATOR_TELEGRAM_ID);
       const partner = await makeUser(PARTNER_TELEGRAM_ID);
-      await householdsRepo.create(handle.db, creator.id);
-      await householdsRepo.create(handle.db, partner.id);
+      const household = await householdsRepo.create(handle.db, creator.id);
+      const firstInvite = await householdsRepo.createInvite(handle.db, household.id, creator.id);
+      await householdsRepo.joinByCode(handle.db, firstInvite.code, partner.id);
 
-      const invite = await householdsRepo.createInvite(
-        handle.db,
-        (await usersRepo.findById(handle.db, creator.id))!.householdId!,
-        creator.id,
-      );
-
-      await expect(householdsRepo.joinByCode(handle.db, invite.code, partner.id)).rejects.toThrow(
-        JoinHouseholdError,
-      );
+      const secondInvite = await householdsRepo.createInvite(handle.db, household.id, creator.id);
+      await expect(
+        householdsRepo.joinByCode(handle.db, secondInvite.code, partner.id),
+      ).rejects.toThrow(JoinHouseholdError);
     });
 
     it('rejects an expired invite', async () => {
@@ -185,6 +222,17 @@ describeIfDb('households', () => {
       await expect(householdsRepo.joinByCode(handle.db, invite.code, partner.id)).rejects.toThrow(
         JoinHouseholdError,
       );
+    });
+
+    it('rejects an invite created by someone no longer a member', async () => {
+      const stranger = await makeUser(STRANGER_TELEGRAM_ID);
+      await expect(
+        householdsRepo.createInvite(
+          handle.db,
+          (await householdsRepo.create(handle.db, stranger.id)).id,
+          '00000000-0000-4000-8000-000000000000',
+        ),
+      ).rejects.toThrow(JoinHouseholdError);
     });
 
     it('never lets two racing joins both succeed on the same code', async () => {
@@ -208,22 +256,74 @@ describeIfDb('households', () => {
   });
 
   describe('leave', () => {
-    it('returns the user to solo tracking', async () => {
+    it('refuses to leave the personal space', async () => {
       const creator = await makeUser(CREATOR_TELEGRAM_ID);
-      await householdsRepo.create(handle.db, creator.id);
+      const personal = await householdsRepo.personalSpaceOf(handle.db, creator.id);
 
-      await householdsRepo.leave(handle.db, creator.id);
+      await expect(householdsRepo.leave(handle.db, creator.id, personal.id)).rejects.toThrow(
+        JoinHouseholdError,
+      );
+    });
+
+    it('falls back to the personal space when leaving the active one', async () => {
+      const creator = await makeUser(CREATOR_TELEGRAM_ID);
+      const personal = await householdsRepo.personalSpaceOf(handle.db, creator.id);
+      const household = await householdsRepo.create(handle.db, creator.id);
+
+      await householdsRepo.leave(handle.db, creator.id, household.id);
 
       const refreshed = await usersRepo.findById(handle.db, creator.id);
-      expect(refreshed?.householdId).toBeNull();
+      expect(refreshed?.activeHouseholdId).toBe(personal.id);
+
+      const spaces = await householdsRepo.mySpaces(handle.db, creator.id);
+      expect(spaces.map((s) => s.id)).toEqual([personal.id]);
+    });
+
+    it('leaves the active space alone when leaving a DIFFERENT, inactive one', async () => {
+      const creator = await makeUser(CREATOR_TELEGRAM_ID);
+      const first = await householdsRepo.create(handle.db, creator.id);
+      const second = await householdsRepo.create(handle.db, creator.id); // becomes active
+
+      await householdsRepo.leave(handle.db, creator.id, first.id);
+
+      const refreshed = await usersRepo.findById(handle.db, creator.id);
+      expect(refreshed?.activeHouseholdId).toBe(second.id);
     });
 
     it('lets them create or join a new household afterward', async () => {
       const creator = await makeUser(CREATOR_TELEGRAM_ID);
-      await householdsRepo.create(handle.db, creator.id);
-      await householdsRepo.leave(handle.db, creator.id);
+      const household = await householdsRepo.create(handle.db, creator.id);
+      await householdsRepo.leave(handle.db, creator.id, household.id);
 
       await expect(householdsRepo.create(handle.db, creator.id)).resolves.toBeTruthy();
+    });
+  });
+
+  describe('switchActive', () => {
+    it('switches between spaces the user actually belongs to', async () => {
+      const creator = await makeUser(CREATOR_TELEGRAM_ID);
+      const personal = await householdsRepo.personalSpaceOf(handle.db, creator.id);
+      const household = await householdsRepo.create(handle.db, creator.id); // active now
+
+      await householdsRepo.switchActive(handle.db, creator.id, personal.id);
+      expect((await usersRepo.findById(handle.db, creator.id))?.activeHouseholdId).toBe(
+        personal.id,
+      );
+
+      await householdsRepo.switchActive(handle.db, creator.id, household.id);
+      expect((await usersRepo.findById(handle.db, creator.id))?.activeHouseholdId).toBe(
+        household.id,
+      );
+    });
+
+    it("refuses to switch into a space the user isn't a member of", async () => {
+      const creator = await makeUser(CREATOR_TELEGRAM_ID);
+      const stranger = await makeUser(STRANGER_TELEGRAM_ID);
+      const strangersSpace = await householdsRepo.create(handle.db, stranger.id);
+
+      await expect(
+        householdsRepo.switchActive(handle.db, creator.id, strangersSpace.id),
+      ).rejects.toThrow(JoinHouseholdError);
     });
   });
 

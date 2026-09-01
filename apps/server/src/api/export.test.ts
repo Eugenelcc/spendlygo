@@ -64,8 +64,16 @@ describeIfDb('GET /api/export', () => {
   };
 
   const cleanUsers = async () => {
-    for (const id of [OWNER, OTHER]) {
-      await handle.db.delete(schema.users).where(eq(schema.users.telegramId, id));
+    for (const telegramId of [OWNER, OTHER]) {
+      const rows = await handle.db
+        .select({ id: schema.users.id })
+        .from(schema.users)
+        .where(eq(schema.users.telegramId, telegramId));
+      for (const row of rows) {
+        await handle.db.delete(schema.transactions).where(eq(schema.transactions.userId, row.id));
+        await handle.db.delete(schema.households).where(eq(schema.households.createdBy, row.id));
+      }
+      await handle.db.delete(schema.users).where(eq(schema.users.telegramId, telegramId));
     }
   };
 

@@ -47,6 +47,8 @@ an end-of-month summary. Turn them on or off in Settings.
 
 \`/household invite\` gives you a code; they send \`/join CODE\`. Either of you
 can then change the budget, and you'll both see everything either of you logs.
+Joining never drops you from your other spaces — \`/switch\` moves between all
+of them, personal budget included.
 
 *Savings goals* — tracked separately, never touching your monthly budget
 
@@ -66,6 +68,7 @@ can then change the budget, and you'll both see everything either of you logs.
 /budget — show or set your monthly budget
 /recurring — list or add recurring transactions
 /household — share a budget with a partner
+/switch — move between your spaces
 /goals — savings goals and progress
 /recap — your month or year at a glance
 /export — download your data as CSV

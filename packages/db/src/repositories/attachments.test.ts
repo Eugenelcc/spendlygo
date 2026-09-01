@@ -1,10 +1,10 @@
 /**
  * Integration tests for attachment visibility.
  *
- * Mirrors transactions.household.test.ts's asymmetry, applied to photos: a
- * stranger never sees one, a household partner sees one on a shared
- * transaction exactly as they'd see the transaction itself — the whole point
- * of a shared budget being transparent, not just combined.
+ * Mirrors transactions.household.test.ts, applied to photos: a stranger never
+ * sees one, a space-mate sees one on a shared transaction exactly as they'd
+ * see the transaction itself — the whole point of a shared budget being
+ * transparent, not just combined.
  */
 
 import { eq } from 'drizzle-orm';
@@ -24,11 +24,11 @@ const STRANGER_TELEGRAM_ID = 960000000003n;
 describeIfDb('attachment visibility', () => {
   let handle: DatabaseHandle;
   let ownerId: string;
-  let partnerId: string;
-  let strangerId: string;
-  let soloTransactionId: string;
+  let ownerPersonalId: string;
+  let sharedId: string;
+  let personalTransactionId: string;
   let sharedTransactionId: string;
-  let soloAttachmentId: string;
+  let personalAttachmentId: string;
   let sharedAttachmentId: string;
 
   beforeAll(async () => {
@@ -42,6 +42,7 @@ describeIfDb('attachment visibility', () => {
         .from(schema.users)
         .where(eq(schema.users.telegramId, id));
       for (const row of rows) {
+        await handle.db.delete(schema.transactions).where(eq(schema.transactions.userId, row.id));
         await handle.db.delete(schema.households).where(eq(schema.households.createdBy, row.id));
       }
       await handle.db.delete(schema.users).where(eq(schema.users.telegramId, id));
@@ -56,33 +57,33 @@ describeIfDb('attachment visibility', () => {
       timezone: 'Asia/Singapore',
     });
     ownerId = owner.id;
+    ownerPersonalId = (await householdsRepo.personalSpaceOf(handle.db, ownerId)).id;
 
     const stranger = await usersRepo.upsertByTelegramId(handle.db, {
       telegramId: STRANGER_TELEGRAM_ID,
       timezone: 'Asia/Singapore',
     });
-    strangerId = stranger.id;
 
     const household = await householdsRepo.create(handle.db, ownerId);
+    sharedId = household.id;
     const partner = await usersRepo.upsertByTelegramId(handle.db, {
       telegramId: PARTNER_TELEGRAM_ID,
       timezone: 'Asia/Singapore',
     });
     const invite = await householdsRepo.createInvite(handle.db, household.id, ownerId);
     await householdsRepo.joinByCode(handle.db, invite.code, partner.id);
-    partnerId = partner.id;
 
-    const solo = await transactionsRepo.create(handle.db, {
+    const personal = await transactionsRepo.create(handle.db, {
       userId: ownerId,
-      householdId: null,
+      householdId: ownerPersonalId,
       direction: 'out',
       amountCents: 1200,
       categoryId: null,
-      note: 'solo lunch',
+      note: 'personal lunch',
       occurredOn: '2026-08-20',
       source: 'chat',
     });
-    soloTransactionId = solo.id;
+    personalTransactionId = personal.id;
 
     const shared = await transactionsRepo.create(handle.db, {
       userId: ownerId,
@@ -96,16 +97,16 @@ describeIfDb('attachment visibility', () => {
     });
     sharedTransactionId = shared.id;
 
-    const soloAttachment = await attachmentsRepo.create(handle.db, {
-      transactionId: soloTransactionId,
+    const personalAttachment = await attachmentsRepo.create(handle.db, {
+      transactionId: personalTransactionId,
       userId: ownerId,
-      tgFileId: 'file-solo',
-      tgFileUniqueId: 'unique-solo',
+      tgFileId: 'file-personal',
+      tgFileUniqueId: 'unique-personal',
       width: 800,
       height: 600,
       fileSize: 12_345,
     });
-    soloAttachmentId = soloAttachment.id;
+    personalAttachmentId = personalAttachment.id;
 
     const sharedAttachment = await attachmentsRepo.create(handle.db, {
       transactionId: sharedTransactionId,
@@ -117,6 +118,8 @@ describeIfDb('attachment visibility', () => {
       fileSize: 23_456,
     });
     sharedAttachmentId = sharedAttachment.id;
+
+    void stranger; // referenced only for its telegram id above
   });
 
   afterAll(async () => {
@@ -125,50 +128,40 @@ describeIfDb('attachment visibility', () => {
   });
 
   describe('findViewable', () => {
-    it('the owner sees their own attachment on a solo transaction', async () => {
-      const found = await attachmentsRepo.findViewable(handle.db, ownerId, null, soloAttachmentId);
-      expect(found?.id).toBe(soloAttachmentId);
-    });
-
-    it('a stranger never sees a solo attachment', async () => {
+    it('the owner sees their own attachment on a personal-space transaction', async () => {
       const found = await attachmentsRepo.findViewable(
         handle.db,
-        strangerId,
-        null,
-        soloAttachmentId,
+        ownerPersonalId,
+        personalAttachmentId,
+      );
+      expect(found?.id).toBe(personalAttachmentId);
+    });
+
+    it("a stranger's personal space never sees the owner's personal attachment", async () => {
+      const stranger = (await usersRepo.findByTelegramId(handle.db, STRANGER_TELEGRAM_ID))!;
+      const found = await attachmentsRepo.findViewable(
+        handle.db,
+        stranger.activeHouseholdId!,
+        personalAttachmentId,
       );
       expect(found).toBeNull();
     });
 
-    it('a household partner sees a photo on a shared transaction — full transparency', async () => {
-      const partnerHousehold =
-        (await usersRepo.findById(handle.db, partnerId))?.householdId ?? null;
-      const found = await attachmentsRepo.findViewable(
-        handle.db,
-        partnerId,
-        partnerHousehold,
-        sharedAttachmentId,
-      );
+    it('a space-mate sees a photo on a shared transaction — full transparency', async () => {
+      const found = await attachmentsRepo.findViewable(handle.db, sharedId, sharedAttachmentId);
       expect(found?.id).toBe(sharedAttachmentId);
     });
 
-    it("a household partner still cannot see the owner's SOLO attachment", async () => {
-      const partnerHousehold =
-        (await usersRepo.findById(handle.db, partnerId))?.householdId ?? null;
-      const found = await attachmentsRepo.findViewable(
-        handle.db,
-        partnerId,
-        partnerHousehold,
-        soloAttachmentId,
-      );
+    it("a shared space never shows the owner's PERSONAL attachment", async () => {
+      const found = await attachmentsRepo.findViewable(handle.db, sharedId, personalAttachmentId);
       expect(found).toBeNull();
     });
 
-    it('a stranger never sees a shared-household attachment either', async () => {
+    it("a stranger's space never sees a shared attachment either", async () => {
+      const stranger = (await usersRepo.findByTelegramId(handle.db, STRANGER_TELEGRAM_ID))!;
       const found = await attachmentsRepo.findViewable(
         handle.db,
-        strangerId,
-        null,
+        stranger.activeHouseholdId!,
         sharedAttachmentId,
       );
       expect(found).toBeNull();
@@ -177,8 +170,7 @@ describeIfDb('attachment visibility', () => {
     it('returns null for a nonexistent id, same shape as "not yours"', async () => {
       const found = await attachmentsRepo.findViewable(
         handle.db,
-        ownerId,
-        null,
+        ownerPersonalId,
         '00000000-0000-0000-0000-000000000000',
       );
       expect(found).toBeNull();
@@ -189,19 +181,18 @@ describeIfDb('attachment visibility', () => {
     it('lists every visible attachment on a transaction', async () => {
       const rows = await attachmentsRepo.listForTransaction(
         handle.db,
-        ownerId,
-        null,
-        soloTransactionId,
+        ownerPersonalId,
+        personalTransactionId,
       );
-      expect(rows.map((r) => r.id)).toEqual([soloAttachmentId]);
+      expect(rows.map((r) => r.id)).toEqual([personalAttachmentId]);
     });
 
     it('is empty for a transaction the viewer cannot see', async () => {
+      const stranger = (await usersRepo.findByTelegramId(handle.db, STRANGER_TELEGRAM_ID))!;
       const rows = await attachmentsRepo.listForTransaction(
         handle.db,
-        strangerId,
-        null,
-        soloTransactionId,
+        stranger.activeHouseholdId!,
+        personalTransactionId,
       );
       expect(rows).toHaveLength(0);
     });

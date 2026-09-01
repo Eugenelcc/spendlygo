@@ -18,7 +18,7 @@
 import { formatCents, type AmountCents } from '@spendlygo/core';
 import { attachmentsRepo, transactionsRepo } from '@spendlygo/db';
 import type { PhotoSize } from 'grammy/types';
-import { computeSafeToSpend, todayFor } from '../api/service.js';
+import { activeHouseholdId, computeSafeToSpend, todayFor } from '../api/service.js';
 import type { AppContext } from '../context.js';
 import { guessReceiptAmount } from '../telegram/ocr.js';
 import { resolveFileUrl } from '../telegram/photos.js';
@@ -123,7 +123,7 @@ async function captureWithOcr(
 
   const created = await transactionsRepo.create(ctx.db, {
     userId: user.id,
-    householdId: user.householdId,
+    householdId: activeHouseholdId(user),
     direction: 'out',
     amountCents: guessedCents,
     categoryId: null,

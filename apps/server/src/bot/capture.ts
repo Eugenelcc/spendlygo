@@ -17,7 +17,7 @@ import {
 } from '@spendlygo/core';
 import { categoriesRepo, transactionsRepo } from '@spendlygo/db';
 import type { AppContext } from '../context.js';
-import { computeSafeToSpend, todayFor } from '../api/service.js';
+import { activeHouseholdId, computeSafeToSpend, todayFor } from '../api/service.js';
 import { logger } from '../logger.js';
 import type { BotContext } from './middleware.js';
 import { escapeMarkdown } from './markdown.js';
@@ -140,7 +140,7 @@ export async function captureFromText(
 
   const created = await transactionsRepo.create(ctx.db, {
     userId: user.id,
-    householdId: user.householdId,
+    householdId: activeHouseholdId(user),
     direction: parsed.direction,
     amountCents: parsed.amountCents,
     categoryId: category?.id ?? null,
