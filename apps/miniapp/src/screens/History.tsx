@@ -4,6 +4,16 @@ import { TransactionRow } from '../components/TransactionRow';
 import { formatMoney, formatRelativeDate } from '../lib/format';
 import { haptics } from '../lib/telegram';
 
+export type HistoryPeriod = 'all' | 'day' | 'week' | 'month' | 'custom';
+
+const PERIODS: Array<{ value: HistoryPeriod; label: string }> = [
+  { value: 'all', label: 'All' },
+  { value: 'day', label: 'Today' },
+  { value: 'week', label: 'Last 7 days' },
+  { value: 'month', label: 'Last 30 days' },
+  { value: 'custom', label: 'Custom' },
+];
+
 export interface HistoryScreenProps {
   transactions: Transaction[];
   loading: boolean;
@@ -11,6 +21,12 @@ export interface HistoryScreenProps {
   locale: string;
   today: string;
   onSelect: (transaction: Transaction) => void;
+  period: HistoryPeriod;
+  onPeriodChange: (period: HistoryPeriod) => void;
+  customFrom: string;
+  customTo: string;
+  onCustomFromChange: (value: string) => void;
+  onCustomToChange: (value: string) => void;
 }
 
 interface CategoryOption {
@@ -19,9 +35,10 @@ interface CategoryOption {
   emoji: string;
 }
 
-/** Grouped by day with the day's net at the head, so the list scans. Search
- * and the category chips filter what's already loaded — PRD-adjacent, no
- * extra round trip since History already fetches a generous window. */
+/** Grouped by day with the day's net at the head, so the list scans. The
+ * period chips narrow the fetch itself (server-side, PRD-adjacent — no point
+ * paging through hundreds of rows client-side for "last 7 days"); search and
+ * the category chips then filter whatever that period's window loaded. */
 export function HistoryScreen({
   transactions,
   loading,
@@ -29,6 +46,12 @@ export function HistoryScreen({
   locale,
   today,
   onSelect,
+  period,
+  onPeriodChange,
+  customFrom,
+  customTo,
+  onCustomFromChange,
+  onCustomToChange,
 }: HistoryScreenProps): JSX.Element {
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
@@ -66,20 +89,13 @@ export function HistoryScreen({
   }
 
   const filtering = search.trim() !== '' || categoryFilter !== null;
+  const customIncomplete = period === 'custom' && (!customFrom || !customTo);
 
-  if (loading && transactions.length === 0) {
-    return (
-      <div className="screen">
-        <div className="card">
-          <div className="skeleton" />
-          <div className="skeleton" />
-          <div className="skeleton skeleton--short" />
-        </div>
-      </div>
-    );
-  }
-
-  if (transactions.length === 0) {
+  // A brand-new user with nothing logged at all, ever — the only case that
+  // earns the full centered empty state; any period/filter narrowing an
+  // otherwise-nonempty history gets an inline message instead, so the
+  // controls that got them there stay on screen to try something else.
+  if (!loading && transactions.length === 0 && period === 'all' && !filtering) {
     return (
       <div className="screen">
         <div className="empty">
@@ -123,6 +139,47 @@ export function HistoryScreen({
         )}
       </div>
 
+      <div className="chip-row" role="group" aria-label="Filter by date">
+        {PERIODS.map((option) => (
+          <button
+            type="button"
+            key={option.value}
+            className={`chip ${period === option.value ? 'chip--on' : ''}`}
+            onClick={() => {
+              haptics.select();
+              onPeriodChange(option.value);
+            }}
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
+
+      {period === 'custom' && (
+        <div className="date-range">
+          <input
+            type="date"
+            className="input"
+            value={customFrom}
+            max={customTo || today}
+            aria-label="From date"
+            onChange={(event) => onCustomFromChange(event.target.value)}
+          />
+          <span className="date-range__sep" aria-hidden="true">
+            –
+          </span>
+          <input
+            type="date"
+            className="input"
+            value={customTo}
+            min={customFrom}
+            max={today}
+            aria-label="To date"
+            onChange={(event) => onCustomToChange(event.target.value)}
+          />
+        </div>
+      )}
+
       {categoryOptions.length > 1 && (
         <div className="chip-row" role="group" aria-label="Filter by category">
           <button
@@ -133,7 +190,7 @@ export function HistoryScreen({
               setCategoryFilter(null);
             }}
           >
-            All
+            All categories
           </button>
           {categoryOptions.map((category) => (
             <button
@@ -151,11 +208,22 @@ export function HistoryScreen({
         </div>
       )}
 
-      {filtered.length === 0 ? (
+      {loading ? (
+        <div className="card">
+          <div className="skeleton" />
+          <div className="skeleton" />
+          <div className="skeleton skeleton--short" />
+        </div>
+      ) : customIncomplete ? (
+        <div className="empty empty--inline">
+          <div className="empty__emoji">🗓️</div>
+          <p className="empty__body">Pick both a start and end date.</p>
+        </div>
+      ) : filtered.length === 0 ? (
         <div className="empty empty--inline">
           <div className="empty__emoji">🔍</div>
           <p className="empty__body">
-            {filtering ? 'Nothing matches that.' : 'Nothing logged yet.'}
+            {filtering ? 'Nothing matches that.' : 'Nothing logged in this period.'}
           </p>
         </div>
       ) : (

@@ -469,6 +469,10 @@ button {
   font-variant-numeric: tabular-nums;
 }
 
+.spark__day .list {
+  margin-top: 4px;
+}
+
 /* ---------- calendar heatmap (last year, GitHub-style) ---------- */
 
 .heatmap {
@@ -1108,6 +1112,24 @@ button {
   line-height: 1;
   padding: 4px;
   cursor: pointer;
+}
+
+.date-range {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.date-range .input {
+  flex: 1;
+  min-width: 0;
+  min-height: 40px;
+  padding: 9px 10px;
+  font-size: 14px;
+  color-scheme: dark light;
+}
+.date-range__sep {
+  color: var(--text-hint);
+  flex-shrink: 0;
 }
 
 .input {

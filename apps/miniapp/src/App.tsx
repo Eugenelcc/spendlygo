@@ -24,9 +24,9 @@ import { Sheet } from './components/Sheet';
 import { SpaceSwitcher } from './components/SpaceSwitcher';
 import { TodayScreen } from './screens/Today';
 import { StatsScreen } from './screens/Stats';
-import { HistoryScreen } from './screens/History';
+import { HistoryScreen, type HistoryPeriod } from './screens/History';
 import { SettingsScreen } from './screens/Settings';
-import { formatMoney } from './lib/format';
+import { addDays, formatMoney } from './lib/format';
 
 type Tab = 'today' | 'stats' | 'history' | 'settings';
 
@@ -108,12 +108,43 @@ function Shell(): JSX.Element {
     staleTime: 5 * 60_000, // a year of history barely changes minute to minute
   });
 
+  const [historyPeriod, setHistoryPeriod] = useState<HistoryPeriod>('all');
+  const [historyCustomFrom, setHistoryCustomFrom] = useState('');
+  const [historyCustomTo, setHistoryCustomTo] = useState('');
+
+  const todayIso = today.data?.today;
+  const historyRange = useMemo<{ from?: string; to?: string }>(() => {
+    if (!todayIso) return {};
+    switch (historyPeriod) {
+      case 'day':
+        return { from: todayIso, to: todayIso };
+      case 'week':
+        return { from: addDays(todayIso, -6), to: todayIso };
+      case 'month':
+        return { from: addDays(todayIso, -29), to: todayIso };
+      case 'custom':
+        return historyCustomFrom && historyCustomTo
+          ? { from: historyCustomFrom, to: historyCustomTo }
+          : {};
+      default:
+        return {};
+    }
+  }, [historyPeriod, historyCustomFrom, historyCustomTo, todayIso]);
+
   const history = useQuery({
-    queryKey: ['transactions'],
-    // 200 is the server's own cap (transactionsRepo.list) — searching History
-    // should reach as far back as a single request can, not just the last 100.
-    queryFn: () => api.transactions({ limit: 200 }),
+    // 200 is the server's own cap (transactionsRepo.list) — with no date
+    // range that's "as far back as a single request can reach"; a period
+    // narrows it server-side instead of filtering a fixed window client-side.
+    queryKey: ['transactions', historyRange.from ?? null, historyRange.to ?? null],
+    queryFn: () => api.transactions({ ...historyRange, limit: 200 }),
     enabled: tab === 'history',
+  });
+
+  const [sparklineDay, setSparklineDay] = useState<string | null>(null);
+  const dayTransactions = useQuery({
+    queryKey: ['transactions', 'day', sparklineDay],
+    queryFn: () => api.transactions({ from: sparklineDay as string, to: sparklineDay as string }),
+    enabled: sparklineDay !== null,
   });
 
   const recurring = useQuery({
@@ -368,6 +399,10 @@ function Shell(): JSX.Element {
             data={today.data}
             onSelectTransaction={setSelected}
             onSetBudget={() => setTab('settings')}
+            sparklineDay={sparklineDay}
+            onSelectSparklineDay={setSparklineDay}
+            sparklineDayTransactions={dayTransactions.data?.transactions}
+            sparklineDayLoading={dayTransactions.isPending}
           />
         )}
 
@@ -396,6 +431,12 @@ function Shell(): JSX.Element {
             locale={locale}
             today={today.data.today}
             onSelect={setSelected}
+            period={historyPeriod}
+            onPeriodChange={setHistoryPeriod}
+            customFrom={historyCustomFrom}
+            customTo={historyCustomTo}
+            onCustomFromChange={setHistoryCustomFrom}
+            onCustomToChange={setHistoryCustomTo}
           />
         )}
 
