@@ -64,6 +64,13 @@ function parts(isoDate: string): { year: number; month: number; day: number } {
   return { year: year ?? 1970, month: month ?? 1, day: day ?? 1 };
 }
 
+/** Days in the calendar month `isoDate` falls in — for converting a daily
+ * figure to a monthly one and back (Settings' budget input). */
+export function daysInMonth(isoDate: string): number {
+  const { year, month } = parts(isoDate);
+  return new Date(Date.UTC(year, month, 0)).getUTCDate();
+}
+
 export function formatLongDate(isoDate: string): string {
   const { year, month, day } = parts(isoDate);
   const weekday = DAY_NAMES[new Date(Date.UTC(year, month - 1, day)).getUTCDay()] ?? '';

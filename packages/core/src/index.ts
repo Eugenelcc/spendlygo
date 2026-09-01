@@ -9,3 +9,4 @@ export * from './recurrence.js';
 export * from './savings.js';
 export * from './streaks.js';
 export * from './receipt-text.js';
+export * from './csv-export.js';

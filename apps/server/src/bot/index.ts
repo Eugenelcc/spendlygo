@@ -15,6 +15,7 @@ import { handleRecurring } from './commands/recurring.js';
 import { handleHousehold, handleJoin } from './commands/household.js';
 import { handleGoals } from './commands/goals.js';
 import { handleRecap } from './commands/recap.js';
+import { handleExport } from './commands/export.js';
 import { handleCapture, handleUndo, UNDO_PREFIX } from './capture.js';
 import { handlePhotoCapture } from './photo-capture.js';
 import { canLaunchMiniApp, openAppKeyboard } from './keyboards.js';
@@ -50,6 +51,7 @@ export function createBot(ctx: AppContext): SpendlygoBot {
   bot.command('join', (botCtx) => handleJoin(ctx, botCtx));
   bot.command('goals', (botCtx) => handleGoals(ctx, botCtx));
   bot.command('recap', (botCtx) => handleRecap(ctx, botCtx));
+  bot.command('export', (botCtx) => handleExport(ctx, botCtx));
 
   bot.callbackQuery(new RegExp(`^${UNDO_PREFIX}`), (botCtx) => handleUndo(ctx, botCtx));
 
@@ -174,6 +176,7 @@ export async function configureBotMenu(bot: SpendlygoBot, ctx: AppContext): Prom
     { command: 'household', description: 'Share a budget with a partner' },
     { command: 'goals', description: 'Savings goals and progress' },
     { command: 'recap', description: 'Your month or year at a glance' },
+    { command: 'export', description: 'Download your data as CSV' },
     { command: 'help', description: 'How to log a spend' },
     { command: 'start', description: 'Start over' },
   ]);

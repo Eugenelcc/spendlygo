@@ -24,7 +24,7 @@ without blowing the month.
   tagging a transfer to them
 - **Logging streaks** — a 🔥 nudge for consecutive days logged
 - **Recap** — an on-demand, shareable month or year wrap-up (`/recap`)
-- **CSV export** — your data, on the way
+- **CSV export** — every transaction, any range, from the bot (`/export`) or the Mini App
 
 ## Documentation
 
@@ -52,10 +52,10 @@ P2 mini app   ██████████ done
 P3 goals      ██████████ done
 P4 stats      ██████████ done
 P5 automation ██████████ done
-P6 polish     ████████░░  photos + OCR done; CSV export next
+P6 polish     █████████░  photos + OCR + CSV export done
 ```
 
-412 tests, initial Mini App bundle 84 KB gzipped.
+430 tests, initial Mini App bundle 84 KB gzipped.
 
 ## Running it locally
 

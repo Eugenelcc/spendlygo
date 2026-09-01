@@ -57,6 +57,10 @@ can then change the budget, and you'll both see everything either of you logs.
 
 \`/recap\` for this month, \`/recap year\` for the whole year.
 
+*Export* — your data, as a CSV file
+
+\`/export\` for everything, \`/export 2026\` or \`/export 2026-08\` for a range.
+
 *Commands*
 /today — what's safe to spend today
 /budget — show or set your monthly budget
@@ -64,6 +68,7 @@ can then change the budget, and you'll both see everything either of you logs.
 /household — share a budget with a partner
 /goals — savings goals and progress
 /recap — your month or year at a glance
+/export — download your data as CSV
 /recent — your last 10 entries
 /undo — undo the last entry
 /app — open the app

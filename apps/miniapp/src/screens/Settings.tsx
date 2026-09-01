@@ -10,7 +10,7 @@ import type {
 import { GoalsSection } from '../components/GoalsSection';
 import { HouseholdSection } from '../components/HouseholdSection';
 import { RecurringForm } from '../components/RecurringForm';
-import { formatMoney } from '../lib/format';
+import { daysInMonth, formatMoney } from '../lib/format';
 import { haptics } from '../lib/telegram';
 
 export interface SettingsScreenProps {
@@ -45,6 +45,8 @@ export interface SettingsScreenProps {
   onAddGoal: (input: { name: string; targetCents: number; targetDate: string | null }) => void;
   onContributeGoal: (id: string, amountCents: number) => void;
   onArchiveGoal: (id: string) => void;
+  exportBusy: boolean;
+  onExportCsv: () => void;
 }
 
 const CADENCE_LABEL: Record<Cadence, string> = {
@@ -78,24 +80,60 @@ export function SettingsScreen({
   onAddGoal,
   onContributeGoal,
   onArchiveGoal,
+  exportBusy,
+  onExportCsv,
 }: SettingsScreenProps): JSX.Element {
   const { user } = me;
+  const [budgetMode, setBudgetMode] = useState<'monthly' | 'daily'>('monthly');
   const [draft, setDraft] = useState(
     user.monthlyBudgetCents === null ? '' : String(user.monthlyBudgetCents / 100),
   );
   const [addingRecurring, setAddingRecurring] = useState(false);
 
+  const daysThisMonth = daysInMonth(today);
   const parsed = Number(draft.replace(/,/g, ''));
   const valid = draft.trim() !== '' && Number.isFinite(parsed) && parsed >= 0;
+  // Whatever mode the field is in, this is always the monthly figure that
+  // actually gets saved — safe-to-spend still runs off one monthly budget
+  // (PRD F6), a daily entry is just a more convenient way to set it.
+  const monthlyCentsFromDraft = valid
+    ? Math.round((budgetMode === 'daily' ? parsed * daysThisMonth : parsed) * 100)
+    : null;
+
+  function switchBudgetMode(next: 'monthly' | 'daily'): void {
+    if (next === budgetMode) return;
+    haptics.select();
+    if (valid) {
+      const converted = next === 'daily' ? parsed / daysThisMonth : parsed * daysThisMonth;
+      setDraft(converted.toFixed(2).replace(/\.00$/, ''));
+    }
+    setBudgetMode(next);
+  }
 
   return (
     <div className="screen">
       <section className="card">
-        <div className="card__label">Monthly budget</div>
+        <div className="card__label">Budget</div>
         <p className="card__prose">
           The number everything else is derived from. Spendlygo divides what's left by the days
           remaining — so overspending today shrinks tomorrow.
         </p>
+
+        <div className="seg" role="tablist" aria-label="Set budget as">
+          {(['monthly', 'daily'] as const).map((mode) => (
+            <button
+              key={mode}
+              type="button"
+              role="tab"
+              aria-selected={budgetMode === mode}
+              className={`seg__option ${budgetMode === mode ? 'seg__option--on' : ''}`}
+              onClick={() => switchBudgetMode(mode)}
+            >
+              {mode === 'monthly' ? 'Monthly' : 'Daily'}
+            </button>
+          ))}
+        </div>
+
         <div className="field">
           <span className="field__prefix">{user.currency}</span>
           <input
@@ -103,18 +141,44 @@ export function SettingsScreen({
             inputMode="decimal"
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
-            placeholder="1500"
-            aria-label="Monthly budget"
+            placeholder={budgetMode === 'monthly' ? '1500' : '50'}
+            aria-label={budgetMode === 'monthly' ? 'Monthly budget' : 'Daily budget'}
           />
         </div>
+
+        {valid && monthlyCentsFromDraft !== null && (
+          <p className="card__foot card__foot--tight">
+            {budgetMode === 'daily' ? (
+              <span>
+                ={' '}
+                {formatMoney(monthlyCentsFromDraft, {
+                  currency: user.currency,
+                  locale: user.locale,
+                  hideZeroCents: true,
+                })}
+                /month ({daysThisMonth} days this month)
+              </span>
+            ) : (
+              <span>
+                ≈{' '}
+                {formatMoney(Math.floor(monthlyCentsFromDraft / daysThisMonth), {
+                  currency: user.currency,
+                  locale: user.locale,
+                })}
+                /day
+              </span>
+            )}
+          </p>
+        )}
+
         <button
           type="button"
           className="primary primary--inline"
           disabled={!valid || busy}
           onClick={() => {
-            if (!valid) return;
+            if (monthlyCentsFromDraft === null) return;
             haptics.press();
-            onSaveBudget(Math.round(parsed * 100));
+            onSaveBudget(monthlyCentsFromDraft);
           }}
         >
           {busy ? 'Saving…' : 'Save budget'}
@@ -127,7 +191,13 @@ export function SettingsScreen({
                 currency: user.currency,
                 locale: user.locale,
                 hideZeroCents: true,
+              })}{' '}
+              ·{' '}
+              {formatMoney(Math.floor(user.monthlyBudgetCents / daysThisMonth), {
+                currency: user.currency,
+                locale: user.locale,
               })}
+              /day
             </span>
             <button
               type="button"
@@ -293,9 +363,20 @@ export function SettingsScreen({
           <span className="row__key">Currency</span>
           <span className="row__value">{user.currency}</span>
         </div>
+        <button
+          type="button"
+          className="primary primary--inline"
+          disabled={exportBusy}
+          onClick={() => {
+            haptics.select();
+            onExportCsv();
+          }}
+        >
+          {exportBusy ? 'Preparing…' : 'Export CSV'}
+        </button>
       </section>
 
-      <p className="footnote">Your data is yours — CSV export is on the way.</p>
+      <p className="footnote">Your data is yours — export everything as a CSV, any time.</p>
     </div>
   );
 }

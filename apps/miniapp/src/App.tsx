@@ -267,6 +267,15 @@ function Shell(): JSX.Element {
     onError: () => haptics.error(),
   });
 
+  const exportCsv = useMutation({
+    mutationFn: api.exportCsv,
+    onSuccess: () => {
+      haptics.success();
+      showToast('Downloaded');
+    },
+    onError: () => haptics.error(),
+  });
+
   if (me.isPending || today.isPending) {
     return (
       <main className="screen">
@@ -373,6 +382,8 @@ function Shell(): JSX.Element {
             onAddGoal={(input) => addGoal.mutate(input)}
             onContributeGoal={(id, amountCents) => contributeGoal.mutate({ id, amountCents })}
             onArchiveGoal={(id) => archiveGoal.mutate(id)}
+            exportBusy={exportCsv.isPending}
+            onExportCsv={() => exportCsv.mutate()}
           />
         )}
       </main>

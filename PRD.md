@@ -313,7 +313,11 @@ sequence, `Σ safeToSpend` over the month never exceeds `budget`.
 - **F8.4** Optional range argument: `/export 2026` or `/export 2026-08`.
 - **F8.5** Amounts render as decimal SGD in the CSV, even though they're stored
   as cents.
-- **F8.6** Exports stream in chunks; a large range must not blow the 512 MB budget.
+- **F8.6** A large range must not blow the 512 MB runtime budget. In practice: one
+  bounded query (capped well above this app's realistic scale of thousands of
+  rows, as a typo/sanity guard rather than a real limit) generates the whole
+  CSV in memory in one pass — simpler than chunked/streamed generation, and
+  comfortably within budget at that scale.
 
 ---
 
