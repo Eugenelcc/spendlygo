@@ -1,6 +1,9 @@
-import { useState, type JSX } from 'react';
-import type { StatsPeriod, StatsResponse } from '@spendlygo/shared';
+import type { JSX } from 'react';
+import type { HeatmapResponse, StatsPeriod, StatsResponse } from '@spendlygo/shared';
 import { BarChart } from '../components/BarChart';
+import { CalendarHeatmap } from '../components/CalendarHeatmap';
+import { CategoryDonut } from '../components/CategoryDonut';
+import { LineChart } from '../components/LineChart';
 import { formatMoney } from '../lib/format';
 import { haptics } from '../lib/telegram';
 
@@ -9,6 +12,7 @@ export interface StatsScreenProps {
   onPeriodChange: (period: StatsPeriod) => void;
   data: StatsResponse | undefined;
   loading: boolean;
+  heatmap: HeatmapResponse | undefined;
   currency: string;
   locale: string;
   today: string;
@@ -26,12 +30,12 @@ export function StatsScreen({
   onPeriodChange,
   data,
   loading,
+  heatmap,
   currency,
   locale,
   today,
   onOpenRecap,
 }: StatsScreenProps): JSX.Element {
-  const [openCategory, setOpenCategory] = useState<string | null>(null);
   const money = (cents: number) => formatMoney(cents, { currency, locale });
 
   const highlightKey =
@@ -41,8 +45,6 @@ export function StatsScreen({
     data && data.previousOutCents > 0
       ? Math.round(((data.outCents - data.previousOutCents) / data.previousOutCents) * 100)
       : null;
-
-  const categoryTotal = data?.byCategory.reduce((sum, row) => sum + row.outCents, 0) ?? 0;
 
   return (
     <div className="screen">
@@ -63,6 +65,15 @@ export function StatsScreen({
           </button>
         ))}
       </div>
+
+      <section className="card">
+        <div className="card__label">Last year at a glance</div>
+        {heatmap ? (
+          <CalendarHeatmap days={heatmap.days} currency={currency} locale={locale} />
+        ) : (
+          <div className="skeleton skeleton--short" />
+        )}
+      </section>
 
       {loading && !data ? (
         <div className="card">
@@ -125,51 +136,18 @@ export function StatsScreen({
             </section>
           )}
 
+          {period !== 'day' && (
+            <section className="card">
+              <LineChart data={data.series} currency={currency} locale={locale} />
+            </section>
+          )}
+
           <section className="card">
             <div className="card__label">Where it went</div>
             {data.byCategory.length === 0 ? (
               <p className="empty__body">Nothing spent in this period.</p>
             ) : (
-              <div className="catlist">
-                {data.byCategory.map((row) => {
-                  const share = categoryTotal > 0 ? row.outCents / categoryTotal : 0;
-                  const id = row.categoryId ?? 'none';
-                  return (
-                    <button
-                      type="button"
-                      className="cat"
-                      key={id}
-                      aria-expanded={openCategory === id}
-                      onClick={() => {
-                        haptics.tap();
-                        setOpenCategory(openCategory === id ? null : id);
-                      }}
-                    >
-                      <span className="cat__emoji" aria-hidden="true">
-                        {row.emoji}
-                      </span>
-                      <span className="cat__body">
-                        <span className="cat__top">
-                          <span className="cat__name">{row.name}</span>
-                          <span className="cat__amount">{money(row.outCents)}</span>
-                        </span>
-                        <span className="cat__meter">
-                          <span
-                            className={`cat__fill cat__fill--${row.colorToken}`}
-                            style={{ width: `${Math.max(2, share * 100)}%` }}
-                          />
-                        </span>
-                        {openCategory === id && (
-                          <span className="cat__detail">
-                            {Math.round(share * 100)}% of spending · {row.count}{' '}
-                            {row.count === 1 ? 'entry' : 'entries'}
-                          </span>
-                        )}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
+              <CategoryDonut data={data.byCategory} currency={currency} locale={locale} />
             )}
           </section>
         </>

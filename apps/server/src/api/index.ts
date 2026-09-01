@@ -37,6 +37,7 @@ import {
   updateSettingsSchema,
   updateTransactionSchema,
   type CategoriesResponse,
+  type HeatmapResponse,
   type Household as ApiHousehold,
   type HouseholdInviteResponse,
   type HouseholdResponse,
@@ -460,6 +461,29 @@ export function createApiRouter(ctx: AppContext, bot: SpendlygoBot): Hono<ApiEnv
     const anchor = (c.req.query('anchor') as IsoDate | undefined) ?? today;
 
     const body = await buildStats(ctx, activeHouseholdId(user), period, anchor);
+    return c.json(body);
+  });
+
+  // A rolling 53 weeks ending today, for the GitHub-style calendar heatmap —
+  // deliberately not calendar-year-aligned, so "long term" always means the
+  // last full year of activity rather than resetting on 1 January.
+  const HEATMAP_DAYS = 371;
+
+  api.get('/stats/heatmap', async (c) => {
+    const user = c.get('user');
+    const today = todayFor(ctx, user);
+    const from = addDays(today, -(HEATMAP_DAYS - 1));
+
+    const rows = await transactionsRepo.totalsByDay(ctx.db, activeHouseholdId(user), from, today);
+    const byDay = new Map(rows.map((row) => [row.day, row.outCents]));
+
+    const days: HeatmapResponse['days'] = [];
+    for (let offset = HEATMAP_DAYS - 1; offset >= 0; offset -= 1) {
+      const day = addDays(today, -offset);
+      days.push({ day, outCents: byDay.get(day) ?? 0 });
+    }
+
+    const body: HeatmapResponse = { from, to: today, days };
     return c.json(body);
   });
 

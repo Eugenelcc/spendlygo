@@ -36,10 +36,13 @@ export function TodayScreen({
           ? 'ahead'
           : 'ontrack';
 
-  // The ring shows today's allowance being used up, not the whole month — it
-  // is a today screen, and a month-scale ring barely moves after one coffee.
-  const usedToday =
-    sts.safeTodayCents > 0 ? Math.min(1, sts.spentTodayCents / sts.safeTodayCents) : 1;
+  // The ring shows today's allowance draining as it's used, not the whole
+  // month — it is a today screen, and a month-scale ring barely moves after
+  // one coffee. Full green = nothing spent yet; it empties toward the
+  // remaining figure shown in the middle, so an empty ring reads as "gone"
+  // rather than a full ring reading as "spent everything, nice job".
+  const remainingToday =
+    sts.safeTodayCents > 0 ? Math.max(0, 1 - sts.spentTodayCents / sts.safeTodayCents) : 0;
 
   // A 1-day "streak" isn't a streak yet — matches the threshold the bot uses.
   const streakWorthShowing = data.streak.current >= 2;
@@ -59,7 +62,7 @@ export function TodayScreen({
         <>
           <div className="hero">
             <Ring
-              progress={usedToday}
+              progress={remainingToday}
               tone={tone}
               label={`${money(sts.leftForTodayCents)} left to spend today`}
             >
@@ -136,8 +139,11 @@ export function TodayScreen({
           </span>
         </div>
         <Sparkline
-          values={data.recentDays.map((day) => day.outCents)}
-          label={`Spending over the last 7 days, ending today at ${money(sts.spentTodayCents)}`}
+          days={data.recentDays}
+          today={data.today}
+          currency={currency}
+          locale={locale}
+          label={`Spending over the last 7 days, ending today at ${money(sts.spentTodayCents)}. Tap a bar for that day's amount.`}
         />
       </section>
 

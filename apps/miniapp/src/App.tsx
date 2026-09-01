@@ -101,9 +101,18 @@ function Shell(): JSX.Element {
     enabled: tab === 'stats',
   });
 
+  const heatmap = useQuery({
+    queryKey: ['heatmap'],
+    queryFn: api.heatmap,
+    enabled: tab === 'stats',
+    staleTime: 5 * 60_000, // a year of history barely changes minute to minute
+  });
+
   const history = useQuery({
     queryKey: ['transactions'],
-    queryFn: () => api.transactions({ limit: 100 }),
+    // 200 is the server's own cap (transactionsRepo.list) — searching History
+    // should reach as far back as a single request can, not just the last 100.
+    queryFn: () => api.transactions({ limit: 200 }),
     enabled: tab === 'history',
   });
 
@@ -368,6 +377,7 @@ function Shell(): JSX.Element {
             onPeriodChange={setPeriod}
             data={stats.data}
             loading={stats.isPending}
+            heatmap={heatmap.data}
             currency={currency}
             locale={locale}
             today={today.data.today}

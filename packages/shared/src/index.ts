@@ -294,6 +294,15 @@ export const statsResponseSchema = z.object({
 });
 export type StatsResponse = z.infer<typeof statsResponseSchema>;
 
+// --- GET /api/stats/heatmap — a rolling year for the calendar heatmap ------
+
+export const heatmapResponseSchema = z.object({
+  from: isoDateSchema,
+  to: isoDateSchema,
+  days: z.array(z.object({ day: isoDateSchema, outCents: z.number().int().nonnegative() })),
+});
+export type HeatmapResponse = z.infer<typeof heatmapResponseSchema>;
+
 // --- GET /api/transactions/:id/photos (PRD F4) -------------------------
 
 export const photosResponseSchema = z.object({
