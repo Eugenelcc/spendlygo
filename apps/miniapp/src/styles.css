@@ -1131,6 +1131,25 @@ button {
   color: var(--text-hint);
   flex-shrink: 0;
 }
+.date-range__month {
+  text-align: center;
+}
+.date-range__step {
+  flex-shrink: 0;
+  width: 40px;
+  min-height: 40px;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: var(--bg-secondary);
+  color: var(--text);
+  font-size: 18px;
+  cursor: pointer;
+}
+.date-range__step:disabled {
+  color: var(--text-hint);
+  opacity: 0.5;
+  cursor: default;
+}
 
 .input {
   width: 100%;
