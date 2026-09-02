@@ -10,14 +10,17 @@ import type {
 import { GoalsSection } from '../components/GoalsSection';
 import { HouseholdSection } from '../components/HouseholdSection';
 import { RecurringForm } from '../components/RecurringForm';
-import { daysInMonth, formatMoney } from '../lib/format';
+import { daysInMonth, formatHour, formatMoney } from '../lib/format';
 import { haptics } from '../lib/telegram';
+
+const DIGEST_HOURS = Array.from({ length: 24 }, (_, hour) => hour);
 
 export interface SettingsScreenProps {
   me: MeResponse;
   busy: boolean;
   onSaveBudget: (cents: number | null) => void;
   onToggleDigest: (enabled: boolean) => void;
+  onSetDigestHour: (hour: number) => void;
   onToggleAlerts: (enabled: boolean) => void;
   categories: Category[];
   today: string;
@@ -61,6 +64,7 @@ export function SettingsScreen({
   busy,
   onSaveBudget,
   onToggleDigest,
+  onSetDigestHour,
   onToggleAlerts,
   categories,
   today,
@@ -238,7 +242,7 @@ export function SettingsScreen({
         <div className="card__label">Daily digest</div>
         <label className="toggle">
           <span>
-            Nightly summary at {String(user.digestHour).padStart(2, '0')}:00
+            Nightly summary
             <span className="toggle__hint">Plus a Sunday and end-of-month wrap-up</span>
           </span>
           <input
@@ -251,6 +255,25 @@ export function SettingsScreen({
           />
           <span className="toggle__track" aria-hidden="true" />
         </label>
+        <div className="field-row">
+          <span className="field-row__label">Send at</span>
+          <select
+            className="input"
+            value={user.digestHour}
+            disabled={!user.digestEnabled}
+            aria-label="Digest time"
+            onChange={(event) => {
+              haptics.select();
+              onSetDigestHour(Number(event.target.value));
+            }}
+          >
+            {DIGEST_HOURS.map((hour) => (
+              <option key={hour} value={hour}>
+                {formatHour(hour)}
+              </option>
+            ))}
+          </select>
+        </div>
       </section>
 
       <section className="card">

@@ -93,6 +93,13 @@ export function monthAbbrev(isoDate: string): string {
   return MONTH_NAMES[month - 1]?.slice(0, 3) ?? '';
 }
 
+/** "9:00 PM" from 21 — Settings' digest-hour picker. */
+export function formatHour(hour: number): string {
+  const period = hour < 12 ? 'AM' : 'PM';
+  const twelve = hour % 12 === 0 ? 12 : hour % 12;
+  return `${twelve}:00 ${period}`;
+}
+
 /** "August 2026" from "YYYY-MM" — History's month-picker caption. */
 export function formatMonthLabel(isoMonth: string): string {
   const [year, month] = isoMonth.split('-').map(Number);

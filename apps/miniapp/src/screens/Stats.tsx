@@ -1,5 +1,5 @@
 import type { JSX } from 'react';
-import type { HeatmapResponse, StatsPeriod, StatsResponse } from '@spendlygo/shared';
+import type { HeatmapResponse, StatsPeriod, StatsResponse, Transaction } from '@spendlygo/shared';
 import { BarChart } from '../components/BarChart';
 import { CalendarHeatmap } from '../components/CalendarHeatmap';
 import { CategoryDonut } from '../components/CategoryDonut';
@@ -17,6 +17,11 @@ export interface StatsScreenProps {
   locale: string;
   today: string;
   onOpenRecap: () => void;
+  selectedCategoryKey: string | null;
+  onSelectCategoryKey: (key: string | null) => void;
+  selectedCategoryTransactions: Transaction[] | undefined;
+  selectedCategoryLoading: boolean;
+  onSelectTransaction: (transaction: Transaction) => void;
 }
 
 const PERIODS: Array<{ value: StatsPeriod; label: string }> = [
@@ -35,6 +40,11 @@ export function StatsScreen({
   locale,
   today,
   onOpenRecap,
+  selectedCategoryKey,
+  onSelectCategoryKey,
+  selectedCategoryTransactions,
+  selectedCategoryLoading,
+  onSelectTransaction,
 }: StatsScreenProps): JSX.Element {
   const money = (cents: number) => formatMoney(cents, { currency, locale });
 
@@ -147,7 +157,16 @@ export function StatsScreen({
             {data.byCategory.length === 0 ? (
               <p className="empty__body">Nothing spent in this period.</p>
             ) : (
-              <CategoryDonut data={data.byCategory} currency={currency} locale={locale} />
+              <CategoryDonut
+                data={data.byCategory}
+                currency={currency}
+                locale={locale}
+                selectedKey={selectedCategoryKey}
+                onSelectKey={onSelectCategoryKey}
+                selectedTransactions={selectedCategoryTransactions}
+                selectedLoading={selectedCategoryLoading}
+                onSelectTransaction={onSelectTransaction}
+              />
             )}
           </section>
         </>

@@ -138,6 +138,9 @@ export interface ListOptions {
   to?: string;
   limit?: number;
   offset?: number;
+  /** The literal `"none"` means "uncategorised" (`categoryId IS NULL`) — the
+   * category donut's own "Uncategorised" slice has no real id to filter by. */
+  categoryId?: string;
 }
 
 export async function list(
@@ -148,6 +151,8 @@ export async function list(
   const filters = [scopedTo(householdId)];
   if (options.from) filters.push(gte(transactions.occurredOn, options.from));
   if (options.to) filters.push(lte(transactions.occurredOn, options.to));
+  if (options.categoryId === 'none') filters.push(isNull(transactions.categoryId));
+  else if (options.categoryId) filters.push(eq(transactions.categoryId, options.categoryId));
 
   const rows = await baseViewQuery(db)
     .where(and(...filters))

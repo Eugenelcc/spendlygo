@@ -196,6 +196,51 @@ describeIfDb('transactions API', () => {
     });
   });
 
+  describe('GET /api/transactions?categoryId=… (the category donut drill-down)', () => {
+    it('filters down to just that category', async () => {
+      const categories = await json(await app.request('/api/categories', { headers: auth(OWNER) }));
+      const food = categories.categories.find((c: { slug: string }) => c.slug === 'food');
+      const transport = categories.categories.find((c: { slug: string }) => c.slug === 'transport');
+
+      await post(OWNER, { direction: 'out', amountCents: 1200, categoryId: food.id });
+      await post(OWNER, { direction: 'out', amountCents: 800, categoryId: transport.id });
+
+      const body = await json(
+        await app.request(`/api/transactions?categoryId=${food.id}`, { headers: auth(OWNER) }),
+      );
+      expect(body.transactions).toHaveLength(1);
+      expect(body.transactions[0].categorySlug).toBe('food');
+    });
+
+    it('"none" means uncategorised, not a literal category id', async () => {
+      const categories = await json(await app.request('/api/categories', { headers: auth(OWNER) }));
+      const food = categories.categories.find((c: { slug: string }) => c.slug === 'food');
+
+      await post(OWNER, { direction: 'out', amountCents: 1200, categoryId: food.id });
+      // No note and no categoryId — the auto-guess (PRD F10.4) has nothing to
+      // go on and leaves this one genuinely uncategorised.
+      await post(OWNER, { direction: 'out', amountCents: 500 });
+
+      const body = await json(
+        await app.request('/api/transactions?categoryId=none', { headers: auth(OWNER) }),
+      );
+      expect(body.transactions).toHaveLength(1);
+      expect(body.transactions[0].categoryId).toBeNull();
+    });
+
+    it("never leaks another user's spending in that category", async () => {
+      const categories = await json(await app.request('/api/categories', { headers: auth(OWNER) }));
+      const food = categories.categories.find((c: { slug: string }) => c.slug === 'food');
+
+      await post(OTHER, { direction: 'out', amountCents: 1200, categoryId: food.id });
+
+      const body = await json(
+        await app.request(`/api/transactions?categoryId=${food.id}`, { headers: auth(OWNER) }),
+      );
+      expect(body.transactions).toHaveLength(0);
+    });
+  });
+
   describe('DELETE /api/transactions/:id', () => {
     it('soft-deletes and removes it from the totals', async () => {
       const created = await json(await post(OWNER, { direction: 'out', amountCents: 4200 }));

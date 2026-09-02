@@ -311,13 +311,14 @@ export function createApiRouter(ctx: AppContext, bot: SpendlygoBot): Hono<ApiEnv
 
   api.get('/transactions', async (c) => {
     const user = c.get('user');
-    const { from, to, limit, offset } = c.req.query();
+    const { from, to, limit, offset, categoryId } = c.req.query();
 
     const rows = await transactionsRepo.list(ctx.db, activeHouseholdId(user), {
       from,
       to,
       limit: limit ? Number(limit) : 50,
       offset: offset ? Number(offset) : 0,
+      categoryId,
     });
 
     const body: TransactionsResponse = {

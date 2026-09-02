@@ -108,6 +108,19 @@ function Shell(): JSX.Element {
     staleTime: 5 * 60_000, // a year of history barely changes minute to minute
   });
 
+  const [selectedCategoryKey, setSelectedCategoryKey] = useState<string | null>(null);
+  const categoryTransactions = useQuery({
+    queryKey: ['transactions', 'category', selectedCategoryKey, stats.data?.from, stats.data?.to],
+    queryFn: () =>
+      api.transactions({
+        categoryId: selectedCategoryKey as string,
+        from: stats.data?.from,
+        to: stats.data?.to,
+      }),
+    // Needs the period's exact bounds from `stats`, which load first.
+    enabled: selectedCategoryKey !== null && !!stats.data,
+  });
+
   const [historyPeriod, setHistoryPeriod] = useState<HistoryPeriod>('all');
   const [historyMonth, setHistoryMonth] = useState('');
   const [historyCustomFrom, setHistoryCustomFrom] = useState('');
@@ -418,7 +431,11 @@ function Shell(): JSX.Element {
         {tab === 'stats' && (
           <StatsScreen
             period={period}
-            onPeriodChange={setPeriod}
+            onPeriodChange={(next) => {
+              setPeriod(next);
+              // Last period's category selection may not exist in the new one.
+              setSelectedCategoryKey(null);
+            }}
             data={stats.data}
             loading={stats.isPending}
             heatmap={heatmap.data}
@@ -429,6 +446,11 @@ function Shell(): JSX.Element {
               setRecapPeriod(period === 'year' ? 'year' : 'month');
               setRecapOpen(true);
             }}
+            selectedCategoryKey={selectedCategoryKey}
+            onSelectCategoryKey={setSelectedCategoryKey}
+            selectedCategoryTransactions={categoryTransactions.data?.transactions}
+            selectedCategoryLoading={categoryTransactions.isPending}
+            onSelectTransaction={setSelected}
           />
         )}
 
@@ -457,6 +479,7 @@ function Shell(): JSX.Element {
             busy={settings.isPending}
             onSaveBudget={(cents) => settings.mutate({ monthlyBudgetCents: cents })}
             onToggleDigest={(enabled) => settings.mutate({ digestEnabled: enabled })}
+            onSetDigestHour={(hour) => settings.mutate({ digestHour: hour })}
             onToggleAlerts={(enabled) => settings.mutate({ alertsEnabled: enabled })}
             categories={categories.data?.categories ?? []}
             today={today.data.today}
