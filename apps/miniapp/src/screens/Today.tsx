@@ -10,6 +10,10 @@ export interface TodayScreenProps {
   data: TodayResponse;
   onSelectTransaction: (transaction: Transaction) => void;
   onSetBudget: () => void;
+  sparklineDay: string | null;
+  onSelectSparklineDay: (day: string | null) => void;
+  sparklineDayTransactions: Transaction[] | undefined;
+  sparklineDayLoading: boolean;
 }
 
 /**
@@ -21,6 +25,10 @@ export function TodayScreen({
   data,
   onSelectTransaction,
   onSetBudget,
+  sparklineDay,
+  onSelectSparklineDay,
+  sparklineDayTransactions,
+  sparklineDayLoading,
 }: TodayScreenProps): JSX.Element {
   const { safeToSpend: sts, currency, locale } = data;
   const money = (cents: number) => formatMoney(cents, { currency, locale });
@@ -143,7 +151,12 @@ export function TodayScreen({
           today={data.today}
           currency={currency}
           locale={locale}
-          label={`Spending over the last 7 days, ending today at ${money(sts.spentTodayCents)}. Tap a bar for that day's amount.`}
+          label={`Spending over the last 7 days, ending today at ${money(sts.spentTodayCents)}. Tap a bar to see that day's transactions.`}
+          selectedDay={sparklineDay}
+          onSelectDay={onSelectSparklineDay}
+          dayTransactions={sparklineDayTransactions}
+          dayTransactionsLoading={sparklineDayLoading}
+          onSelectTransaction={onSelectTransaction}
         />
       </section>
 

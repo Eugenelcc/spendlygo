@@ -77,6 +77,16 @@ export function isoWeekday(isoDate: string): number {
   return new Date(Date.UTC(year, month - 1, day)).getUTCDay();
 }
 
+/** `isoDate` shifted by `delta` days (negative goes back) — History's period filter. */
+export function addDays(isoDate: string, delta: number): string {
+  const { year, month, day } = parts(isoDate);
+  const shifted = new Date(Date.UTC(year, month - 1, day + delta));
+  const y = shifted.getUTCFullYear();
+  const m = String(shifted.getUTCMonth() + 1).padStart(2, '0');
+  const d = String(shifted.getUTCDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
 /** "Jan", "Feb", … — the heatmap's month ticks. */
 export function monthAbbrev(isoDate: string): string {
   const { month } = parts(isoDate);
