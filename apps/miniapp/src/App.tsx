@@ -108,7 +108,21 @@ function Shell(): JSX.Element {
     staleTime: 5 * 60_000, // a year of history barely changes minute to minute
   });
 
+  const [selectedCategoryKey, setSelectedCategoryKey] = useState<string | null>(null);
+  const categoryTransactions = useQuery({
+    queryKey: ['transactions', 'category', selectedCategoryKey, stats.data?.from, stats.data?.to],
+    queryFn: () =>
+      api.transactions({
+        categoryId: selectedCategoryKey as string,
+        from: stats.data?.from,
+        to: stats.data?.to,
+      }),
+    // Needs the period's exact bounds from `stats`, which load first.
+    enabled: selectedCategoryKey !== null && !!stats.data,
+  });
+
   const [historyPeriod, setHistoryPeriod] = useState<HistoryPeriod>('all');
+  const [historyMonth, setHistoryMonth] = useState('');
   const [historyCustomFrom, setHistoryCustomFrom] = useState('');
   const [historyCustomTo, setHistoryCustomTo] = useState('');
 
@@ -120,8 +134,16 @@ function Shell(): JSX.Element {
         return { from: todayIso, to: todayIso };
       case 'week':
         return { from: addDays(todayIso, -6), to: todayIso };
-      case 'month':
-        return { from: addDays(todayIso, -29), to: todayIso };
+      case 'month': {
+        const target = historyMonth || todayIso.slice(0, 7);
+        const from = `${target}-01`;
+        // day 0 of "next month" is the last day of `target` — clamped to
+        // today so the current month never asks for future dates.
+        const [year, monthNum] = target.split('-').map(Number);
+        const lastDay = new Date(Date.UTC(year ?? 1970, monthNum ?? 1, 0)).getUTCDate();
+        const to = `${target}-${String(lastDay).padStart(2, '0')}`;
+        return { from, to: to > todayIso ? todayIso : to };
+      }
       case 'custom':
         return historyCustomFrom && historyCustomTo
           ? { from: historyCustomFrom, to: historyCustomTo }
@@ -129,7 +151,7 @@ function Shell(): JSX.Element {
       default:
         return {};
     }
-  }, [historyPeriod, historyCustomFrom, historyCustomTo, todayIso]);
+  }, [historyPeriod, historyMonth, historyCustomFrom, historyCustomTo, todayIso]);
 
   const history = useQuery({
     // 200 is the server's own cap (transactionsRepo.list) — with no date
@@ -409,7 +431,11 @@ function Shell(): JSX.Element {
         {tab === 'stats' && (
           <StatsScreen
             period={period}
-            onPeriodChange={setPeriod}
+            onPeriodChange={(next) => {
+              setPeriod(next);
+              // Last period's category selection may not exist in the new one.
+              setSelectedCategoryKey(null);
+            }}
             data={stats.data}
             loading={stats.isPending}
             heatmap={heatmap.data}
@@ -420,6 +446,11 @@ function Shell(): JSX.Element {
               setRecapPeriod(period === 'year' ? 'year' : 'month');
               setRecapOpen(true);
             }}
+            selectedCategoryKey={selectedCategoryKey}
+            onSelectCategoryKey={setSelectedCategoryKey}
+            selectedCategoryTransactions={categoryTransactions.data?.transactions}
+            selectedCategoryLoading={categoryTransactions.isPending}
+            onSelectTransaction={setSelected}
           />
         )}
 
@@ -433,6 +464,8 @@ function Shell(): JSX.Element {
             onSelect={setSelected}
             period={historyPeriod}
             onPeriodChange={setHistoryPeriod}
+            month={historyMonth}
+            onMonthChange={setHistoryMonth}
             customFrom={historyCustomFrom}
             customTo={historyCustomTo}
             onCustomFromChange={setHistoryCustomFrom}
@@ -446,6 +479,7 @@ function Shell(): JSX.Element {
             busy={settings.isPending}
             onSaveBudget={(cents) => settings.mutate({ monthlyBudgetCents: cents })}
             onToggleDigest={(enabled) => settings.mutate({ digestEnabled: enabled })}
+            onSetDigestHour={(hour) => settings.mutate({ digestHour: hour })}
             onToggleAlerts={(enabled) => settings.mutate({ alertsEnabled: enabled })}
             categories={categories.data?.categories ?? []}
             today={today.data.today}

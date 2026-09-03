@@ -1,7 +1,7 @@
 import { useMemo, useState, type JSX } from 'react';
 import type { Transaction } from '@spendlygo/shared';
 import { TransactionRow } from '../components/TransactionRow';
-import { formatMoney, formatRelativeDate } from '../lib/format';
+import { formatMonthLabel, formatMoney, formatRelativeDate, shiftMonth } from '../lib/format';
 import { haptics } from '../lib/telegram';
 
 export type HistoryPeriod = 'all' | 'day' | 'week' | 'month' | 'custom';
@@ -10,7 +10,7 @@ const PERIODS: Array<{ value: HistoryPeriod; label: string }> = [
   { value: 'all', label: 'All' },
   { value: 'day', label: 'Today' },
   { value: 'week', label: 'Last 7 days' },
-  { value: 'month', label: 'Last 30 days' },
+  { value: 'month', label: 'Month' },
   { value: 'custom', label: 'Custom' },
 ];
 
@@ -23,6 +23,9 @@ export interface HistoryScreenProps {
   onSelect: (transaction: Transaction) => void;
   period: HistoryPeriod;
   onPeriodChange: (period: HistoryPeriod) => void;
+  /** "YYYY-MM", empty until touched — defaults to the current month. */
+  month: string;
+  onMonthChange: (value: string) => void;
   customFrom: string;
   customTo: string;
   onCustomFromChange: (value: string) => void;
@@ -48,6 +51,8 @@ export function HistoryScreen({
   onSelect,
   period,
   onPeriodChange,
+  month,
+  onMonthChange,
   customFrom,
   customTo,
   onCustomFromChange,
@@ -90,6 +95,8 @@ export function HistoryScreen({
 
   const filtering = search.trim() !== '' || categoryFilter !== null;
   const customIncomplete = period === 'custom' && (!customFrom || !customTo);
+  const todayMonth = today.slice(0, 7);
+  const activeMonth = month || todayMonth;
 
   // A brand-new user with nothing logged at all, ever — the only case that
   // earns the full centered empty state; any period/filter narrowing an
@@ -154,6 +161,42 @@ export function HistoryScreen({
           </button>
         ))}
       </div>
+
+      {period === 'month' && (
+        <div className="date-range">
+          <button
+            type="button"
+            className="date-range__step"
+            aria-label="Previous month"
+            onClick={() => {
+              haptics.tap();
+              onMonthChange(shiftMonth(activeMonth, -1));
+            }}
+          >
+            ‹
+          </button>
+          <input
+            type="month"
+            className="input date-range__month"
+            value={activeMonth}
+            max={todayMonth}
+            aria-label={`Month, currently ${formatMonthLabel(activeMonth)}`}
+            onChange={(event) => event.target.value && onMonthChange(event.target.value)}
+          />
+          <button
+            type="button"
+            className="date-range__step"
+            aria-label="Next month"
+            disabled={activeMonth >= todayMonth}
+            onClick={() => {
+              haptics.tap();
+              onMonthChange(shiftMonth(activeMonth, 1));
+            }}
+          >
+            ›
+          </button>
+        </div>
+      )}
 
       {period === 'custom' && (
         <div className="date-range">

@@ -93,6 +93,26 @@ export function monthAbbrev(isoDate: string): string {
   return MONTH_NAMES[month - 1]?.slice(0, 3) ?? '';
 }
 
+/** "9:00 PM" from 21 — Settings' digest-hour picker. */
+export function formatHour(hour: number): string {
+  const period = hour < 12 ? 'AM' : 'PM';
+  const twelve = hour % 12 === 0 ? 12 : hour % 12;
+  return `${twelve}:00 ${period}`;
+}
+
+/** "August 2026" from "YYYY-MM" — History's month-picker caption. */
+export function formatMonthLabel(isoMonth: string): string {
+  const [year, month] = isoMonth.split('-').map(Number);
+  return `${MONTH_NAMES[(month ?? 1) - 1] ?? ''} ${year ?? ''}`.trim();
+}
+
+/** `isoMonth` ("YYYY-MM") shifted by `delta` whole months. */
+export function shiftMonth(isoMonth: string, delta: number): string {
+  const [year, month] = isoMonth.split('-').map(Number);
+  const shifted = new Date(Date.UTC(year ?? 1970, (month ?? 1) - 1 + delta, 1));
+  return `${shifted.getUTCFullYear()}-${String(shifted.getUTCMonth() + 1).padStart(2, '0')}`;
+}
+
 export function formatLongDate(isoDate: string): string {
   const { year, month, day } = parts(isoDate);
   const weekday = DAY_NAMES[new Date(Date.UTC(year, month - 1, day)).getUTCDay()] ?? '';
