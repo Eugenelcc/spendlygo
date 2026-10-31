@@ -27,6 +27,8 @@ import { StatsScreen } from './screens/Stats';
 import { HistoryScreen, type HistoryPeriod } from './screens/History';
 import { SettingsScreen } from './screens/Settings';
 import { addDays, formatMoney } from './lib/format';
+import { CycleStepper } from './features/history/CycleStepper';
+import { useHistoryCycle } from './features/history/use-history-cycle';
 
 type Tab = 'today' | 'stats' | 'history' | 'settings';
 
@@ -127,6 +129,13 @@ function Shell(): JSX.Element {
   const [historyCustomTo, setHistoryCustomTo] = useState('');
 
   const todayIso = today.data?.today;
+  const cycleStartDay = today.data?.cycle?.startDay ?? me.data?.cycle?.startDay ?? 1;
+  const [historyCycleAnchor, setHistoryCycleAnchor] = useState<string | undefined>(undefined);
+  const historyCycle = useHistoryCycle({
+    enabled: tab === 'history' && historyPeriod === 'month' && cycleStartDay !== 1,
+    anchor: historyCycleAnchor,
+    today: todayIso,
+  });
   const historyRange = useMemo<{ from?: string; to?: string }>(() => {
     if (!todayIso) return {};
     switch (historyPeriod) {
@@ -135,6 +144,11 @@ function Shell(): JSX.Element {
       case 'week':
         return { from: addDays(todayIso, -6), to: todayIso };
       case 'month': {
+        if (cycleStartDay !== 1) {
+          return historyCycle.from && historyCycle.to
+            ? { from: historyCycle.from, to: historyCycle.to }
+            : {};
+        }
         const target = historyMonth || todayIso.slice(0, 7);
         const from = `${target}-01`;
         // day 0 of "next month" is the last day of `target` — clamped to
@@ -151,7 +165,16 @@ function Shell(): JSX.Element {
       default:
         return {};
     }
-  }, [historyPeriod, historyMonth, historyCustomFrom, historyCustomTo, todayIso]);
+  }, [
+    historyPeriod,
+    historyMonth,
+    historyCustomFrom,
+    historyCustomTo,
+    todayIso,
+    cycleStartDay,
+    historyCycle.from,
+    historyCycle.to,
+  ]);
 
   const history = useQuery({
     // 200 is the server's own cap (transactionsRepo.list) — with no date
@@ -470,6 +493,16 @@ function Shell(): JSX.Element {
             customTo={historyCustomTo}
             onCustomFromChange={setHistoryCustomFrom}
             onCustomToChange={setHistoryCustomTo}
+            cycleStartDay={cycleStartDay}
+            cycleStepper={
+              <CycleStepper
+                label={historyCycle.label}
+                loading={historyCycle.isPending}
+                canGoNext={historyCycle.canGoNext}
+                onPrevious={() => setHistoryCycleAnchor(historyCycle.prevAnchor)}
+                onNext={() => setHistoryCycleAnchor(historyCycle.nextAnchor)}
+              />
+            }
           />
         )}
 
@@ -599,6 +632,7 @@ function Shell(): JSX.Element {
           onChangePeriod={setRecapPeriod}
           currency={currency}
           locale={locale}
+          cycleStartDay={cycleStartDay}
         />
       </Sheet>
 

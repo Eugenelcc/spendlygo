@@ -7,16 +7,22 @@
  */
 
 import {
-  addMonths,
+  cycleContaining,
+  formatCycleRange,
   monthName,
-  monthRange,
   parseIsoDate,
+  previousCycle,
   yearRange,
   type IsoDate,
 } from '@spendlygo/core';
 import type { User } from '@spendlygo/db';
 import type { AppContext } from '../context.js';
-import { computePeriodStats, computeStreak, type PeriodStats } from './service.js';
+import {
+  activeSpaceSettings,
+  computePeriodStats,
+  computeStreak,
+  type PeriodStats,
+} from './service.js';
 
 export type RecapPeriod = 'month' | 'year';
 
@@ -29,8 +35,8 @@ export interface RecapData {
   streak: { current: number; longest: number };
 }
 
-function rangeFor(period: RecapPeriod, anchor: IsoDate) {
-  const { year, month } = parseIsoDate(anchor);
+function rangeFor(period: RecapPeriod, anchor: IsoDate, cycleStartDay: number) {
+  const { year } = parseIsoDate(anchor);
 
   if (period === 'year') {
     const range = yearRange(year);
@@ -44,16 +50,18 @@ function rangeFor(period: RecapPeriod, anchor: IsoDate) {
     };
   }
 
-  const range = monthRange(year, month);
-  const previousAnchor = addMonths(range.start, -1);
-  const previousParts = parseIsoDate(previousAnchor);
-  const previousRange = monthRange(previousParts.year, previousParts.month);
+  // The budget cycle containing the anchor (F17); start day 1 is the calendar month.
+  const cycle = cycleContaining(anchor, cycleStartDay);
+  const previous = previousCycle(cycle);
   return {
-    from: range.start,
-    to: range.end,
-    previousFrom: previousRange.start,
-    previousTo: previousRange.end,
-    label: `${monthName(month)} ${year}`,
+    from: cycle.start,
+    to: cycle.end,
+    previousFrom: previous.start,
+    previousTo: previous.end,
+    label:
+      cycleStartDay === 1
+        ? `${monthName(parseIsoDate(cycle.start).month)} ${parseIsoDate(cycle.start).year}`
+        : formatCycleRange(cycle),
   };
 }
 
@@ -69,7 +77,8 @@ export async function buildRecap(
   anchor: IsoDate,
   today: IsoDate,
 ): Promise<RecapData> {
-  const range = rangeFor(period, anchor);
+  const { cycleStartDay } = await activeSpaceSettings(ctx, user);
+  const range = rangeFor(period, anchor, cycleStartDay);
   // A recap of a period still in progress must not read past today —
   // spending "dated in the future" can't exist, but the safe-to-spend figure
   // inside computePeriodStats still needs a real "as of" date.

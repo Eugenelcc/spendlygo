@@ -30,6 +30,10 @@ export interface HistoryScreenProps {
   customTo: string;
   onCustomFromChange: (value: string) => void;
   onCustomToChange: (value: string) => void;
+  /** The space's cycle start day (F17); 1 keeps the calendar month picker. */
+  cycleStartDay: number;
+  /** The cycle stepper shown instead of the month picker when the start day isn't 1. */
+  cycleStepper: JSX.Element | null;
 }
 
 interface CategoryOption {
@@ -57,6 +61,8 @@ export function HistoryScreen({
   customTo,
   onCustomFromChange,
   onCustomToChange,
+  cycleStartDay,
+  cycleStepper,
 }: HistoryScreenProps): JSX.Element {
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
@@ -147,7 +153,10 @@ export function HistoryScreen({
       </div>
 
       <div className="chip-row" role="group" aria-label="Filter by date">
-        {PERIODS.map((option) => (
+        {PERIODS.map((option) => ({
+          ...option,
+          label: option.value === 'month' && cycleStartDay !== 1 ? 'Cycle' : option.label,
+        })).map((option) => (
           <button
             type="button"
             key={option.value}
@@ -162,7 +171,9 @@ export function HistoryScreen({
         ))}
       </div>
 
-      {period === 'month' && (
+      {period === 'month' && cycleStartDay !== 1 && cycleStepper}
+
+      {period === 'month' && cycleStartDay === 1 && (
         <div className="date-range">
           <button
             type="button"

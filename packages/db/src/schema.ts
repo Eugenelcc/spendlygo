@@ -386,8 +386,10 @@ export const budgetPeriods = pgTable(
 
 /**
  * One row per (user, month, threshold) crossed, so a threshold is announced
- * once per month no matter how many times the hourly tick re-checks it —
+ * once per cycle no matter how many times the hourly tick re-checks it —
  * the same idempotency shape as recurring_runs (GUARDRAILS.md section 3).
+ * `year`/`month` are the calendar month the budget cycle ends in (F17); for a
+ * calendar-month cycle, that month.
  */
 export const budgetAlerts = pgTable(
   'budget_alerts',

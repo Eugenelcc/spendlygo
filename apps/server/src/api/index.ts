@@ -1,13 +1,14 @@
 import { Hono } from 'hono';
 import {
   addDays,
-  addMonths,
-  daysInMonth,
+  cycleContaining,
+  daysBetween,
+  formatCycleRange,
   inferCategorySlug,
   isoDateOf,
   monthName,
-  monthRange,
   parseIsoDate,
+  previousCycle,
   toIsoDate,
   ValidationError,
   yearRange,
@@ -30,6 +31,7 @@ import {
   createRecurringRuleSchema,
   createSavingsGoalSchema,
   createTransactionSchema,
+  isoDateSchema,
   recapPeriodSchema,
   statsPeriodSchema,
   switchSpaceBodySchema,
@@ -54,7 +56,7 @@ import {
   type TodayResponse,
   type TransactionsResponse,
 } from '@spendlygo/shared';
-import { NotFoundError, cycleContaining } from '@spendlygo/core';
+import { NotFoundError } from '@spendlygo/core';
 import type { SpendlygoBot } from '../bot/index.js';
 import type { AppContext } from '../context.js';
 import { requireInitData, type ApiEnv } from '../middleware/auth.js';
@@ -470,9 +472,10 @@ export function createApiRouter(ctx: AppContext, bot: SpendlygoBot): Hono<ApiEnv
     const user = c.get('user');
     const today = todayFor(ctx, user);
     const period = statsPeriodSchema.parse(c.req.query('period') ?? 'month');
-    const anchor = (c.req.query('anchor') as IsoDate | undefined) ?? today;
+    const anchor = parseAnchor(c.req.query('anchor')) ?? today;
+    const { cycleStartDay } = await activeSpaceSettings(ctx, user);
 
-    const body = await buildStats(ctx, activeHouseholdId(user), period, anchor);
+    const body = await buildStats(ctx, activeHouseholdId(user), period, anchor, cycleStartDay);
     return c.json(body);
   });
 
@@ -727,11 +730,21 @@ async function guessCategoryId(
   return all.find((c) => c.slug === slug)?.id ?? null;
 }
 
+/** A malformed or impossible anchor (2026-02-30) is a 400, not a silent roll-over. */
+function parseAnchor(raw: string | undefined): IsoDate | undefined {
+  if (raw === undefined) return undefined;
+  const parsed = isoDateSchema.safeParse(raw);
+  if (!parsed.success) throw new ValidationError('anchor must be a valid YYYY-MM-DD date');
+  parseIsoDate(parsed.data); // throws ValidationError for impossible dates
+  return parsed.data as IsoDate;
+}
+
 async function buildStats(
   ctx: AppContext,
   householdId: string,
   period: 'day' | 'month' | 'year',
   anchor: IsoDate,
+  cycleStartDay: number,
 ): Promise<StatsResponse> {
   const { year, month, day } = parseIsoDate(anchor);
 
@@ -748,17 +761,17 @@ async function buildStats(
     previousFrom = addDays(anchor, -1);
     previousTo = previousFrom;
   } else if (period === 'month') {
-    const range = monthRange(year, month);
-    from = range.start;
-    to = range.end;
-    label = `${monthName(month)} ${year}`;
-    const previousAnchor = addMonths(range.start, -1);
-    const previousRange = monthRange(
-      parseIsoDate(previousAnchor).year,
-      parseIsoDate(previousAnchor).month,
-    );
-    previousFrom = previousRange.start;
-    previousTo = previousRange.end;
+    // The budget cycle containing the anchor (F17); start day 1 is the calendar month.
+    const cycle = cycleContaining(anchor, cycleStartDay);
+    const previous = previousCycle(cycle);
+    from = cycle.start;
+    to = cycle.end;
+    label =
+      cycleStartDay === 1
+        ? `${monthName(parseIsoDate(cycle.start).month)} ${parseIsoDate(cycle.start).year}`
+        : formatCycleRange(cycle);
+    previousFrom = previous.start;
+    previousTo = previous.end;
   } else {
     const range = yearRange(year);
     from = range.start;
@@ -774,7 +787,7 @@ async function buildStats(
     transactionsRepo.totalsForPeriod(ctx.db, householdId, previousFrom, previousTo),
   ]);
 
-  const series = await buildSeries(ctx, householdId, period, from, to, year, month);
+  const series = await buildSeries(ctx, householdId, period, from, to, year);
 
   return {
     period,
@@ -809,7 +822,6 @@ async function buildSeries(
   from: IsoDate,
   to: IsoDate,
   year: number,
-  month: number,
 ): Promise<StatsResponse['series']> {
   if (period === 'year') {
     const rows = await transactionsRepo.totalsByMonth(ctx.db, householdId, from, to);
@@ -842,13 +854,14 @@ async function buildSeries(
     ];
   }
 
-  const total = daysInMonth(year, month);
+  // One bucket per day of the cycle, labelled with the day of the month.
+  const total = daysBetween(from, to) + 1;
   return Array.from({ length: total }, (_, index) => {
-    const key = toIsoDate({ year, month, day: index + 1 });
+    const key = addDays(from, index);
     const row = byDay.get(key);
     return {
       key,
-      label: String(index + 1),
+      label: String(parseIsoDate(key).day),
       outCents: row?.outCents ?? 0,
       inCents: row?.inCents ?? 0,
     };

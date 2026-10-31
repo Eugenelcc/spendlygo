@@ -10,6 +10,8 @@ export interface RecapCardProps {
   onChangePeriod: (period: RecapPeriod) => void;
   currency: string;
   locale: string;
+  /** The space's cycle start day (F17); the first tab reads "This cycle" unless it is 1. */
+  cycleStartDay: number;
 }
 
 /**
@@ -25,6 +27,7 @@ export function RecapCard({
   onChangePeriod,
   currency,
   locale,
+  cycleStartDay,
 }: RecapCardProps): JSX.Element {
   const money = (cents: number) => formatMoney(cents, { currency, locale, hideZeroCents: true });
 
@@ -43,7 +46,7 @@ export function RecapCard({
               onChangePeriod(option);
             }}
           >
-            {option === 'month' ? 'This month' : 'This year'}
+            {option === 'month' ? (cycleStartDay === 1 ? 'This month' : 'This cycle') : 'This year'}
           </button>
         ))}
       </div>

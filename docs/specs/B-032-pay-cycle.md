@@ -938,30 +938,32 @@ the plan should say so.**
 | P1-AC25 | `apps/server/src/bot/capture.test.ts` › `the confirmation card with a pay cycle (F17) › says "this cycle" when over budget with a non-calendar cycle` | ❌ failing (expected) (its day-1 assertions already hold) | ✅ |
 | P1-AC26 | Screenshot check (Q8 A), no automated test | n/a | ⏭ not screenshotted (see Build notes) |
 | P1-AC27 | `apps/server/src/api/pay-cycle.test.ts` › `PATCH /api/settings › an unknown key is a 400 and changes nothing (strict schema)` | ❌ failing (expected) (returns 200 today) | ✅ |
-| P2-AC1 | `apps/server/src/api/pay-cycle.test.ts` › `GET /api/stats › month view is the day-20 cycle with 31 day buckets` | ❌ failing (expected) (still the calendar month) | |
-| P2-AC2 | `apps/server/src/api/pay-cycle.test.ts` › `GET /api/stats › day 1 month view is unchanged` | ✅ passes before build (regression guard) | |
-| P2-AC3 | `apps/server/src/api/pay-cycle.test.ts` › `GET /api/stats › anchors either side of a cycle step exactly one cycle, re-grouped by the current start day` | ❌ failing (expected) | |
-| P2-AC4 | `apps/server/src/api/pay-cycle.test.ts` › `GET /api/stats › rejects unauthenticated and a bad anchor; a stranger sees only their own month` | ✅ passes before build (regression guard) (401, 400 and isolation already hold) | |
-| P2-AC5 | `apps/server/src/api/pay-cycle.test.ts` › `GET /api/stats › the year view stays the calendar year with a day-20 cycle` | ✅ passes before build (regression guard) | |
-| P2-AC6 | `apps/server/src/api/recap.test.ts` › `buildRecap with a pay cycle (F17) › a month recap follows the cycle and stops at today` | ❌ failing (expected) | |
-| P2-AC7 | `apps/server/src/api/recap.test.ts` › `buildRecap with a pay cycle (F17) › a year recap stays the calendar year with a day-20 cycle` | ✅ passes before build (regression guard) | |
-| P2-AC8 | `apps/server/src/bot/commands/recap.test.ts` › `recapFooter › says "this cycle" only when the start day isn't 1` | ❌ failing (expected) (`recapFooter` missing) | |
-| P2-AC9 | `apps/server/src/tasks/digest-periods.test.ts` › `isMonthlyDigestDay with a cycle › day 20 fires on the 19th, including across the new year` | ❌ failing (expected) | |
-| P2-AC10 | `apps/server/src/tasks/digest-periods.test.ts` › `isMonthlyDigestDay with a cycle › day 31 fires on 27 Feb (common) and 28 Feb (leap)` | ❌ failing (expected) | |
-| P2-AC11 | `apps/server/src/tasks/digest-periods.test.ts` › `isMonthlyDigestDay with a cycle › day 1 matches the calendar month end (the existing no-argument tests are untouched)` | ✅ passes before build (regression guard) | |
-| P2-AC12 | `apps/server/src/tasks/digest.test.ts` › `the digest family › buildMonthlyDigest › names the cycle range and totals only the cycle` | ❌ failing (expected) | |
-| P2-AC13 | `apps/server/src/tasks/digest.test.ts` › `the digest family › sendDueDigests › sends the monthly digest on the cycle's last day, not the calendar month end` | ❌ failing (expected) | |
-| P2-AC14 | `apps/server/src/tasks/alerts.test.ts` › `pay cycle (F17) › spend before the cycle start does not count` | ✅ passes before build (regression guard) (Part 1 already counts only the cycle's spend) | |
-| P2-AC15 | `apps/server/src/tasks/alerts.test.ts` › `pay cycle (F17) › a double-fired tick sends the 80% alert once per cycle` | ✅ passes before build (regression guard) (the alert key is still wrong, but one message is sent) | |
-| P2-AC16 | `apps/server/src/tasks/alerts.test.ts` › `pay cycle (F17) › thresholds re-arm in the next cycle` | ❌ failing (expected) (key is October, not the month the cycle ends in) | |
-| P2-AC17 | `apps/server/src/tasks/alerts.test.ts` › `pay cycle (F17) › the 100% text names the cycle range` | ❌ failing (expected) | |
-| P2-AC18 | `apps/server/src/tasks/alerts.test.ts` › `pay cycle (F17) › a day-1 row written before B-032 still suppresses the repeat` | ✅ passes before build (regression guard) | |
-| P2-AC19 | `apps/server/src/tasks/alerts.test.ts` › `pay cycle (F17) › switching 1 → 20 after an October alert still alerts in the new cycle` | ❌ failing (expected) | |
-| P2-AC20 | `apps/server/src/tasks/alerts.test.ts` › `pay cycle (F17) › documented limitation: switching 20 → 1 on 25 Oct skips October's 80% alert once` | ✅ passes before build (regression guard) (the limitation coincides with today's calendar-month key) | |
-| P2-AC21 | `apps/server/src/tasks/alerts.test.ts` › `pay cycle (F17) › flipping through every start day on one date never sends a threshold twice` | ❌ failing (expected) (1 message today, expected 2) | |
-| P2-AC22 | Screenshot check (Q8 A), no automated test: History Cycle chip and arrows, day 20 and day 1 | n/a | |
-| P2-AC23 | Screenshot check (Q8 A), no automated test: Stats month tab and recap card, day 20 and day 1 | n/a | |
-| (helper) | `packages/core/src/cycle.test.ts` › `cycleAlertKey (B-032 Part 2, Q2 A)` (2 tests: month the cycle ends in; 36 distinct keys per start day) | ❌ failing (expected) (`cycleAlertKey` missing) | |
+| P2-AC1 | `apps/server/src/api/pay-cycle.test.ts` › `GET /api/stats › month view is the day-20 cycle with 31 day buckets` | ❌ failing (expected) (still the calendar month) |  ✅ |
+| P2-AC2 | `apps/server/src/api/pay-cycle.test.ts` › `GET /api/stats › day 1 month view is unchanged` | ✅ passes before build (regression guard) |  ✅ |
+| P2-AC3 | `apps/server/src/api/pay-cycle.test.ts` › `GET /api/stats › anchors either side of a cycle step exactly one cycle, re-grouped by the current start day` | ❌ failing (expected) |  ✅ |
+| P2-AC4 | `apps/server/src/api/pay-cycle.test.ts` › `GET /api/stats › rejects unauthenticated and a bad anchor; a stranger sees only their own month` | ✅ passes before build (regression guard) (401, 400 and isolation already hold) |  ✅ |
+| P2-AC5 | `apps/server/src/api/pay-cycle.test.ts` › `GET /api/stats › the year view stays the calendar year with a day-20 cycle` | ✅ passes before build (regression guard) |  ✅ |
+| P2-AC6 | `apps/server/src/api/recap.test.ts` › `buildRecap with a pay cycle (F17) › a month recap follows the cycle and stops at today` | ❌ failing (expected) |  ✅ |
+| P2-AC7 | `apps/server/src/api/recap.test.ts` › `buildRecap with a pay cycle (F17) › a year recap stays the calendar year with a day-20 cycle` | ✅ passes before build (regression guard) |  ✅ |
+| P2-AC8 | `apps/server/src/bot/commands/recap.test.ts` › `recapFooter › says "this cycle" only when the start day isn't 1` | ❌ failing (expected) (`recapFooter` missing) |  ✅ |
+| P2-AC9 | `apps/server/src/tasks/digest-periods.test.ts` › `isMonthlyDigestDay with a cycle › day 20 fires on the 19th, including across the new year` | ❌ failing (expected) |  ✅ |
+| P2-AC10 | `apps/server/src/tasks/digest-periods.test.ts` › `isMonthlyDigestDay with a cycle › day 31 fires on 27 Feb (common) and 28 Feb (leap)` | ❌ failing (expected) |  ✅ |
+| P2-AC11 | `apps/server/src/tasks/digest-periods.test.ts` › `isMonthlyDigestDay with a cycle › day 1 matches the calendar month end (the existing no-argument tests are untouched)` | ✅ passes before build (regression guard) |  ✅ |
+| P2-AC12 | `apps/server/src/tasks/digest.test.ts` › `the digest family › buildMonthlyDigest › names the cycle range and totals only the cycle` | ❌ failing (expected) |  ✅ |
+| P2-AC13 | `apps/server/src/tasks/digest.test.ts` › `the digest family › sendDueDigests › sends the monthly digest on the cycle's last day, not the calendar month end` | ❌ failing (expected) |  ✅ |
+| P2-AC14 | `apps/server/src/tasks/alerts.test.ts` › `pay cycle (F17) › spend before the cycle start does not count` | ✅ passes before build (regression guard) (Part 1 already counts only the cycle's spend) |  ✅ |
+| P2-AC15 | `apps/server/src/tasks/alerts.test.ts` › `pay cycle (F17) › a double-fired tick sends the 80% alert once per cycle` | ✅ passes before build (regression guard) (the alert key is still wrong, but one message is sent) |  ✅ |
+| P2-AC16 | `apps/server/src/tasks/alerts.test.ts` › `pay cycle (F17) › thresholds re-arm in the next cycle` | ❌ failing (expected) (key is October, not the month the cycle ends in) |  ✅ |
+| P2-AC17 | `apps/server/src/tasks/alerts.test.ts` › `pay cycle (F17) › the 100% text names the cycle range` | ❌ failing (expected) |  ✅ |
+| P2-AC18 | `apps/server/src/tasks/alerts.test.ts` › `pay cycle (F17) › a day-1 row written before B-032 still suppresses the repeat` | ✅ passes before build (regression guard) |  ✅ |
+| P2-AC19 | `apps/server/src/tasks/alerts.test.ts` › `pay cycle (F17) › switching 1 → 20 after an October alert still alerts in the new cycle` | ❌ failing (expected) |  ✅ |
+| P2-AC20 | `apps/server/src/tasks/alerts.test.ts` › `pay cycle (F17) › documented limitation: switching 20 → 1 on 25 Oct skips October's 80% alert once` | ✅ passes before build (regression guard) (the limitation coincides with today's calendar-month key) |  ✅ |
+| P2-AC21 | `apps/server/src/tasks/alerts.test.ts` › `pay cycle (F17) › flipping through every start day on one date never sends a threshold twice` | ❌ failing (expected) (1 message today, expected 2) |  ✅ |
+| P2-AC22 | Screenshot check (Q8 A), no automated test: History Cycle chip and arrows, day 20 and day 1 | n/a |  ⏭ UI built; screenshot pending (main session) |
+| P2-AC23 | Screenshot check (Q8 A), no automated test: Stats month tab and recap card, day 20 and day 1 | n/a |  ⏭ UI built; screenshot pending (main session) |
+| (helper) | `packages/core/src/cycle.test.ts` › `cycleAlertKey (B-032 Part 2, Q2 A)` (2 tests: month the cycle ends in; 36 distinct keys per start day) | ❌ failing (expected) (`cycleAlertKey` missing) |  ✅ |
+
+**Checks (Part 2, after build):** typecheck ✓ lint ✓ test 524 passed / 0 failed (`pnpm ci:local` passed, 524 tests).
 
 **Checks (Part 2, before build):** 524 tests: 510 passed, 14 failed. All 14 failures are new Part 2 tests, each failing for the right reason (missing function or behaviour); the 9 other new tests are day-1 or already-true regression guards. All 501 pre-existing tests pass. Amounts asserted in the app's `$` form.
 
@@ -980,6 +982,9 @@ the plan should say so.**
   - day 20, $15,000: label still on **one line** (card head 23px tall in every case, so finding 3's wrap risk didn't happen)
   - day 20, no budget: the "No budget yet" card
   API figures were checked by hand (e.g. ($350 − $138.50) ÷ 19 = $11.13; the ring shows what's left today after today's $12.50). The PNGs were shared with the owner in the session; they're not committed to the repo.
+- **Part 2 build:** Deviations: `currentCycle` was removed from `service.ts` in the Part 1 tidy-up, so I re-added it (plan listed it as existing; used by `buildMonthlyDigest`). `/stats` anchor check uses `isoDateSchema` + `parseIsoDate` in a small `parseAnchor` helper in `api/index.ts`. The `/recap` bot footer and Mini App wire `cycleStartDay` from `activeSpaceSettings` / `today.cycle`. History `Cycle` stepper in `features/history/` (new `features/` dir). While the cycle query is pending, `historyRange` is `{}` (loads the unfiltered list briefly). No migration, dependency or API shape added. Docs updated: PRD F7/F9.5/F13.2-3 (limitation)/F16.1/F17.5, `apps/server/CLAUDE.md` gotcha, ADR 0007 (alert key + History sections), schema/alerts-repo doc comments.
+- **Part 2 screenshots to take (P2-AC22/23), start day 20 and 1, light + dark, 375px:** History > Cycle chip (label "Cycle", `20 Oct – 19 Nov` stepper, 20-31 Oct rows, next arrow disabled on the current cycle, previous goes to `20 Sep – 19 Oct`); day 1 History > "Month" picker unchanged; Stats month tab heading (`20 Oct – 19 Nov` vs `October 2026`); Recap sheet first tab ("This cycle" vs "This month").
+- **Part 2 parked:** none.
 - **Parked ideas:** none
 - **Follow-up (review finding 1, perf):** the active space is loaded once per request and passed through (`computeSafeToSpend` takes optional `settings`); independent queries run in `Promise.all`. Sequential DB stages after auth: `/api/today` 3 to 2 (settings runs alongside list/recent/streak, then all totals in parallel; 1 is impossible while the cycle start depends on the space row), text and photo-OCR captures 2 to 1 (settings runs alongside the category lookup or the insert), `/api/me` reads the space 3 times to 2 (both reads in one parallel stage; `loadHouseholdView` reads it too). Behaviour identical; `ci:local` green, 501 tests. The now-unused `currentCycle` was removed in the re-review tidy-up.
 

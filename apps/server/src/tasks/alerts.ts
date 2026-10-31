@@ -3,14 +3,20 @@
  * digest hour) so a threshold crossed at any moment gets flagged promptly.
  *
  * Regardless of category, per the user's own scoping — this watches total
- * month-to-date spend against the whole budget, not any one category.
+ * cycle-to-date spend against the whole budget, not any one category.
  *
  * GUARDRAILS.md section 3: `alertsRepo.recordIfNew` is the idempotency guard.
  * Every tick re-evaluates every threshold for every user; a threshold already
- * announced this month is a no-op, so a double-fired tick cannot double-alert.
+ * announced for this cycle's key is a no-op, so a double-fired tick cannot double-alert.
  */
 
-import { formatCents, parseIsoDate, type AmountCents, type IsoDate } from '@spendlygo/core';
+import {
+  cycleAlertKey,
+  formatCents,
+  formatCycleRange,
+  type AmountCents,
+  type IsoDate,
+} from '@spendlygo/core';
 import { alertsRepo, usersRepo, type User } from '@spendlygo/db';
 import type { Bot } from 'grammy';
 import { computeSafeToSpend, todayFor } from '../api/service.js';
@@ -44,7 +50,9 @@ async function checkOne(ctx: AppContext, bot: Bot<BotContext>, user: User): Prom
   if (!result.hasBudget) return 0;
 
   const usedPct = result.budgetUsedRatio * 100;
-  const { year, month } = parseIsoDate(today);
+  // Once per cycle, keyed by the calendar month the cycle ENDS in (Q2 A). Moving the
+  // start day can skip one threshold once; it can never double-send (B-032, PRD F13).
+  const { year, month } = cycleAlertKey(result.cycle);
   const already = await alertsRepo.sentThisMonth(ctx.db, user.id, year, month);
 
   let sent = 0;
@@ -92,7 +100,9 @@ function buildAlertText(
 
   if (threshold >= 100) {
     return [
-      `🔴 *Budget spent* — you're ${money(result.overspentCents)} over for ${escapeMarkdown(today.slice(0, 7))}`,
+      `🔴 *Budget spent* — you're ${money(result.overspentCents)} over for ${escapeMarkdown(
+        result.cycle.startDay === 1 ? today.slice(0, 7) : formatCycleRange(result.cycle),
+      )}`,
       '',
       `${money(result.spentMonthToDateCents)} of ${money(result.budgetCents ?? (0 as AmountCents))} spent, ${result.daysRemaining} days left.`,
     ].join('\n');

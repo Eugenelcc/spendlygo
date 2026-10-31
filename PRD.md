@@ -296,7 +296,7 @@ sequence, `Σ safeToSpend` over the month never exceeds `budget`.
 | View | Contents |
 |---|---|
 | **Daily** | Spent today vs today's allowance (ring), today's transactions, 7-day sparkline |
-| **Monthly** | Total in/out/net, category donut, day-by-day bars, top 5 merchants/notes, vs last month |
+| **Monthly** | Total in/out/net, category donut, day-by-day bars, top 5 merchants/notes, vs last month. Follows the budget cycle (F17); with a start day other than 1 it is a day-20-style range, with one bar per day of the cycle. Yearly stays a calendar year |
 | **Yearly** | 12-month bars, yearly totals, category trend, best & worst month, average monthly burn |
 
 **Rules**
@@ -338,7 +338,7 @@ sequence, `Σ safeToSpend` over the month never exceeds `budget`.
 - **F9.3** One message. Never a thread.
 - **F9.4** Fully disableable, and the "you logged nothing today" nudge is
   separately disableable. It must not become nagware.
-- **F9.5** Weekly (Sunday) and monthly (last day) variants add period summaries.
+- **F9.5** Weekly (Sunday) and monthly (last day of the budget cycle, F17) variants add period summaries.
 
 ---
 
@@ -399,13 +399,21 @@ they behave identically everywhere: capture, safe-to-spend, stats, export.
 A warning that arrives when it matters, not just at digest time.
 
 - **F13.1** Checked on **every hourly tick**, not only at the digest hour.
-- **F13.2** Two thresholds: **80%** and **100%** of the month's budget, based on
-  total month-to-date spend (the same figure safe-to-spend uses). Alerts don't
+- **F13.2** Two thresholds: **80%** and **100%** of the cycle's budget (F17), based on
+  total cycle-to-date spend (the same figure safe-to-spend uses). Alerts don't
   depend on category.
-- **F13.3** Each threshold is announced **once per month**. Idempotency comes
-  from `budget_alerts`, unique on `(user_id, year, month, threshold_pct)`. The
+- **F13.3** Each threshold is announced **once per cycle**. Idempotency comes
+  from `budget_alerts`, unique on `(user_id, year, month, threshold_pct)`, where
+  `year`/`month` are the calendar month the cycle **ends** in (for start day 1,
+  the calendar month, so older rows still match). The
   record is reserved before sending and released if delivery fails, so a later
   tick retries.
+  **Known limitation (B-032, owner decision):** after the start day moves
+  *earlier*, or *later before the new day has arrived*, the new cycle can end in
+  a month whose threshold was already used under the old rule, so that threshold
+  is skipped once in that cycle. It never sends the same threshold twice, and
+  the next cycle alerts normally. A similar overlap already exists because
+  alerts are keyed by user, not space.
 - **F13.4** No budget set → no alerts.
 - **F13.5** Disableable on its own via `users.alerts_enabled`, independent of
   the digest.
@@ -457,7 +465,7 @@ figure.
 A shareable wrap-up the user asks for, unlike the digest, which is a quiet
 scheduled nudge.
 
-- **F16.1** `/recap` for this month and `/recap year` for this year. The Mini
+- **F16.1** `/recap` for this month (this budget cycle when the start day is not 1, F17) and `/recap year` for this (calendar) year. The Mini
   App has a recap card too.
 - **F16.2** Built from the same period stats as F7 (in/out/net, categories,
   comparison with the previous period) plus the streak (F15). Aggregated in
@@ -484,7 +492,10 @@ it, so safe-to-spend resets when the salary lands. B-032; ADR 0007.
   not 1; the plain month name when it is 1.
 - **F17.5** Part 1 delivers the cycle maths, safe-to-spend, `/api/today` and
   `/api/me`, the bot's `/today` and capture confirmations, and the Today card.
-  Stats, digests, alerts, export and setting the day follow in later parts.
+  Part 2 delivers the Stats month view, History's "Cycle" chip, recap and
+  `/recap` footer, the monthly digest (last day of the cycle) and budget alerts
+  (F13.3). Year views stay calendar years. Export and setting the day follow
+  in later parts.
 
 ---
 

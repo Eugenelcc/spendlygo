@@ -8,7 +8,7 @@
 import { formatCents, type AmountCents } from '@spendlygo/core';
 import type { AppContext } from '../../context.js';
 import { buildRecap, type RecapPeriod } from '../../api/recap.js';
-import { todayFor } from '../../api/service.js';
+import { activeSpaceSettings, todayFor } from '../../api/service.js';
 import { openAppKeyboard } from '../keyboards.js';
 import { escapeMarkdown as escape } from '../markdown.js';
 import type { BotContext } from '../middleware.js';
@@ -30,6 +30,16 @@ function formatDayLabel(date: string): string {
     'Dec',
   ];
   return `${day} ${names[(month ?? 1) - 1]}`;
+}
+
+/** The closing hint line. Year view offers the current budget period; "cycle" wording only off start day 1. */
+export function recapFooter(period: RecapPeriod, cycleStartDay: number): string {
+  if (period === 'year') {
+    return cycleStartDay === 1
+      ? '`/recap` for this month instead'
+      : '`/recap` for this cycle instead';
+  }
+  return '`/recap year` for the whole year';
 }
 
 export async function handleRecap(ctx: AppContext, botCtx: BotContext): Promise<void> {
@@ -84,10 +94,7 @@ export async function handleRecap(ctx: AppContext, botCtx: BotContext): Promise<
     lines.push('', `🔥 Longest streak: ${recap.streak.longest} days`);
   }
 
-  lines.push(
-    '',
-    period === 'year' ? '`/recap` for this month instead' : '`/recap year` for the whole year',
-  );
+  lines.push('', recapFooter(period, (await activeSpaceSettings(ctx, user)).cycleStartDay));
 
   await botCtx.reply(lines.join('\n'), {
     parse_mode: 'Markdown',

@@ -86,3 +86,14 @@ function shortDate(date: IsoDate): string {
 export function formatCycleRange(range: DateRange): string {
   return `${shortDate(range.start)} – ${shortDate(range.end)}`;
 }
+
+/**
+ * The alert key of a cycle (PRD F13, Q2 A): the calendar year and month the
+ * cycle ENDS in. For start day 1 that is the calendar month itself, so rows
+ * written before F17 still match. For a fixed start day every cycle ends in a
+ * different month, so the key is unique per cycle.
+ */
+export function cycleAlertKey(cycle: BudgetCycle): { year: number; month: number } {
+  const { year, month } = parseIsoDate(cycle.end);
+  return { year, month };
+}

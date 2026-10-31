@@ -10,18 +10,24 @@
 
 import {
   addDays,
-  addMonths,
-  daysInMonth,
+  DEFAULT_CYCLE_START_DAY,
   formatCents,
+  formatCycleRange,
+  isLastDayOfCycle,
   isoWeekday,
   monthName,
-  monthRange,
   parseIsoDate,
+  previousCycle,
   type AmountCents,
   type IsoDate,
 } from '@spendlygo/core';
 import { recurringRepo, type User } from '@spendlygo/db';
-import { computePeriodStats, computeSafeToSpend, computeStreak } from '../api/service.js';
+import {
+  computePeriodStats,
+  computeSafeToSpend,
+  computeStreak,
+  currentCycle,
+} from '../api/service.js';
 import { escapeMarkdown } from '../bot/markdown.js';
 import type { AppContext } from '../context.js';
 
@@ -216,9 +222,12 @@ export async function buildWeeklyDigest(
 
 // --- monthly -------------------------------------------------------------
 
-export function isMonthlyDigestDay(today: IsoDate): boolean {
-  const { year, month, day } = parseIsoDate(today);
-  return day === daysInMonth(year, month);
+/** The last day of the space's budget cycle (F17); start day 1 is the calendar month's last day. */
+export function isMonthlyDigestDay(
+  today: IsoDate,
+  startDay: number = DEFAULT_CYCLE_START_DAY,
+): boolean {
+  return isLastDayOfCycle(today, startDay);
 }
 
 export async function buildMonthlyDigest(
@@ -226,18 +235,18 @@ export async function buildMonthlyDigest(
   user: User,
   today: IsoDate,
 ): Promise<DigestContent> {
-  const { year, month } = parseIsoDate(today);
-  const range = monthRange(year, month);
-  const previousAnchor = addMonths(range.start, -1);
-  const previousParts = parseIsoDate(previousAnchor);
-  const previousRange = monthRange(previousParts.year, previousParts.month);
+  const cycle = await currentCycle(ctx, user, today);
+  const previous = previousCycle(cycle);
 
   return buildPeriodSummary(ctx, user, {
-    heading: monthName(month) || 'This month',
-    from: range.start,
+    heading:
+      cycle.startDay === 1
+        ? monthName(parseIsoDate(cycle.start).month) || 'This month'
+        : formatCycleRange(cycle),
+    from: cycle.start,
     to: today,
-    previousFrom: previousRange.start,
-    previousTo: previousRange.end,
+    previousFrom: previous.start,
+    previousTo: previous.end,
   });
 }
 
