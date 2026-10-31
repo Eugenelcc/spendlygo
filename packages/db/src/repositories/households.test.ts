@@ -9,7 +9,7 @@
  * (both partners tapping a shared link at once).
  */
 
-import { eq, inArray } from 'drizzle-orm';
+import { eq, inArray, sql } from 'drizzle-orm';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { createDatabase, schema, usersRepo, type DatabaseHandle } from '../index.js';
 import { JoinHouseholdError } from './households.js';
@@ -341,6 +341,44 @@ describeIfDb('households', () => {
 
       const reread = await householdsRepo.findById(handle.db, household.id);
       expect(reread?.monthlyBudgetCents).toBe(200_000);
+    });
+  });
+  describe('cycle start day', () => {
+    it('defaults to 1 and the CHECK rejects 0 and 32', async () => {
+      const creator = await makeUser(CREATOR_TELEGRAM_ID);
+      const household = await householdsRepo.create(handle.db, creator.id);
+      expect(household.cycleStartDay).toBe(1);
+
+      for (const bad of [0, 32]) {
+        await expect(
+          handle.db.execute(
+            sql`UPDATE households SET cycle_start_day = ${bad} WHERE id = ${household.id}`,
+          ),
+        ).rejects.toThrow(/households_cycle_start_day_ck/);
+      }
+      const reread = await householdsRepo.findById(handle.db, household.id);
+      expect(reread?.cycleStartDay).toBe(1);
+    });
+
+    it('updateCycleStartDay reports whether it changed anything', async () => {
+      const creator = await makeUser(CREATOR_TELEGRAM_ID);
+      const household = await householdsRepo.create(handle.db, creator.id);
+
+      await expect(householdsRepo.updateCycleStartDay(handle.db, household.id, 20)).resolves.toBe(
+        true,
+      );
+      const afterFirst = await householdsRepo.findById(handle.db, household.id);
+      expect(afterFirst?.cycleStartDay).toBe(20);
+
+      await expect(householdsRepo.updateCycleStartDay(handle.db, household.id, 20)).resolves.toBe(
+        false,
+      );
+      const afterSecond = await householdsRepo.findById(handle.db, household.id);
+      expect(afterSecond?.updatedAt.getTime()).toBe(afterFirst?.updatedAt.getTime());
+
+      await expect(
+        householdsRepo.updateCycleStartDay(handle.db, '00000000-0000-4000-8000-000000000000', 20),
+      ).rejects.toThrow(/No household/);
     });
   });
 });

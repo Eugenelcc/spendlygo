@@ -79,3 +79,14 @@ describe('the confirmation card (PRD F1.5)', () => {
     expect(card({ amountCents: centsOf(1_250_000) as AmountCents })).toContain('12,500.00');
   });
 });
+
+describe('the confirmation card with a pay cycle (F17)', () => {
+  it('says "this cycle" when over budget with a non-calendar cycle', () => {
+    const over = { overspentCents: centsOf(4210), leftForTodayCents: centsOf(0) };
+    expect(card({ ...over, cycleStartDay: 20 })).toContain('over budget this cycle');
+    expect(card({ ...over, cycleStartDay: 20 })).not.toContain('this month');
+    // Start day 1 (or no start day at all) keeps today's wording.
+    expect(card({ ...over, cycleStartDay: 1 })).toContain('over budget this month');
+    expect(card({ ...over })).toContain('over budget this month');
+  });
+});

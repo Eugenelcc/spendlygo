@@ -908,9 +908,36 @@ the plan should say so.**
 
 | AC | Test file › test name | Before build | After build |
 |---|---|---|---|
-| AC1 | | ❌ failing (expected) | |
+| P1-AC1 | `packages/core/src/cycle.test.ts` › `start day 1 is exactly the calendar month for every date 2024–2028` | ❌ failing (expected) (module missing) | |
+| P1-AC2 | `packages/core/src/cycle.test.ts` › `day 20: 31 Oct, first day and last day are in 20 Oct – 19 Nov; 19 Oct is in the previous cycle` | ❌ failing (expected) | |
+| P1-AC3 | `packages/core/src/cycle.test.ts` › `days 29–31 clamp to 28 Feb in a common year` | ❌ failing (expected) | |
+| P1-AC4 | `packages/core/src/cycle.test.ts` › `days 29–31 and 20 in leap February 2028` | ❌ failing (expected) | |
+| P1-AC5 | `packages/core/src/cycle.test.ts` › `day 31 starts on the 30th in 30-day months` | ❌ failing (expected) | |
+| P1-AC6 | `packages/core/src/cycle.test.ts` › `a day-20 cycle spans the new year` | ❌ failing (expected) | |
+| P1-AC7 | `packages/core/src/cycle.test.ts` › `cycles tile with no gaps or overlaps for every start day 1–31` | ❌ failing (expected) | |
+| P1-AC8 | `packages/core/src/cycle.test.ts` › `rejects a start day outside 1–31 or not an integer` | ❌ failing (expected) | |
+| P1-AC9 | `packages/core/src/cycle.test.ts` › `formats a cycle as "20 Oct – 19 Nov", with no year` | ❌ failing (expected) | |
+| P1-AC10 | `packages/core/src/cycle.test.ts` › `GUARDRAILS §9: 00:30 on the start day belongs to the new cycle` | ❌ failing (expected) | |
+| P1-AC11 | `packages/core/src/safe-to-spend.test.ts` › `pay cycles (F17) › first day of a cycle splits the budget across the whole cycle` | ❌ failing (expected) | |
+| P1-AC12 | `packages/core/src/safe-to-spend.test.ts` › `pay cycles (F17) › last day of a cycle gets the whole remainder` | ❌ failing (expected) | |
+| P1-AC13 | `packages/core/src/safe-to-spend.test.ts` › `pay cycles (F17) › a calendar-month cycle gives exactly the old result` | ✅ passes before build (regression guard) | |
+| P1-AC14 | `packages/core/src/safe-to-spend.test.ts` › `pay cycles (F17) › Σ daily allowance ≤ budget over every cycle shape` | ❌ failing (expected) (cycle.ts missing) | |
+| P1-AC15 | `packages/core/src/safe-to-spend.test.ts` › `pay cycles (F17) › zero budget and overspend inside a cycle` | ✅ passes before build (regression guard: `cycle` is ignored, and today 2026-11-01 is a calendar month the old path handles identically) | |
+| P1-AC16 | `packages/core/src/safe-to-spend.test.ts` › `pay cycles (F17) › rejects a today outside the cycle` | ❌ failing (expected) | |
+| P1-AC17 | `packages/db/src/repositories/households.test.ts` › `cycle start day › defaults to 1 and the CHECK rejects 0 and 32` | ❌ failing (expected) (column missing) | |
+| P1-AC28 | `packages/db/src/repositories/households.test.ts` › `cycle start day › updateCycleStartDay reports whether it changed anything` | ❌ failing (expected) (function missing) | |
+| P1-AC18 | `apps/server/src/api/pay-cycle.test.ts` › `GET /api/today › owner's example: day 20 counts from 20 Oct` | ❌ failing (expected) | |
+| P1-AC19 | `apps/server/src/api/pay-cycle.test.ts` › `GET /api/today › day 1 is the calendar month, unchanged` | ❌ failing (expected) (the numbers already match; fails on the new `cycle` field) | |
+| P1-AC20 | `apps/server/src/api/pay-cycle.test.ts` › `GET /api/today › a 00:30 entry on the start day is in the new cycle` | ❌ failing (expected) | |
+| P1-AC21 | `apps/server/src/api/pay-cycle.test.ts` › `GET /api/today › a shared space's members share its cycle; switching spaces switches cycle` | ❌ failing (expected) | |
+| P1-AC22 | `apps/server/src/api/pay-cycle.test.ts` › `GET /api/today › rejects unauthenticated, and a stranger never gets another space's cycle` | ❌ failing (expected) | |
+| P1-AC23 | `apps/server/src/api/pay-cycle.test.ts` › `GET /api/me › returns the current cycle` (plus an unauthenticated 401 case that passes today) | ❌ failing (expected) | |
+| P1-AC24 | `apps/server/src/bot/commands/money.test.ts` › `/today text › names the cycle range for day 20 and is unchanged for day 1` | ❌ failing (expected) (`buildTodayText` missing) | |
+| P1-AC25 | `apps/server/src/bot/capture.test.ts` › `the confirmation card with a pay cycle (F17) › says "this cycle" when over budget with a non-calendar cycle` | ❌ failing (expected) (its day-1 assertions already hold) | |
+| P1-AC26 | Screenshot check (Q8 A), no automated test | n/a | |
+| P1-AC27 | `apps/server/src/api/pay-cycle.test.ts` › `PATCH /api/settings › an unknown key is a 400 and changes nothing (strict schema)` | ❌ failing (expected) (returns 200 today) | |
 
-**Checks:** <!-- one line, e.g. typecheck ✓ · lint ✓ · test 312 passed / 154 skipped -->
+**Checks (Part 1, before build):** test 472 passed, 15 failed (+ `cycle.test.ts` fails to load: `./cycle.js` missing). All 15 failures and the load failure are new Part 1 tests; every pre-existing test passes.
 **Screenshots:** <!-- UI changes: light + dark at 375px, attached to the PR — or "n/a" -->
 
 ---
