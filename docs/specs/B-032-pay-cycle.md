@@ -948,7 +948,12 @@ the plan should say so.**
 ## Build notes (Stage 4)
 
 - **Deviations from plan:** none in code. **Blocker, not edited:** `money.test.ts` (P1-AC24) asserts `S$50.00 of S$1,500.00` for user `{currency:'SGD', locale:'en-SG'}`, but `formatCents` (unchanged) renders `$50.00` for `en-SG` on Node 22 (`en-US` would give `SGD 50.00`; only the `S$` in `money.test.ts` is wrong; `core/money.test.ts` `S$12.50` is parsing). `buildTodayText` produces `20 Oct – 19 Nov: $50.00 of $1,500.00` and day 1 `This month: $50.00 …` as intended. Planner/test-writer must fix the expected string (e.g. `$50.00 of $1,500.00`) or the user fixture locale.
-- **Screenshots (P1-AC26):** not taken: the Today screen needs `/api/today` and there is no API/DB wired to a preview here; the change is copy only (heading/`received this cycle`). Not faked.
+- **Screenshots (P1-AC26):** taken by the main session on 2026-11-01 (SGT), after the review, against the **real stack**: the branch's server on the local test Postgres, the built Mini App via `vite preview`, and a properly signed `initData` from a throwaway local bot token (never sent to Telegram). Data: seeded expenses plus a $3,000 salary on 21 Oct. 4 scenarios × light/dark at 375px:
+  - day 1, $350: "THIS MONTH · $12.50 of $350.00 · 30 days left"
+  - day 20, $350: "20 OCT – 19 NOV · $138.50 of $350.00 · 19 days left · $3,000.00 received this cycle"
+  - day 20, $15,000: label still on **one line** (card head 23px tall in every case, so finding 3's wrap risk didn't happen)
+  - day 20, no budget: the "No budget yet" card
+  API figures were checked by hand (e.g. ($350 − $138.50) ÷ 19 = $11.13; the ring shows what's left today after today's $12.50). The PNGs were shared with the owner in the session; they're not committed to the repo.
 - **Parked ideas:** none
 - **Follow-up (review finding 1, perf):** the active space is loaded once per request and passed through (`computeSafeToSpend` takes optional `settings`); independent queries run in `Promise.all`. Sequential DB stages after auth: `/api/today` 3 to 2 (settings runs alongside list/recent/streak, then all totals in parallel; 1 is impossible while the cycle start depends on the space row), text and photo-OCR captures 2 to 1 (settings runs alongside the category lookup or the insert), `/api/me` reads the space 2 times to 1. Behaviour identical; `ci:local` green, 501 tests. Parked: `currentCycle` in `service.ts` is now unused.
 
@@ -1016,7 +1021,7 @@ suites ran), build ✓, Mini App bundle 86.1 KB gz (43% of budget).
 | P1-AC18–AC23 | `apps/server/src/api/pay-cycle.test.ts` | Yes. Exact numbers from the spec, 00:30 SGT via a real POST without a date, shared space + switch, 401 + a stranger who would see 20 if leaked |
 | P1-AC24 | `apps/server/src/bot/commands/money.test.ts` | Partly (finding 2) |
 | P1-AC25 | `apps/server/src/bot/capture.test.ts` › `the confirmation card with a pay cycle (F17)` | Yes |
-| P1-AC26 | Screenshot check | **Not done** (finding 3) |
+| P1-AC26 | Screenshot check | ✅ done after review: real stack, 4 scenarios × light/dark at 375px, no wrap (see Build notes) |
 | P1-AC27 | `pay-cycle.test.ts` › `PATCH /api/settings › an unknown key is a 400…` | Yes. The budget is re-read and unchanged |
 
 **Plan fidelity.** Every Part 1 file in the plan was touched as described,
