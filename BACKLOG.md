@@ -144,6 +144,10 @@ Parked ideas. Not agreed, not scheduled. Promote one only by agreement.
 |---|---|---|
 | B-013 | Voice-note capture | PRD §5.2, v2. Needs a zero-cost speech-to-text option first (GUARDRAILS §1). |
 | B-014 | Multi-currency + FX | PRD §5.2, v3. |
+| B-038 | `RUNBOOK.md`: deploy, roll back, health checks, common failures (Supabase paused, webhook broken, CI billing lock) | Owner chose 2026-10-31 (industry "running it" set). Grill first |
+| B-039 | `docs/postmortems/`: blameless write-ups after real incidents; the first candidate is the 2026 CI billing lock | Owner chose 2026-10-31. Grill first |
+| B-040 | `CHANGELOG.md` (Keep a Changelog), possibly generated from Conventional Commits | Owner chose 2026-10-31. Grill first |
+| B-041 | Definition of Ready in WORKFLOW.md: what a task needs before building starts | Owner chose 2026-10-31. Mostly covered by the grilling recap; grill first |
 | B-028 | Change timezone from the bot or Mini App | Needs a validated IANA list and a decision on how already-stored `occurred_on` dates are treated. Parked at B-004 approval; `/settings` shows timezone read-only. |
 
 ## Drift & debt
