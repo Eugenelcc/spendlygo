@@ -204,6 +204,19 @@ describeIfDb('HTTP surface', () => {
     });
   });
 
+  describe('CORS', () => {
+    it('exposes Content-Disposition so the Mini App can read the export file name', async () => {
+      const response = await buildApp(makeConfig()).request('/api/me', {
+        headers: { Origin: MINIAPP_URL },
+      });
+      const exposed = (response.headers.get('Access-Control-Expose-Headers') ?? '')
+        .toLowerCase()
+        .split(',')
+        .map((h) => h.trim());
+      expect(exposed).toContain('content-disposition');
+    });
+  });
+
   describe('GET /api/categories', () => {
     it('returns the seeded defaults', async () => {
       const response = await buildApp(makeConfig()).request('/api/categories', {

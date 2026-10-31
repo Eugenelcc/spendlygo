@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom';
 import { useEffect, useRef, type JSX, type ReactNode } from 'react';
 
 export interface SheetProps {
@@ -38,13 +39,16 @@ export function Sheet({ open, onClose, title, children }: SheetProps): JSX.Eleme
 
   if (!open) return null;
 
-  return (
+  // Portal to <body>: an ancestor with a transform/overflow would otherwise trap
+  // `position: fixed` (the Export sheet inside Settings rendered clipped).
+  return createPortal(
     <div className="sheet" role="dialog" aria-modal="true" aria-label={title}>
       <button className="sheet__scrim" onClick={onClose} aria-label="Close" type="button" />
       <div className="sheet__panel" ref={panelRef} tabIndex={-1}>
         <div className="sheet__grip" aria-hidden="true" />
         {children}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

@@ -686,6 +686,7 @@ unauthenticated test and a cross-user test.
 | P3-AC15 | `export.test.ts` (bot) › `/export cycle sends one file named by dates with a range caption` |
 | P3-AC16 | `pay-cycle.test.ts` › `GET /api/me › also returns the previous cycle` |
 | P3-AC17 | Screenshot check: the export sheet, day 20 and day 1 |
+| P3-AC17a (defect) | `apps/server/src/app.test.ts` › `CORS › exposes Content-Disposition so the Mini App can read the export file name` — ❌ failing before fix (a97faa9) → ✅ after fa11ffe |
 | P4-AC1 | `pay-cycle.test.ts` › `PATCH /api/settings › owner's example: setting day 20 on 31 Oct moves Today to 20 Oct – 19 Nov` |
 | P4-AC2 | `pay-cycle.test.ts` › `PATCH /api/settings › rejects 0, 32, 1.5 and "20" without changing anything` |
 | P4-AC3 | `pay-cycle.test.ts` › `PATCH /api/settings › either member of a shared space can change it` |
@@ -962,6 +963,30 @@ the plan should say so.**
 | P2-AC22 | Screenshot check (Q8 A), no automated test: History Cycle chip and arrows, day 20 and day 1 | n/a | ✅ real-stack screenshots 2026-11-01: day 20 "Cycle" chip, `20 Oct – 19 Nov`, Next disabled on the current cycle, Previous → `20 Sep – 19 Oct` (18 Oct shoes, 7 Oct grab); day 1 "Month" + "November 2026" picker unchanged |
 | P2-AC23 | Screenshot check (Q8 A), no automated test: Stats month tab and recap card, day 20 and day 1 | n/a | ✅ real-stack screenshots 2026-11-01: Stats month heading `20 Oct – 19 Nov`, $138.50 vs $173.00 → "20% less", bars 20…19; recap tab "This cycle" (day 20) / "This month" (day 1) |
 | (helper) | `packages/core/src/cycle.test.ts` › `cycleAlertKey (B-032 Part 2, Q2 A)` (2 tests: month the cycle ends in; 36 distinct keys per start day) | ❌ failing (expected) (`cycleAlertKey` missing) |  ✅ |
+| P3-AC1 | `apps/server/src/api/export-range.test.ts` › `parseExportRange › no argument is still everything, named spendlygo-all-time.csv` | ❌ failing (expected) (no `filename` yet) |  ✅ |
+| P3-AC2 | `apps/server/src/api/export-range.test.ts` › `"cycle" is this cycle, named with exact dates` | ❌ failing (expected) |  ✅ |
+| P3-AC3 | `apps/server/src/api/export-range.test.ts` › `"last cycle" in any spacing or case is the previous cycle` | ❌ failing (expected) |  ✅ |
+| P3-AC4 | `apps/server/src/api/export-range.test.ts` › `day 1: this and last cycle are labelled with month names` | ❌ failing (expected) |  ✅ |
+| P3-AC5 | `apps/server/src/api/export-range.test.ts` › `YYYY-MM is always the calendar month, whatever the start day` | ❌ failing (expected) (no `filename`) |  ✅ |
+| P3-AC6 | `apps/server/src/api/export-range.test.ts` › `YYYY is the calendar year and YYYY-MM-DD a single day, named with exact dates` | ❌ failing (expected) |  ✅ |
+| P3-AC7 | `apps/server/src/api/export-range.test.ts` › `a custom from..to range is inclusive; reversed or malformed is null` | ❌ failing (expected) |  ✅ |
+| P3-AC8 | `apps/server/src/api/export-range.test.ts` › `ranges spanning New Year carry both years in the label` | ❌ failing (expected) |  ✅ |
+| P3-AC9 | `apps/server/src/api/export.test.ts` › `GET /api/export with pay cycles (F17) › no range still exports everything, whatever the start day` | ✅ passes before build (regression guard) |  ✅ |
+| P3-AC10 | `apps/server/src/api/export.test.ts` › `GET /api/export with pay cycles (F17) › cycle and last-cycle follow the start day and name the file by dates` | ❌ failing (expected) (400) |  ✅ |
+| P3-AC11 | `apps/server/src/api/export.test.ts` › `GET /api/export with pay cycles (F17) › a custom from..to range is inclusive; reversed is a 400` | ❌ failing (expected) (400 on valid range) |  ✅ |
+| P3-AC12 | existing `rejects an unauthenticated request` and `never includes another user's transactions` (unchanged, pass), plus `apps/server/src/api/export.test.ts` › `GET /api/export with pay cycles (F17) › range=cycle never includes another user's transactions` | ❌ failing (expected) |  ✅ |
+| P3-AC13 | `apps/server/src/bot/commands/export.test.ts` › `exportUsageText › the usage hint lists everything, cycle, last cycle, year and month` (plus DB: `an unknown argument replies with the usage hint for the space cycle`) | ❌ failing (expected) (`exportUsageText` missing) |  ✅ |
+| P3-AC14 | `apps/server/src/bot/commands/export.test.ts` › `/export (DB) › an empty last cycle says nothing was logged for its range` | ❌ failing (expected) |  ✅ |
+| P3-AC15 | `apps/server/src/bot/commands/export.test.ts` › `/export (DB) › /export cycle sends one file named by dates with a range caption` | ❌ failing (expected) |  ✅ |
+| P3-AC16 | `apps/server/src/api/pay-cycle.test.ts` › `GET /api/me › also returns the previous cycle` | ❌ failing (expected) |  ✅ |
+| P3-AC17 | Screenshot check (Q8 A), no automated test: the export sheet, day 20 and day 1 | n/a | ✅ real-stack check 2026-11-01: 5 options in order, Everything preselected, captions `20 Oct – 19 Nov` / `20 Sep – 19 Oct` (day 1: "This month · November", "Last month · October"), custom Download disabled until from ≤ to, real downloads named `spendlygo_2026-10-20_to_2026-11-19.csv` (5 rows), `spendlygo_2026-09-20_to_2026-10-19.csv` (2), `spendlygo-all-time.csv` (7), `spendlygo_2026-10-05_to_2026-10-24.csv` (4); light and dark, 375px |
+| (helper) | `packages/core/src/cycle.test.ts` › `formatDateRangeWithYears (B-032 Part 3)` | ❌ failing (expected) (export missing) |  ✅ |
+| (guard) | `apps/server/src/bot/commands/export.test.ts` › `/export (DB) › /export with no argument still sends everything, as today` | ✅ passes before build (regression guard) |  ✅ |
+| (guard) | `export-range.test.ts` › `anything else is null` | ✅ passes before build (regression guard) |  ✅ |
+
+**Checks (Part 3, before build):** 544 tests: 527 passed, 17 failed (14 `parseExportRange`/bot/API/`/me` plus the core helper; all fail for the missing feature). The 3 passing new tests are the guards marked above. No existing test asserts the old `spendlygo-2026-10.csv` name, so none conflicts with the owner's file-name decision.
+
+**Checks (Part 3, after build):** typecheck ✓ (after the test-helper type fix) lint ✓ test 544 passed / 0 failed; ci:local passed.
 
 **Checks (Part 2, after build):** typecheck ✓ lint ✓ test 524 passed / 0 failed (`pnpm ci:local` passed, 524 tests).
 
@@ -987,12 +1012,18 @@ the plan should say so.**
 - **Part 2 screenshots taken** by the main session on 2026-11-01 (SGT): real stack (the branch server on the local test Postgres, the built Mini App, a signed `initData` from a throwaway local token), light and dark at 375px. The `/api/stats` month figures were checked by hand: day 20 this cycle $138.50, previous cycle (20 Sep – 19 Oct) $173.00; day 1 November $12.50, October $299.00. All as expected. The PNGs were shared with the owner in the session; they're not committed.
 - **Review finding 1 verified** by the main session on the real stack (Playwright intercepting `/api/stats?period=month`), start day 20, History › Cycle. **Stalled:** skeleton only, 0 rows (the "All" list had them). **500:** after the app's 2 retries (~3.3 s) "Couldn't load this cycle." plus "Try again", 0 rows, light and dark. **Normal:** only this cycle's rows. **‹ onto a stalled anchor:** 0 rows until loaded, then exactly 20 Sep – 19 Oct (shoes, grab). Observations passed to the re-review: in the error state the ‹ button stays enabled with a blank label; the "Try again" chip may be low-contrast in dark mode (DESIGN §10).
 - **Part 2 parked:** none.
+- **Part 3 build:** `/api/*` CORS in `app.ts` now has `exposeHeaders: ['Content-Disposition']` so the Mini App reads the export file name (test `app.test.ts › CORS › exposes Content-Disposition…` now passes). Gotcha row added to `apps/server/CLAUDE.md`. Deviations: none. Parked: none.
 - **Part 2 re-review fixes (R1, R2):** History's "Try again" now uses `primary primary--inline` (same as `App.tsx`, no `--text-subtle` on `--bg-secondary`); `CycleStepper` ‹ is `disabled={loading || label === undefined}`. No test edits (no Mini App harness until B-016).
 - **Part 2 review fix (finding 1, 3):** History's Cycle chip no longer fetches or lists until the cycle bounds are known (`enabled` gated on `historyRange.from`; `App.tsx` passes `[]` + loading while waiting, so the cached All list never shows); if `/api/stats` fails, `HistoryScreen` shows "Couldn't load this cycle." with a Try again button (new optional `loadError`/`onRetry` props, `retry` from `useHistoryCycle`). Day 1 unchanged. Finding 3: "alerts keyed by user, not space" added to `apps/server/CLAUDE.md` and ADR 0007. Screenshots pending (main session).
+- **Part 3 build:** Deviations: none from the plan. **(Resolved in 1c660a4: type-only test fix by test-writer)** Former blocker: `apps/server/src/bot/commands/export.test.ts` line ~109 calls `transactionsRepo.create` without `categoryId` and `note`, which `CreateTransactionInput` requires, so `tsc --noEmit` fails (TS2345) and `pnpm ci:local` stops at typecheck. Vitest passes (544). The fix is type-only: add `categoryId: null, note: null` to the `log()` helper. ADR 0007 had no Part 3 item, so unchanged. Docs: PRD F8.1/F8.4/§8, `/help` line.
+- **Part 3 screenshots to take (P3-AC17), start day 20 and 1, light + dark, 375px:** Settings > Export CSV opens the sheet with Everything preselected; day 20: "This cycle 20 Oct – 19 Nov" and "Last cycle 20 Sep – 19 Oct"; day 1: "This month October" / "Last month September"; Pick a month shows a month input defaulting to this calendar month; Custom dates shows two date inputs and Download is disabled until both are set and from <= to; Download saves a file with the server's name (`spendlygo_2026-10-20_to_2026-11-19.csv`; Everything gives `spendlygo-all-time.csv`); the footnote under the button is unchanged.
 - **Parked ideas:** none
 - **Follow-up (review finding 1, perf):** the active space is loaded once per request and passed through (`computeSafeToSpend` takes optional `settings`); independent queries run in `Promise.all`. Sequential DB stages after auth: `/api/today` 3 to 2 (settings runs alongside list/recent/streak, then all totals in parallel; 1 is impossible while the cycle start depends on the space row), text and photo-OCR captures 2 to 1 (settings runs alongside the category lookup or the insert), `/api/me` reads the space 3 times to 2 (both reads in one parallel stage; `loadHouseholdView` reads it too). Behaviour identical; `ci:local` green, 501 tests. The now-unused `currentCycle` was removed in the re-review tidy-up.
 - **Part 2 review fix (findings 2, 4):** one space read per request/digest; one `cycleLabel` helper in `service.ts` used by `/stats` and the recap (digest heading and `toApiCycle` keep their own month-name-only labels, a different rule). Sequential DB stages, before to after: `/api/stats` month 4 to 3 (space, then totals/categories/previous/series in parallel; was space, 3 parallel, series), day 3 to 1, year 3 to 1 (no space read); `/recap` 3 to 2 (space reads 2 to 1); monthly digest on its day 4 to 2 (space reads 3 to 1). Tests: 524 passed.
 
+- **Part 3 fix (P3-AC17, sheet overlay):** the Export sheet inside Settings rendered clipped under the tab bar because an ancestor trapped `position: fixed`. The shared `components/Sheet.tsx` now renders via `createPortal(…, document.body)`; props, focus, scrim and CSS unchanged. Re-screenshot needed: Export sheet and one existing sheet (Recap or Capture).
+- **Part 3 real-stack verification (main session, 2026-11-01).** It found two defects before review, both fixed test-first: (1) the Mini App couldn't read `Content-Disposition` cross-origin, so every Mini App download was named `spendlygo-export.csv` (pre-existing on main); fixed with CORS `exposeHeaders` (a97faa9 test, fa11ffe fix). (2) The export sheet rendered inside Settings, clipped under the tab bar and FAB, with Download unreachable; fixed by portalling the shared `Sheet` to `document.body` (b52837d). Re-verified: the sheet overlays the viewport with a scrim, Download is topmost at 375×812, and the Recap and Capture sheets are unchanged.
+- **Part 3 review follow-ups verified on the real stack (main session, 2026-11-01), after 715defb.** With `/api/export` forced to 500, the toast "Couldn't export — try again" shows on top of the sheet (checked at 0.5 s; it lasts 2.6 s), the sheet stays open and "Last cycle" stays selected, and a retry downloads `spendlygo_2026-09-20_to_2026-10-19.csv` and closes the sheet. With the month field forced to a plain text box (as in Telegram macOS), `2026-1` shows "Use the format 2026-10" with Download disabled, and `2026-10` enables it. The bot's custom `from..to` ranges are kept and documented (owner decision).
 ---
 
 ## Review (Stage 5)
@@ -1285,3 +1316,53 @@ third copy. `alerts.ts:104` and `money.ts:66` have their own Part 1 formats.
 - [x] `pnpm ci:local` passed
 
 **Owner decision on R1 (2026-11-01):** after the fix (cb993e0), the main session measured "Try again" on the real stack: white on Telegram's button colour = **4.13:1 (light) / 3.72:1 (dark)** with Telegram-default-like theme values, still below DESIGN §10's 4.5:1. Every primary button in the app inherits the same Telegram `button_color`, so this is app-wide, not specific to Part 2. **The owner accepted it for Part 2**, and the app-wide fix is logged under BACKLOG B-010 (polish audit). R2 is verified: ‹ is disabled in the error state. With that waiver, Part 2 is **ready for owner**.
+
+### Review — Part 3 (export)
+
+*Reviewed 2026-10-31 by `reviewer` (Opus) against `git diff 3db44b2..HEAD`
+(2b29616 tests, 774ae5a build, 1c660a4 test type fix, a97faa9 + fa11ffe CORS,
+b52837d Sheet portal, spec commits). `TEST_DATABASE_URL=… pnpm ci:local`:
+**passed** (38 files, 545 tests, build, bundle 87.2 KB gzipped, 44% of budget).*
+
+**Verdict: ready for owner.** No blocking findings. 1 and 2 are small UX gaps
+that could be parked in B-010. 3 is spec tidy-up.
+
+| # | Severity | Where | What / why | Failure scenario |
+|---|---|---|---|---|
+| 1 | Low (UX, partly pre-existing) | `apps/miniapp/src/App.tsx:384-391`, `features/settings/ExportSheet.tsx:140-143` | A failed export only buzzes (`haptics.error()`). There's no toast or message, and the sheet has already closed on Download. The spec's deploy edge case expects the user to see "Export is not available" when an old server returns 400 for `range=cycle`. `ApiRequestError` carries that text, but nothing shows it | During a deploy, or on a cold start that times out, the user taps Download, feels a buzz and gets no file and no explanation. Fix: `onError` → `showToast("Couldn't export. Try again.")` |
+| 2 | Low | `ExportSheet.tsx:101-108` | `<input type="month">` isn't supported in WKWebView (Telegram for macOS) or desktop Firefox, so it falls back to free text and ignores `max`. The client only checks that the value isn't empty | On Telegram for macOS someone types "Oct 2026" → server 400 → silent (see 1). The default value (this month) is valid, so the untouched path works. Optional: check `/^\d{4}-\d{2}$/` before enabling Download |
+| 3 | Nit (docs) | `docs/specs/B-032-pay-cycle.md` Build notes / Tests | (a) The "**Blocker, not edited:** … `tsc --noEmit` fails" bullet is stale. 1c660a4 fixed it (`categoryId: null, note: null` are in the helper) and ci:local is green. (b) The P3-AC17a row in the plan's Tests table still says "❌ failing (expected)", and it has no row in the results table. (c) The "Part 3 fix (sheet overlay)" and "Part 3 real-stack verification" bullets sit after the `---`, outside Build notes. There are also two separate "Part 3 build:" bullets | A later reader thinks CI was red at merge, or misses the two defect fixes |
+| 4 | Info | `apps/server/src/app.ts:52-61`, `app.test.ts` CORS | `exposeHeaders` adds only `Access-Control-Expose-Headers: Content-Disposition`. `origin` is still the single string `config.miniappUrl` (Hono echoes that fixed value, never the request's Origin). Methods, allow-headers and maxAge are unchanged, so nothing is loosened. There's no test that a foreign Origin isn't echoed, but this diff doesn't touch that | — |
+| 5 | Info | `apps/server/src/api/export.ts` custom branch | The bot also accepts `/export 2026-10-05..2026-10-24` (it shares the parser), though PRD F8.4 says custom ranges are "offered by the Mini App only". It isn't in the usage hint. Harmless: validated, bounded, user-scoped | — |
+| 6 | Info | Plan § PR split | The plan named the Part 3 branch `feat/B-032-pay-cycle-export`. The work is on `feat/B-032-pay-cycle`. Owner's call when opening the PR | — |
+
+**Verified, not just trusted**
+- **Everything is unchanged.** `''` → `{ label: 'all-time', filename: 'spendlygo-all-time.csv' }` with no `from`/`to` (P3-AC1, both start days). `buildExportCsv` gets an identical repo call. The API `Content-Disposition` and the bot `InputFile` name/caption (`N entries · all-time`) are byte-identical to main (P3-AC9 + bot guard). The only day-1 change is the dated name for bounded exports, as the owner confirmed.
+- **`parseExportRange`.** Normalising (trim, lower-case, whitespace → `-`) covers `Last  Cycle`. `cycle`/`last-cycle` use `cycleContaining`/`previousCycle` from `todayFor` (user tz, injected Clock). `YYYY-MM`/`YYYY`/`YYYY-MM-DD` are calendar ranges for every start day. Custom ranges are inclusive (`lte`/`gte` in SQL; the test proves both edge days and excludes the 4th and 26th). Reversed, garbage or impossible dates (`02-30`) → null → 400. New Year labels carry years only when they differ (`20 Nov – 19 Dec` stays bare). The filename is built only from regex- and `parseIsoDate`-validated dates, so there's no header injection.
+- **Usage hint.** Day 20 names both ranges, and day 1 says "this month"/"last month" (P3-AC13). The Markdown is safe (no `_*[` in the ranges).
+- **Bounded (§7, F8.6).** `listForExport` is unchanged: SQL `WHERE` on space + `occurred_on` range, `LIMIT EXPORT_ROW_CAP`. The CSV is built in memory and never written to disk. A wide custom range is no worse than Everything.
+- **Auth (§4).** The space comes from `activeHouseholdId(user)` and the start day from that space's row, never from the query. Tested: 401 for no initData, a stranger with no range and with `range=cycle`, and the owner's `range=cycle` excludes the stranger.
+- **Sheet portal.** Checked by reading (no Mini App harness until B-016). Tokens live on `:root`, and `body` sets font/colour, so nothing is lost leaving `.app` (which only sets padding). No CSS selector scopes sheet content under an ancestor. `#root`/`.app` create no stacking context, so the toast (z 60) and photo viewer (z 100) still sit above sheets (z 50). Escape, body scroll lock, initial panel focus, `env(safe-area-inset-bottom)` and the global reduced-motion rule are unchanged, and they now apply to all four sheets plus SpaceSwitcher. Unmount runs the effect cleanup and React removes the portal node. It's a Vite SPA with no SSR, and `document` is touched only during render in the browser. There was never a focus trap (initial focus only), drag-to-dismiss or Telegram BackButton hook. Those are pre-existing gaps, not regressions.
+- **ExportSheet.** It lives in `features/settings/` and imports only `components/Sheet` (legacy shared, per plan), `lib/telegram` and `@spendlygo/shared`. No feature→feature imports. Its CSS uses tokens only. It's 149 lines (≤ 250). For a11y: `fieldset` with `aria-label`, native radios in labels sharing one `name`, and `aria-label` on the month/From/To inputs. Everything sends no `range`, so it works on an old server. Cycle options are hidden when `me.cycle`/`previousCycle` are missing.
+- **Docs.** PRD F8.1/F8.4/§8, `/help` (text as planned), `apps/server/CLAUDE.md` CORS gotcha, and the export.ts header comment are all updated. No ADR was needed.
+- **Real-stack record.** It's consistent. 5 + 2 = 7 rows (cycle + last cycle = all-time), and the custom 5–24 Oct gave 4. The captions match today = 1 Nov (day 20: `20 Oct – 19 Nov` / `20 Sep – 19 Oct`; day 1: November / October). Both defects it found (CORS, clipped sheet) have commits, and CORS has a test.
+
+**Plan fidelity.** Every Part 3 file in the plan was touched as described.
+`exportFilename` is deleted, and the existing export tests are unchanged. Two
+changes go beyond the plan, the CORS `exposeHeaders` and the `Sheet` portal.
+Both were defects found in verification, recorded in Build notes, and are
+minimal. Nothing else was built.
+
+**PR checklist (WORKFLOW §4)**
+- [x] **Cost (§1):** no new dependency, service or Render service. Bundle 87.2 KB gz
+- [x] **Money (§2):** no arithmetic. CSV formatting of cents is unchanged
+- [x] **Data (§3):** read-only. No migration and no write path
+- [x] **Auth (§4):** identity from `requireInitData` / `appUser` only. Space from `activeHouseholdId`. 401 + cross-user tests, including `range=cycle` (P3-AC12)
+- [x] **Privacy (§6):** no new log lines. The export only goes to the requesting user
+- [x] **Runtime (§7):** SQL filter + row cap. No new JS aggregation
+- [x] **Time (§9):** `todayFor(ctx, user)` (user tz, injected Clock). Tests pin `fixedClock` at SGT noon
+- [x] **Telegram (§10):** the same single `replyWithDocument`. No new send paths
+- [x] **Docs:** PRD, `/help`, server CLAUDE.md gotcha
+- [x] `pnpm ci:local` passed (545 tests)
+
+- **Part 3 review follow-ups (owner-approved):** export failure now toasts "Couldn't export — try again" and keeps the sheet open with the choice kept (closes only on success, via an `onDone` callback); the month text-box fallback is validated as `YYYY-MM` with an inline "Use the format 2026-10" hint and Download disabled; bot `/export YYYY-MM-DD..YYYY-MM-DD` documented in the usage hint, `/help` and PRD F8.4/§8. No test edits.

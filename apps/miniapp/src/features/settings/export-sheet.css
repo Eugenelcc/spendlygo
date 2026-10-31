@@ -1,0 +1,57 @@
+.export-sheet__title {
+  margin: 0 0 4px;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.export-sheet__options {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 8px 0 16px;
+  padding: 0;
+  border: 0;
+}
+
+.export-sheet__option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 44px;
+  padding: 8px 12px;
+  border-radius: var(--r-sm);
+  background: var(--bg-secondary);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.export-sheet__option--on {
+  outline: 2px solid var(--accent);
+}
+
+.export-sheet__option input[type='radio'] {
+  accent-color: var(--accent);
+  flex-shrink: 0;
+}
+
+.export-sheet__label {
+  flex: 1;
+  font-size: 15px;
+}
+
+.export-sheet__caption {
+  color: var(--text-hint);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.export-sheet__extra {
+  padding: 4px 0 8px;
+}
+
+.export-sheet__hint {
+  margin: 6px 0 0;
+  font-size: 13px;
+  color: var(--text-hint);
+}

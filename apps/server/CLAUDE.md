@@ -189,4 +189,5 @@ the old version keeps serving until the new one passes its health check.
 | Postgres NOTICEs on re-migration | `CREATE ... IF NOT EXISTS` for drizzle's bookkeeping logs a NOTICE object every run. Suppress with `onnotice` or it reads like a failed migration |
 | Drizzle 0.38 has no `.nullsNotDistinct()` on the index builder | Use a partial unique index with `.where()` instead |
 | `budget_alerts.year/month` = the calendar month the **cycle ends in**, not of today (B-032) | `cycleAlertKey` in core. Moving the start day can skip one threshold once (never double-sends); documented in PRD F13.3. No per-cycle table on purpose (owner choice Q2 A). Alerts are keyed by user, not space: switching spaces does not reset them (PRD F13.3) |
+| Cross-origin JS can't read response headers unless CORS exposes them | `exposeHeaders: ['Content-Disposition']` in the `/api/*` CORS config, so the Mini App reads export file names (B-032 part 3) |
 | `updateSettingsSchema` is `.strict()` on purpose (B-032) | A new field must be added to the schema in the same PR as the route that handles it, so an older server answers 400 instead of silently dropping it |

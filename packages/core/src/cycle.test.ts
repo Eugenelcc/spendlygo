@@ -8,6 +8,7 @@ import {
   cycleAlertKey,
   cycleContaining,
   formatCycleRange,
+  formatDateRangeWithYears,
   nextCycle,
   previousCycle,
   type BudgetCycle,
@@ -123,6 +124,17 @@ describe('formatCycleRange', () => {
   it('formats a cycle as "20 Oct – 19 Nov", with no year', () => {
     expect(formatCycleRange(cycleContaining(d('2026-10-31'), 20))).toBe('20 Oct – 19 Nov');
     expect(formatCycleRange(cycleContaining(d('2027-01-05'), 20))).toBe('20 Dec – 19 Jan');
+  });
+});
+
+describe('formatDateRangeWithYears (B-032 Part 3)', () => {
+  it('is as formatCycleRange within one year, and carries both years across New Year', () => {
+    const oct = cycleContaining(d('2026-10-31'), 20);
+    expect(formatDateRangeWithYears(oct)).toBe(formatCycleRange(oct));
+    expect(formatDateRangeWithYears(oct)).toBe('20 Oct – 19 Nov');
+    expect(formatDateRangeWithYears(cycleContaining(d('2027-01-05'), 20))).toBe(
+      '20 Dec 2026 – 19 Jan 2027',
+    );
   });
 });
 

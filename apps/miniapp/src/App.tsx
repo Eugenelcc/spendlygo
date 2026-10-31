@@ -387,7 +387,10 @@ function Shell(): JSX.Element {
       haptics.success();
       showToast('Downloaded');
     },
-    onError: () => haptics.error(),
+    onError: () => {
+      haptics.error();
+      showToast("Couldn't export — try again");
+    },
   });
 
   if (me.isPending || today.isPending) {
@@ -539,7 +542,7 @@ function Shell(): JSX.Element {
             onContributeGoal={(id, amountCents) => contributeGoal.mutate({ id, amountCents })}
             onArchiveGoal={(id) => archiveGoal.mutate(id)}
             exportBusy={exportCsv.isPending}
-            onExportCsv={() => exportCsv.mutate()}
+            onExportCsv={(range, onDone) => exportCsv.mutate(range, { onSuccess: onDone })}
           />
         )}
       </main>

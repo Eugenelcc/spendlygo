@@ -258,6 +258,18 @@ describeIfDb('pay cycle API (F17)', () => {
       expect(body.cycle).toEqual(CYCLE_20);
     });
 
+    it('also returns the previous cycle', async () => {
+      await ownersOctober(20);
+      const body = await json(await app.request('/api/me', { headers: auth(OWNER) }));
+      expect(body.previousCycle).toEqual({
+        startDay: 20,
+        start: '2026-09-20',
+        end: '2026-10-19',
+        days: 30,
+        label: '20 Sep – 19 Oct',
+      });
+    });
+
     it('rejects unauthenticated access', async () => {
       expect((await app.request('/api/me')).status).toBe(401);
     });
