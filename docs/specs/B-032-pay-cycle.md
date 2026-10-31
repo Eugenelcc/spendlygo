@@ -1022,6 +1022,7 @@ the plan should say so.**
 - **Part 2 review fix (findings 2, 4):** one space read per request/digest; one `cycleLabel` helper in `service.ts` used by `/stats` and the recap (digest heading and `toApiCycle` keep their own month-name-only labels, a different rule). Sequential DB stages, before to after: `/api/stats` month 4 to 3 (space, then totals/categories/previous/series in parallel; was space, 3 parallel, series), day 3 to 1, year 3 to 1 (no space read); `/recap` 3 to 2 (space reads 2 to 1); monthly digest on its day 4 to 2 (space reads 3 to 1). Tests: 524 passed.
 
 ---
+- **Part 3 fix (P3-AC17, sheet overlay):** the Export sheet inside Settings rendered clipped under the tab bar because an ancestor trapped `position: fixed`. The shared `components/Sheet.tsx` now renders via `createPortal(…, document.body)`; props, focus, scrim and CSS unchanged. Re-screenshot needed: Export sheet and one existing sheet (Recap or Capture).
 
 ## Review (Stage 5)
 
