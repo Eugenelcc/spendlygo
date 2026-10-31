@@ -18,7 +18,7 @@ before starting any new feature.
 | B-001 | Soft-deleted transactions are purged after 30 days | F11.3 | todo |
 | B-002 | Full account deletion on request | §12, GUARDRAILS §6 | todo |
 | B-003 | `/month` bot command | F7, §8 | todo |
-| B-004 | `/settings` bot command | F9.4, §8 | planned |
+| B-004 | `/settings` bot command | F9.4, §8 | in progress (built, agent-reviewed; awaiting owner) |
 
 **B-001 — Soft-delete purge.** PRD F11.3 and GUARDRAILS §3 say soft-deleted
 transactions are purged after 30 days. No purge job exists in `tasks/`.
