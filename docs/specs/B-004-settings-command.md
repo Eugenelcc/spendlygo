@@ -1,6 +1,9 @@
 # B-004 — `/settings` bot command
 
-**Feature:** F9 (F9.1, F9.4; also F13.5) · **Branch:** `ccr-5e696e71-4ezjyv` · **Status:** awaiting owner approval
+**Feature:** F9 (F9.1, F9.4; also F13.5) · **Branch:** `ccr-5e696e71-4ezjyv` · **Status:** approved — tests next
+
+Spec approved by owner, 2026-10-31
+Plan approved by owner, 2026-10-31
 <!-- After each approval, Claude adds a line:
      Spec approved by owner, YYYY-MM-DD
      Plan approved by owner, YYYY-MM-DD -->
@@ -94,6 +97,10 @@ Each toggle button carries the **target value**, never "toggle".
 - Any Mini App change.
 
 ### Open questions for the owner
+
+**Resolved 2026-10-31:** the owner accepted all three recommended defaults
+(timezone read-only, all 24 hours, 24-hour `HH:00` format).
+
 1. **Timezone in `/settings`.** PRD §8 says `/settings` covers timezone. Today
    nothing in the UI changes it (the Mini App shows it read-only), and
    `PATCH /api/settings` accepts any non-empty string with no IANA check.
@@ -121,7 +128,7 @@ Each toggle button carries the **target value**, never "toggle".
 | `apps/server/src/bot/index.ts` | Import `handleSettings`, `handleSettingsCallback`, `SETTINGS_PREFIX`. Add `bot.command('settings', (botCtx) => handleSettings(ctx, botCtx));` next to the other commands. Add `bot.callbackQuery(new RegExp(`^${SETTINGS_PREFIX}`), (botCtx) => handleSettingsCallback(ctx, botCtx));` **directly after the `UNDO_PREFIX` line and before** the catch-all `bot.on('callback_query', …)`. In `configureBotMenu`, add `{ command: 'settings', description: 'Digest time and notifications' }` before `help`. |
 | `apps/server/src/bot/commands/help.ts` | In `HELP_TAIL`: change "Turn them on or off in Settings." to "Turn them on or off with /settings." and add `/settings — digest time and notifications` to the *Commands* list, before `/app`. |
 | `PRD.md` | §8 `/settings` row: replace the "*not built yet…*" note with "Digest time, digest/nudge/alert toggles; timezone shown read-only (changing it: see BACKLOG)". Adjust if the owner decides otherwise on open question 1. |
-| `BACKLOG.md` | Only if open question 1 keeps the default: add a Later item "Change timezone from bot/Mini App" and a Drift & debt row "`PATCH /api/settings` accepts any `timezone` string (no IANA check)". Do **not** change B-004's status (Stage 7 does that). |
+| `BACKLOG.md` | **Already done by the main session** (B-027, B-028 added at approval). Builder: no BACKLOG edits. |
 
 **`settings.ts` contents.** Copy the structure of `bot/capture.ts`
 (`UNDO_PREFIX`, `undoKeyboard`, `handleUndo`) and `bot/commands/switch.ts`.

@@ -18,7 +18,7 @@ before starting any new feature.
 | B-001 | Soft-deleted transactions are purged after 30 days | F11.3 | todo |
 | B-002 | Full account deletion on request | §12, GUARDRAILS §6 | todo |
 | B-003 | `/month` bot command | F7, §8 | todo |
-| B-004 | `/settings` bot command | F9.4, §8 | todo |
+| B-004 | `/settings` bot command | F9.4, §8 | planned |
 
 **B-001 — Soft-delete purge.** PRD F11.3 and GUARDRAILS §3 say soft-deleted
 transactions are purged after 30 days. No purge job exists in `tasks/`.
@@ -63,6 +63,7 @@ links to the Mini App for the rest.
 | B-021 | Mini App restructure 5: `features/history` | F7.3, F11 | todo |
 | B-022 | Mini App restructure 6: `features/settings` (goals, household, recurring) | F5, F12, F14 | todo |
 | B-023 | Mini App restructure 7: `features/spaces` + `features/recap` | F12, F16 | todo |
+| B-026 | Undo callback is never answered if its database read throws | F11.1, GUARDRAILS §10 | todo |
 
 **B-005.** The `budget_periods` table exists in the schema, but no code reads
 or writes it. The live budget is `households.monthly_budget_cents`, so a past
@@ -122,6 +123,12 @@ any of them: the app works the same at every step.
   and populated tests. *Accept:* `App.tsx` shrinks each time; it ends at
   ~100 lines after B-023.
 
+**B-026.** In `bot/capture.ts`, `handleUndo` reads the transaction
+(`transactionsRepo.findById`) outside any error handling. If that read throws,
+`answerCallbackQuery` is never called and the Telegram client spins forever.
+Found while planning B-004. *Accept:* every path, including a DB failure,
+answers the callback; there's a test with a throwing DB.
+
 **Ordering note:** these sit in Next, after B-005 to B-012. Reorder if you'd
 rather restructure before building new Mini App features: new UI work goes
 into the target layout either way.
@@ -134,6 +141,7 @@ Parked ideas. Not agreed, not scheduled. Promote one only by agreement.
 |---|---|---|
 | B-013 | Voice-note capture | PRD §5.2, v2. Needs a zero-cost speech-to-text option first (GUARDRAILS §1). |
 | B-014 | Multi-currency + FX | PRD §5.2, v3. |
+| B-028 | Change timezone from the bot or Mini App | Needs a validated IANA list and a decision on how already-stored `occurred_on` dates are treated. Parked at B-004 approval; `/settings` shows timezone read-only. |
 
 ## Drift & debt
 
@@ -142,7 +150,7 @@ with their own ID above are tracked there. This list is the remainder.
 
 | ID | Item | Status |
 |---|---|---|
-| — | Nothing else open. New drift found during a task gets a B-### here. | — |
+| B-027 | `PATCH /api/settings` accepts any non-empty `timezone` string, with no IANA check. A bad value would break every day boundary for that user. Found while planning B-004 | todo |
 
 ## Done
 
