@@ -654,6 +654,123 @@ component tests. *Recommendation:* A. B-016 would delay the item you put first.
 ## Second opinion (risky items only, `challenger`)
 <!-- Or "n/a: not a risky item". Each finding: scenario, detail, options with pros and cons, blocking? -->
 
+*Reviewed 2026-10-31 against the code on `feat/B-032-pay-cycle`. I recomputed
+every numeric AC (P1-AC2 to AC6, AC11, AC12, AC18 to AC20, P2-AC1, AC4 to AC6,
+AC9 to AC12) by hand against the proposed algorithm, and all of them are
+correct. The cycle algorithm can't produce an empty, overlapping or skipped
+cycle for any start day 1–31: a cycle that starts in month M always ends in
+M+1, the shortest is 28 days (day 31: 31 Jan – 27 Feb), and P1-AC7 tests the
+tiling exhaustively. The claim that start day 1 behaves exactly as today
+holds on every surface the plan touches (Today, bot `/today`, capture, Stats
+month, recap, monthly digest, alerts key and text), **except export**, which
+changes on purpose. The Part 1 migration really is additive and safe for the
+running server: drizzle selects named columns, and `check()` is already used
+in `schema.ts`. **One finding blocks approval of Part 3. Nothing blocks Part 1
+or Part 2.***
+
+**F1 — `/export` with no argument currently exports *everything*. Part 3
+quietly takes that away. BLOCKING for Part 3 (not for Parts 1–2).**
+- *Scenario:* in March you tap Settings › Export CSV for your accountant,
+  like you always have. You get one month. The footnote under the button
+  still says "export everything as a CSV, any time".
+- *Detail:* today `parseExportRange('')` returns `{ label: 'all-time' }`
+  (`api/export.ts`). The bot usage text says "`/export` — everything", and the
+  Mini App calls `api.exportCsv()` with no range (`App.tsx:503`).
+  `Settings.tsx:402` promises "export everything", and that file isn't in
+  Part 3's file list. The recap (decision 8) never says the owner knew
+  `/export` currently means all-time. Q1 notices the gap, but leaves option C
+  open, and C would remove the only one-tap full export (GUARDRAILS §6 "honour
+  export", PRD F8). One more catch: while the deploy is in progress, an
+  old-build Mini App calling `/api/export` with no range gets just this cycle
+  from the new server, not everything.
+- *Options:*
+  (a) Answer Q1 = A, add `Settings.tsx`'s footnote to the Part 3 files, and
+  have the export sheet always send an explicit `range`. *Pro:* keeps decision
+  8 and keeps full export. *Con:* a fifth picker option.
+  (b) Keep `/export` (no argument) = everything, and add `/export cycle` and
+  `/export last cycle`. *Pro:* no behaviour change for anyone, no Q1, no
+  deploy-window surprise, and a smaller Part 3. *Con:* reverses part of
+  decision 8, so the owner has to agree.
+  (c) Q1 = C. *Con:* arguably a §6 conflict, so it needs the owner's explicit
+  sign-off, not a default.
+
+**F2 — Alert key "month the cycle ends in" (Q2 A) misses alerts more often
+than "rare". Never a double-send. Not blocking.**
+- *Scenario:* you're on day 20 and got the 80% warning for 20 Sep – 19 Oct.
+  On 25 Oct you switch back to the 1st. October (key Oct) is already marked
+  as warned, so you get no 80% warning for October even if you blow through
+  it.
+- *Detail:* when you switch from day s1 to day s2 on date d, the new cycle's
+  key collides with an old key whenever the new cycle ends in a month the old
+  rule already used. That happens on *every* switch to an earlier start day,
+  and on any switch to a later day made before the new start day. Examples:
+  20→1 any time 20 Oct – 19 Nov; 20→25 on 22 Oct gives 25 Sep – 24 Oct, key
+  Oct. The failure is always a suppressed alert, never a duplicate. It's also
+  bounded: on any date, the 31 possible start days map to at most 2 keys, so
+  flipping the setting can't spam anyone. That's a real plus for A. A related
+  issue already exists today: `budget_alerts` is keyed by user, not space, so
+  a personal space on day 1 and a shared space on day 20 share keys when you
+  switch between them.
+- *Options:* (a) Keep A, but rewrite Q2's con honestly as "any switch to an
+  earlier day can skip that cycle's alerts", and add an AC for 20→1 on
+  25 Oct. *Pro:* no migration. (b) C, keyed by `(user_id, household_id,
+  cycle_start)`. *Pro:* exact, and fixes the space collision too. *Con:*
+  migration, plus the re-alert or backfill question.
+
+**F3 — A stale `/settings` message can change the *shared* space's cycle.
+Not blocking, cheap fix.**
+- *Scenario:* you open `/settings` in your personal space, then `/switch` to
+  the shared space. Later you tap "20" on the old picker message. Your
+  partner's budget month moves to the 20th without warning.
+- *Detail:* every existing `set:` callback is personal (it sets a user
+  field), so a stale message was harmless. `set:c:<n>` writes to
+  `activeHouseholdId(appUser)` *at tap time* (P4-AC8). Callback data has
+  room: `set:c:20:` plus a UUID is 45 bytes, under the 64-byte limit.
+- *Options:* (a) Put the household id in the callback, and answer "out of
+  date" if it doesn't match the active space. *Pro:* closes the hole.
+  *Con:* about 1 extra AC. (b) Accept the risk, and make the P4-AC6 text say
+  "changes it for everyone in <space>". *Pro:* trivial. *Con:* only partly
+  protects.
+
+**F4 — Rolling back Part 4 doesn't roll back behaviour. Not blocking, but
+the plan should say so.**
+- *Scenario:* Part 4 ships, the owner sets day 20, then Part 4 is reverted
+  ("revert first", WORKFLOW §6). Parts 1–3 still read `cycle_start_day = 20`,
+  but no UI is left to set it back.
+- *Options:* (a) Add a rollback note: revert, then a one-row `UPDATE`, which
+  needs approval under GUARDRAILS §3. (b) Ship the bot setter (server-only)
+  as the first commit of Part 4, so it's never the part that gets reverted.
+
+**F5 — Smaller gaps to fix in the plan. Not blocking.**
+- *Deploy window, Part 4:* `updateSettingsSchema` isn't `.strict()`. A new
+  Mini App PATCHing `cycleStartDay` to the *old* server gets a 200 with the
+  field silently dropped, and the user sees "Saved". Fix: the Mini App checks
+  that the response contains `user.cycleStartDay`.
+- *Shared space:* nobody is told when a partner changes the day. The other
+  member's safe-to-spend can jump from about S$1,350 to S$72 overnight. This
+  matches how budget edits behave today (no notification code exists), but
+  it's more surprising here. Park it, or show a line in Today.
+- *Labels:* `formatCycleRange` has no year. A custom export from 2025-01-05 to
+  2026-03-10 gets the caption "5 Jan – 10 Mar". Also, a day-1 `/export last
+  cycle` caption reads "1 Sep – 30 Sep", which breaks the plan's own copy rule
+  (day 1 keeps month names). Use the month name for day 1, and add the year
+  when the range crosses years.
+- *Copy left out:* the bot's `commands/recap.ts:89` ("`/recap` for this month
+  instead") isn't in the Part 2 files.
+- *Layout:* the Part 2 History cycle chip is planned inside `App.tsx`, but
+  `apps/miniapp/CLAUDE.md` says "all new code goes into the target layout".
+- *Simpler Q3:* after Part 2, `GET /api/stats?period=month&anchor=` already
+  returns `from`, `to` and `label` for a cycle. History could use that instead
+  of a new `/api/cycle` endpoint (one route and one auth test fewer, slightly
+  heavier query).
+- *Testability:* P4-AC12's "PATCH sent once" can't be proven by a screenshot.
+  Either downgrade the wording or check it in the dev-bot network log. Every
+  other AC maps to a single deterministic test.
+- *Digest overlap:* switching 20→25 on 20 Nov, after the 19 Nov digest, makes
+  the 24 Nov digest re-cover 25 Oct – 19 Nov. This is accepted by "no
+  catch-up", but the Edge cases table only mentions the skip, not the
+  overlap.
+
 ---
 
 ## Test report (Stages 3–4)
