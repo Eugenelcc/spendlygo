@@ -55,6 +55,8 @@ export function createApp(ctx: AppContext, bot: SpendlygoBot, options: CreateApp
       origin: ctx.config.miniappUrl,
       allowMethods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
       allowHeaders: ['Authorization', 'Content-Type', 'X-Telegram-Init-Data'],
+      // Cross-origin JS can't read other response headers; the export file name needs this.
+      exposeHeaders: ['Content-Disposition'],
       maxAge: 86_400,
     }),
   );
