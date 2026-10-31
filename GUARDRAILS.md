@@ -224,7 +224,7 @@ Legend: 🔴 **NEVER** — violating this is a defect, no exceptions.
   decision: ADR 0005 and ADR 0006.) "While I was in there" is how free
   projects become paid ones.
 - 🟢 **ALWAYS** park side ideas in [`BACKLOG.md`](./BACKLOG.md) → Later
-  instead of building them in the current task ([`WORKFLOW.md`](./WORKFLOW.md) §6).
+  instead of building them in the current task ([`WORKFLOW.md`](./WORKFLOW.md) §2, Stage 3).
 - 🟡 **ASK FIRST** when a request appears to conflict with the PRD, the
   zero-cost rule, or a guardrail. Surface the conflict; don't silently pick.
 - 🟢 **ALWAYS** finish the phase in progress before starting the next

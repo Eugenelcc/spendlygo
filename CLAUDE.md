@@ -21,7 +21,8 @@ nearly every technical decision here.
 | [`PRD.md`](./PRD.md) | You need to know *what* to build, feature IDs (F1–F11), the data model, or the phase order |
 | [`GUARDRAILS.md`](./GUARDRAILS.md) | **Before every change.** Hard rules on cost, money maths, auth, secrets, privacy, and scope |
 | [`DESIGN.md`](./DESIGN.md) | You are touching anything the user sees — colour, type, motion, haptics, components |
-| [`WORKFLOW.md`](./WORKFLOW.md) | **Start and end of every session.** How work flows: intake, plan, branch, verify, PR, done, hotfix |
+| [`WORKFLOW.md`](./WORKFLOW.md) | **Start and end of every session.** The pipeline: intake → spec → plan → build → test → review → release → close, with success/failure for each stage |
+| [`docs/specs/`](./docs/specs) | A task is past intake. Each item's spec and plan live here (`TEMPLATE.md`) |
 | [`BACKLOG.md`](./BACKLOG.md) | Choosing what to work on. Every task is a `B-###` item here |
 | `CLAUDE.md` (this file) | Repo layout, commands, conventions, deployment, gotchas |
 | `apps/server/CLAUDE.md`, `apps/miniapp/CLAUDE.md`, `packages/core/CLAUDE.md` | Local rules for that workspace. Loaded automatically when you work there |
@@ -81,13 +82,16 @@ spendlygo/
 │   │       ├── middleware/      # initData auth, error handler
 │   │       └── telegram/        # initData HMAC, photo proxy + URL cache, OCR, error classes
 │   └── miniapp/             # Render Static Site (React + Vite)
-│       ├── CLAUDE.md            # local rules for the Mini App
-│       └── src/
-│           ├── App.tsx          # tab shell + space switcher
-│           ├── screens/         # Today, Stats, History, Settings
-│           ├── components/      # Capture sheet, Ring, Money, Sheet, SVG charts, photo viewer…
-│           ├── lib/             # api client, Telegram bridge + haptics, formatters
-│           └── styles.css       # design tokens (Telegram theme vars → DESIGN.md §2–5)
+│       ├── CLAUDE.md            # local rules + architecture for the Mini App
+│       └── src/                 # TARGET layout — migrating one feature per PR (B-016…B-023)
+│           ├── main.tsx         # mount only
+│           ├── app/             # thin shell: App.tsx (providers + tabs), providers.tsx
+│           ├── features/        # one folder per area: today, capture, stats, history,
+│           │                    #   settings, spaces, recap — screen + hooks + CSS + tests
+│           ├── ui/              # reusable, no data fetching: Money, Ring, Sheet, charts…
+│           ├── lib/             # api client, query keys, Telegram bridge + haptics, format
+│           └── styles/          # tokens.css (DESIGN.md §2–5), base.css
+│                                # (until migrated: App.tsx, screens/, components/, styles.css)
 ├── packages/
 │   ├── core/                # PURE domain logic — no I/O, no Date.now(), fully unit-tested
 │   │   ├── CLAUDE.md            # local rules for the dangerous five
@@ -107,6 +111,7 @@ spendlygo/
 │   └── shared/              # Zod schemas + types shared by server and miniapp
 ├── scripts/                 # CI checks: Render blueprint, Mini App bundle size
 ├── docs/adr/                # Architecture decision records
+├── docs/specs/              # one spec + plan per backlog item (TEMPLATE.md)
 ├── PRD.md  GUARDRAILS.md  DESIGN.md  CLAUDE.md  WORKFLOW.md  BACKLOG.md
 └── render.yaml              # Infrastructure as code for both Render services
 ```
@@ -259,8 +264,10 @@ The full process is in [`WORKFLOW.md`](./WORKFLOW.md). In short:
 
 1. **Read `GUARDRAILS.md` before changing anything.** It is short, and it is
    binding.
-2. **Every task is a `BACKLOG.md` item.** For anything bigger than a small
-   fix, post a plan and wait for the owner's OK (WORKFLOW §4).
+2. **Every task is a `BACKLOG.md` item.** Unless it's a small fix (WORKFLOW
+   §1), write a spec, then a plan, in `docs/specs/`. Each needs the owner's
+   "approved" before moving on. After 2 failed attempts at anything, stop and
+   escalate.
 3. **Cite the backlog and feature IDs** in the branch, commits and PR body.
    One feature ID per PR.
 4. **Test the dangerous five**: money maths, the text parser, safe-to-spend,
@@ -284,7 +291,7 @@ The full process is in [`WORKFLOW.md`](./WORKFLOW.md). In short:
 - **Open a pull request only when the owner asks. Never merge.** The owner
   merges after review and green CI.
 - Never force-push a shared branch. Keep `main` deployable.
-- Production broken? Revert first, fix second (WORKFLOW §10).
+- Production broken? Revert first, fix second (WORKFLOW §6).
 
 ---
 

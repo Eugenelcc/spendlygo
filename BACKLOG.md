@@ -1,9 +1,10 @@
 # Spendlygo — Backlog
 
-The single plan. How it's used: [`WORKFLOW.md`](./WORKFLOW.md) §3 and §9.
+The single plan. How it's used: [`WORKFLOW.md`](./WORKFLOW.md) §2 and §7.
+Each item past intake has a spec in [`docs/specs/`](./docs/specs).
 Feature IDs refer to [`PRD.md`](./PRD.md) §7.
 
-**Status key:** `todo` · `planned` (plan approved) · `in progress` · `in review` (PR open) · `done`
+**Status key:** `todo` · `spec` (spec written/approved) · `planned` (plan approved) · `in progress` · `in review` (PR open) · `done`
 
 **Current focus (agreed 2026-10-31):** close the drift and the P6 gaps below
 before starting any new feature.
@@ -54,6 +55,14 @@ links to the Mini App for the rest.
 | B-010 | Audit P6 polish: empty, error, onboarding states | P6 | todo |
 | B-011 | Decide the Mini App's styling and motion stack; record an ADR | DESIGN §5 | todo |
 | B-012 | Rate limiting on `/api` | GUARDRAILS §10 | todo |
+| B-016 | Mini App test setup: Vitest + Testing Library | DESIGN §11 | todo |
+| B-017 | Mini App restructure 1: shell, `ui/`, `lib/`, `styles/`, import rules | — | todo |
+| B-018 | Mini App restructure 2: `features/today` | F6, F15 | todo |
+| B-019 | Mini App restructure 3: `features/capture` | F2 | todo |
+| B-020 | Mini App restructure 4: `features/stats` | F7 | todo |
+| B-021 | Mini App restructure 5: `features/history` | F7.3, F11 | todo |
+| B-022 | Mini App restructure 6: `features/settings` (goals, household, recurring) | F5, F12, F14 | todo |
+| B-023 | Mini App restructure 7: `features/spaces` + `features/recap` | F12, F16 | todo |
 
 **B-005.** The `budget_periods` table exists in the schema, but no code reads
 or writes it. The live budget is `households.monthly_budget_cents`, so a past
@@ -93,6 +102,30 @@ adopt the libraries.
 *Decide:* whether `/api` needs one, given the allowlist and `initData` auth. If
 not, record that decision.
 
+**B-016 to B-023: the Mini App restructure** (agreed 2026-10-31; target layout in
+`apps/miniapp/CLAUDE.md`). One PR each, in order. **No behaviour change** in
+any of them: the app works the same at every step.
+
+- **B-016:** add `vitest`, `@testing-library/react` and `jsdom` as
+  **dev-only** dependencies. Extend `vitest.config.ts` to pick up
+  `apps/miniapp/**/*.test.tsx` with a jsdom environment. First tests cover
+  `lib/format.ts`. *Accept:* `pnpm test` runs them in CI; the bundle size is
+  unchanged.
+- **B-017:** create `app/` (thin `App.tsx` + `providers.tsx`), move reusable
+  components to `ui/`, add `lib/query-keys.ts`, split `styles.css` into
+  `styles/tokens.css` and `styles/base.css` (feature CSS stays put for now),
+  and add `no-restricted-imports` boundaries. *Accept:* checks green;
+  light/dark screenshots identical before and after.
+- **B-018 to B-023:** per feature, move the screen and its sections into
+  `features/<name>/`, move its queries and mutations out of `App.tsx` into
+  `use-*.ts` hooks, move its CSS beside it, and add loading, empty, error
+  and populated tests. *Accept:* `App.tsx` shrinks each time; it ends at
+  ~100 lines after B-023.
+
+**Ordering note:** these sit in Next, after B-005 to B-012. Reorder if you'd
+rather restructure before building new Mini App features: new UI work goes
+into the target layout either way.
+
 ## Later
 
 Parked ideas. Not agreed, not scheduled. Promote one only by agreement.
@@ -118,4 +151,5 @@ Newest first. Earlier work (P0–P6 to date: PRs #4–#12) predates this backlog
 | ID | Title | Feature | PR |
 |---|---|---|---|
 | B-015 | README figures refreshed: 450 tests, Mini App bundle 86.1 KB gzipped | — | (this branch) |
+| B-024 | Workflow v2: spec stage, success/failure per stage, review checklist, spec template, Mini App target architecture | — | (this branch) |
 | B-000 | Docs foundation: WORKFLOW.md, BACKLOG.md, nested CLAUDE.md files, F13–F16 in the PRD, drift fixes | — | (this branch) |

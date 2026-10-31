@@ -20,6 +20,34 @@ consumer.
 | `src/middleware/` | `auth.ts` (initData → `user`), `errors.ts` (DomainError → status) |
 | `src/telegram/` | `init-data.ts` HMAC check, `photos.ts` getFile proxy + URL cache, `ocr.ts` OCR.space, `errors.ts` retry classification |
 
+## Architecture: thin edges, logic in the middle
+
+Every request, whether a bot command, an API route or a tick job, flows the
+same way. Keep each layer to its job:
+
+```
+Telegram update / HTTP request / cron tick
+        │
+        ▼
+ EDGE      bot/commands/<name>.ts · api/index.ts route · tasks/<job>.ts
+           parse + validate input (Zod / parser), get identity, format reply
+        │      no SQL, no business rules here
+        ▼
+ SERVICE   api/service.ts (computeSafeToSpend, computePeriodStats, …)
+           orchestrates repositories + pure core functions
+        │
+        ├──▶ CORE         @spendlygo/core — pure maths, dates, parsing
+        └──▶ REPOSITORY   @spendlygo/db repositories — SQL, filtered by user
+```
+
+| Rule | Detail |
+|---|---|
+| One file per bot command | `bot/commands/<name>.ts` exports `handle<Name>`; registered in `bot/index.ts` |
+| Bot and API share logic | If the bot and the Mini App show the same number, both call the **same** `service.ts` function (e.g. `/today` and `GET /api/today`) |
+| Edges stay thin | A handler that grows business logic moves it into `service.ts`, or into `core` if it's pure |
+| Rendering stays at the edge | Bot Markdown (`bot/markdown.ts`) and JSON shapes (`@spendlygo/shared`) are built at the edge, never in services |
+| Tick jobs: one file each | `tasks/<job>.ts`, called from `tasks/tick.ts`, idempotent (see below) |
+
 ## Rules
 
 - **Identity.** In the API, the user comes only from `c.get('user')`, which

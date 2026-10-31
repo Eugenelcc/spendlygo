@@ -1,179 +1,207 @@
 # Spendlygo — Workflow
 
-How work moves from an idea to production. This is the process; the rules it
-must respect live in [`GUARDRAILS.md`](./GUARDRAILS.md), and what to build lives
-in [`PRD.md`](./PRD.md) and [`BACKLOG.md`](./BACKLOG.md).
+How work moves from an idea to production. This file is the process. The
+rules it must respect are in [`GUARDRAILS.md`](./GUARDRAILS.md), and what to
+build is in [`PRD.md`](./PRD.md) and [`BACKLOG.md`](./BACKLOG.md).
 
-Agreed with the owner (@eugenelcc) on 2026-10-31. Change it the same way: ask,
-agree, then edit this file in its own PR.
-
----
-
-## 1. The loop at a glance
-
-```
-BACKLOG item ──▶ plan ──▶ owner OK ──▶ branch ──▶ build + tests + docs
-     ▲                                                   │
-     │                                                   ▼
-  new ideas parked                         checks green ──▶ push
-  in "Later"                                             │
-     │                                       owner asks ──▶ PR (Claude opens)
-     │                                                   │
-     │                         CI green + owner review ──▶ owner merges
-     │                                                   │
-     └──────────── BACKLOG updated ◀── smoke-tested ◀── Render deploys
-```
-
-Nothing skips a box. A task is not **done** until the last box (§8).
+Agreed with the owner (@eugenelcc) on 2026-10-31. To change it: ask, agree,
+then edit it in its own `docs/` PR (§12).
 
 ---
 
-## 2. Session ritual (Claude)
+## 1. The pipeline at a glance
 
-### Start of every session
+```
+ 0 INTAKE ─▶ 1 SPEC ─▶ 2 PLAN ─▶ 3 BUILD ─▶ 4 TEST ─▶ 5 REVIEW ─▶ 6 RELEASE ─▶ 7 CLOSE
+  B-###      what      how       code       prove      owner        deploy +      BACKLOG
+             ✋ owner   ✋ owner                          merges ✋    smoke test    → Done
+             approves  approves
+```
 
-1. Read `CLAUDE.md`, `GUARDRAILS.md`, and `BACKLOG.md`. Read `PRD.md` /
-   `DESIGN.md` sections relevant to the task.
-2. Sync: `git fetch origin main`.
-3. Confirm which backlog item this session is for. If the request has no
-   backlog item, add one first (§3).
-4. Create the task branch from the latest `main` (§5), or use the branch the
-   session was given.
+✋ marks a human gate. Claude never passes one alone.
 
-### End of every session
+**Small-fix lane:** a change may skip stages 1 and 2 (but nothing else) if it
+is **all** of:
+- docs, a typo, or a contained bug fix of about **30 changed lines or fewer**
+- **no** schema, dependency, API-shape, or external-service change
+- **no** change to the dangerous five (money maths, parser, safe-to-spend,
+  recurrence dates, timezone boundaries)
 
-1. Run `pnpm typecheck && pnpm lint && pnpm test`. Report the real result,
-   including failures.
-2. Update `BACKLOG.md`: move the item's status, add anything parked (§9).
-3. Commit and push the branch.
-4. Report to the owner:
-   - **Done** — what changed, with the backlog and feature IDs
-   - **Not done** — anything skipped or failing, and why
-   - **Next** — the single next step (usually "review and ask for the PR" or
-     the next backlog item)
+If in doubt, it isn't a small fix.
+
+**Escalation rule (every stage):** after **2 honest failed attempts** at the
+same problem, stop and report to the owner. Include what failed (the real
+output), what was tried, and the options. Never keep looping, and never hide a
+failure.
 
 ---
 
-## 3. Intake: every task is a backlog item
+## 2. The stages
 
-- All work maps to an item in `BACKLOG.md` with an ID (`B-###`) and, where it
-  touches product behaviour, a PRD feature ID (`F1`–`F16`).
-- A request that isn't in the backlog gets added to it **before** work starts,
-  in the right section, with acceptance criteria.
-- A request that isn't in the PRD and adds product behaviour needs a PRD entry
-  too. Write it in the same PR as the code (§8).
-- A request that conflicts with `GUARDRAILS.md` or the PRD's scope stops here:
-  surface the conflict and ask (GUARDRAILS §14).
+Each stage lists its input, its output, what success looks like, and what
+happens on failure.
 
-## 4. Plan before building
+### Stage 0 — Intake
 
-For anything bigger than a small fix (a typo, a one-line bug fix, a doc
-correction), Claude posts a short plan and **waits for the owner's OK** before
-writing code:
-
-```
-Backlog: B-### — <title>            Feature: F#
-Change:  <what, in two or three lines>
-Files:   <main files touched>
-Data:    <schema/migration change? backward-compatible with the running server?>
-Tests:   <which tests are added; any of the dangerous five touched?>
-Risks:   <cost, privacy, guardrail notes — or "none">
-Split:   <if more than one feature ID: how it splits into PRs>
-```
-
-Always plan first, however small the change, when it involves a schema
-change, a new dependency, a new external service, or anything in
-GUARDRAILS §14.
-
-## 5. Branches
-
-- **One branch per task**, cut from the latest `main`, short-lived.
-- Name: `<type>/<backlog-id>-<slug>`, for example `feat/B-003-month-command`,
-  `fix/B-007-soft-delete-purge`, `docs/B-012-adr-index`.
-  `<type>` is the Conventional Commit type (`feat`, `fix`, `docs`, `refactor`,
-  `test`, `chore`, `ci`).
-- A cloud session that is assigned a branch name uses that name instead.
-- Never commit directly to `main`. Never force-push a shared branch or rewrite
-  pushed history.
-- Push with `git push -u origin <branch>`.
-
-## 6. Building
-
-- **One feature ID per PR.** Split anything larger into numbered parts, e.g.
-  "part 1 of 2 (data model + bot)", "part 2 of 2 (Mini App)", as F12 was.
-- Follow the conventions in `CLAUDE.md` and the nested `CLAUDE.md` of the
-  workspace you're in (`apps/server`, `apps/miniapp`, `packages/core`).
-- Commits are Conventional Commits with the feature ID in the scope or body:
-  `feat(stats): F7 add /month summary command`.
-- Ideas that come up mid-task go to `BACKLOG.md` → **Later**. They are mentioned
-  in the end-of-session report and **never built in the current task**.
-
-## 7. Verification
-
-Every change, before asking for a PR:
-
-| Check | Who | When |
-|---|---|---|
-| `pnpm typecheck && pnpm lint && pnpm test` | Claude | Before every commit |
-| Tests for the dangerous five (money, parser, safe-to-spend, recurrence, timezones) | Claude | Any change touching them, no exceptions |
-| Auth + cross-user rejection test | Claude | Every new or changed API route |
-| Mini App screenshots: light **and** dark theme at 375px | Claude | Any UI change, via the pre-installed headless Chromium; attached to the PR |
-| Try it on the **development bot** + dev Supabase project | Owner | Before merging |
-| CI green (`.github/workflows/ci.yml`) | GitHub | Before merging; never merge on red |
-
-## 8. Pull requests and merging
-
-- Claude opens a PR **only when the owner asks**. Claude **never merges.**
-- PR body: the backlog ID, the feature ID, what changed, how it was verified
-  (§7), screenshots for UI, and any migration notes.
-- The owner reviews, confirms CI is green, and merges.
-- Migrations ship with the PR that needs them and must work with the currently
-  running server (`CLAUDE.md` → Deployment).
-
-### Definition of done
-
-A task is done only when **all** of these hold:
-
-1. **Docs are updated in the same PR.** If behaviour changed, the PRD says so.
-   If files moved, `CLAUDE.md`'s layout says so. If you learned a lesson, it's
-   in the gotchas. `README.md` status and `BACKLOG.md` are current.
-2. **The dangerous five are tested** wherever they were touched.
-3. **It's deployed and smoke-tested**: after Render deploys `main`, check
-   `/healthz` and log one real transaction through the bot.
-
-Only then does the backlog item move to **Done**.
-
-## 9. The backlog
-
-`BACKLOG.md` is the single plan. Sections:
-
-| Section | Meaning |
+| | |
 |---|---|
-| **Now** | Being worked on or next up. Keep it short. |
-| **Next** | Agreed and ready, in priority order. |
-| **Later** | Parked ideas. Not agreed, not scheduled. |
-| **Drift & debt** | Places where the code and docs disagree, or a guardrail isn't met yet |
-| **Done** | Finished items, newest first, with their PR number |
+| **Input** | A request from the owner, a bug, or a backlog item |
+| **Do** | Find the item in `BACKLOG.md`. If it isn't there, add it with a `B-###` ID, title, feature ID (F1–F16) and section |
+| **Output** | A backlog item |
+| ✅ **Success** | The item exists and the work maps to exactly one feature ID |
+| ❌ **Failure** | It conflicts with `GUARDRAILS.md` or PRD scope (e.g. a deferred feature, a paid service) → **stop and ask** (GUARDRAILS §14). Nothing is built. It spans several features → split into several items |
 
-Each item: `B-###`, a title, the feature ID, acceptance criteria, and its
-status. IDs are never reused.
+### Stage 1 — Spec (*what*) ✋
 
-## 10. When production breaks
+| | |
+|---|---|
+| **Input** | The backlog item, the relevant PRD sections |
+| **Do** | Write `docs/specs/B-###-<slug>.md` from [`docs/specs/TEMPLATE.md`](./docs/specs/TEMPLATE.md): problem, user stories, **acceptance criteria as Given / When / Then**, edge cases, out of scope. Post a summary in the session |
+| **Output** | A spec file on the task branch |
+| ✅ **Success** | The owner replies **"approved"** in the session. Claude writes `Spec approved by owner, <date>` at the top of the spec |
+| ❌ **Failure** | Changes requested → revise and re-post. Unclear → ask, don't guess. The scope grew → split it into new backlog items |
 
-**Revert first, fix second.**
+### Stage 2 — Plan (*how*) ✋
 
-1. Roll back: redeploy the last good deploy in Render, or revert the offending
-   PR on `main`.
+| | |
+|---|---|
+| **Input** | The approved spec |
+| **Do** | Fill in the spec's **Plan** section: files touched, data and migration (backward-compatible with the running server?), which test proves each acceptance criterion, risks, PR split. Post it |
+| **Output** | A completed Plan section |
+| ✅ **Success** | The owner replies **"approved"**. Claude writes `Plan approved by owner, <date>` |
+| ❌ **Failure** | It needs a new service, a paid tier, a destructive migration, or a bulk data change → GUARDRAILS §14, stop and ask. Rejected → revise |
+
+### Stage 3 — Build
+
+| | |
+|---|---|
+| **Input** | The approved plan |
+| **Do** | Code on the task branch (§3). Follow the root and nested `CLAUDE.md`. Conventional Commits citing the feature ID. One feature ID per PR. Update the docs the change affects, in the same branch |
+| **Output** | Commits |
+| ✅ **Success** | The code does what the plan says, nothing more |
+| ❌ **Failure** | Reality differs from the plan (a file, an approach, a schema need) → **pause and re-plan** with the owner; don't improvise. A side idea comes up → park it in BACKLOG → Later; don't build it |
+
+### Stage 4 — Test
+
+| | |
+|---|---|
+| **Input** | The build |
+| **Do** | Write tests that map **one-to-one to the acceptance criteria**. Run `pnpm typecheck && pnpm lint && pnpm test`. Take light and dark screenshots at 375px for UI changes (pre-installed headless Chromium) |
+| **Must include** | Dangerous five touched → their fixture tests (`packages/core/CLAUDE.md`). New or changed API route → a test rejecting unauthenticated and cross-user access. New parser behaviour → a golden fixture |
+| **Output** | Green checks, an acceptance-criterion → test table, screenshots |
+| ✅ **Success** | All checks pass, and every acceptance criterion has a passing test |
+| ❌ **Failure** | Red → fix and rerun, and report the real output. **Never** skip, disable or loosen a test to get green. After 2 failed attempts → escalate (§1) |
+
+### Stage 5 — Review ✋
+
+| | |
+|---|---|
+| **Input** | Green branch. The owner asks for a PR |
+| **Do** | Claude opens the PR. Body: backlog ID, feature ID, link to the spec, summary, **the review checklist (§4)**, screenshots for UI, migration notes. Then the owner tests on the **dev bot** + dev Supabase |
+| **Output** | An open PR |
+| ✅ **Success** | CI is green, the checklist holds, the owner merges. **Claude never merges** |
+| ❌ **Failure** | CI red → back to Stage 4. Changes requested → back to Stage 3. A design flaw → back to Stage 2 |
+
+### Stage 6 — Release
+
+| | |
+|---|---|
+| **Input** | The merge to `main`. Render deploys automatically |
+| **Do** | Smoke test: `GET /healthz` responds, and one real transaction logs through the bot |
+| **Output** | Live in production |
+| ✅ **Success** | Both smoke checks pass |
+| ❌ **Failure** | **Revert first, fix second** (§6) |
+
+### Stage 7 — Close
+
+| | |
+|---|---|
+| **Input** | Release passed |
+| **Do** | Move the item to BACKLOG → Done with its PR number. Confirm the docs are current |
+| ✅ **Success** — the **Definition of Done** | (1) docs updated in the same PR, (2) dangerous five tested wherever touched, (3) deployed and smoke-tested |
+| ❌ **Failure** | Any of the three missing → the item is **not** Done; open a follow-up item |
+
+---
+
+## 3. Branches and commits
+
+- **One branch per task**, from the latest `main`, named
+  `<type>/<backlog-id>-<slug>`, e.g. `feat/B-003-month-command`.
+  `<type>` is `feat`, `fix`, `docs`, `refactor`, `test`, `chore` or `ci`.
+- A cloud session assigned a branch name uses that name instead.
+- Never commit to `main`, never force-push a shared branch, never rewrite
+  pushed history. Push with `git push -u origin <branch>`.
+- Commits: Conventional Commits with the feature ID,
+  e.g. `feat(stats): F7 add /month summary command`.
+
+## 4. PR review checklist
+
+Every PR body carries this, filled in by Claude:
+
+**Acceptance criteria → tests**
+
+| # | Given / When / Then (from the spec) | Proven by |
+|---|---|---|
+| AC1 | … | `path/to/file.test.ts` › "test name" |
+
+**Guardrail self-check**
+
+- [ ] **Cost:** no paid or card-required service, no new external service, no
+  second Render service (GUARDRAILS §1)
+- [ ] **Money:** integer cents only, no negatives, division rounds down
+  (§2)
+- [ ] **Auth:** identity only from verified `initData` / webhook; every query
+  filtered by the user; cross-user test present (§4)
+- [ ] **Privacy:** no amounts, notes, merchants or `initData` in logs; no
+  third parties (§6)
+- [ ] **Time:** user-timezone boundaries, injected `Clock` (§9)
+
+A box that can't honestly be ticked is explained in the PR body. It is never
+ticked anyway.
+
+## 5. Session ritual (Claude)
+
+**Start:** read `CLAUDE.md`, `GUARDRAILS.md`, `BACKLOG.md` (and any spec for
+the item) → `git fetch origin main` → confirm the B-### item and its current
+stage → create or check out the task branch.
+
+**End:** run the checks → update the spec's status and BACKLOG → commit and
+push → report to the owner:
+- **Done:** what changed, with IDs, and which stage the item has reached
+- **Not done:** anything skipped or failing, with the real output
+- **Next:** the single next step (often "approve the spec" or "ask for the PR")
+
+## 6. When production breaks
+
+1. **Revert first:** redeploy the last good build in Render, or revert the PR.
 2. Confirm `/healthz` and a real capture work.
-3. Open a `fix/B-###-<slug>` branch and fix it through the normal loop,
-   including a test that would have caught it.
+3. Fix on a `fix/B-###-<slug>` branch through the pipeline, with a test that
+   would have caught the bug.
 4. Add the lesson to `CLAUDE.md` → Gotchas.
 
-If real financial data looks wrong (wrong totals, missing or duplicated
-transactions), **stop and ask the owner** before touching any data
-(GUARDRAILS §3 and §14.6). Never run a repair script unasked.
+If **real financial data** looks wrong, **stop and ask** before touching any
+data (GUARDRAILS §3, §14.6). Never run a repair script unasked.
 
-## 11. Changing this document
+## 7. The backlog
 
-This workflow was agreed with the owner. Claude doesn't change it alone.
-Propose the change, get agreement, then edit it in its own `docs/` PR.
+`BACKLOG.md` is the single plan: **Now** (in progress or next up) · **Next**
+(agreed, ordered) · **Later** (parked, not agreed) · **Drift & debt** (code
+and docs disagree, or a guardrail is unmet) · **Done** (newest first, with the
+PR). Each item has an ID (`B-###`, never reused), a feature ID, acceptance
+notes, and a status: `todo` → `spec` → `planned` → `in progress` → `in review`
+→ `done`.
+
+## 8. Where things live
+
+| Artifact | Location |
+|---|---|
+| What the product does | `PRD.md` (F1–F16) |
+| What's next | `BACKLOG.md` |
+| What one task will do, and how | `docs/specs/B-###-<slug>.md` |
+| Why a non-obvious decision was made | `docs/adr/NNNN-*.md` |
+| How code is organised | root `CLAUDE.md` + `apps/server/CLAUDE.md`, `apps/miniapp/CLAUDE.md`, `packages/core/CLAUDE.md` |
+
+## 9. Changing this document
+
+Agreed with the owner, so Claude doesn't change it alone. Propose the change,
+get agreement, then make the edit in its own `docs/` PR.
