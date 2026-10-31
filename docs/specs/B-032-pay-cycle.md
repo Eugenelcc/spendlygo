@@ -950,6 +950,7 @@ the plan should say so.**
 - **Deviations from plan:** none in code. **Blocker, not edited:** `money.test.ts` (P1-AC24) asserts `S$50.00 of S$1,500.00` for user `{currency:'SGD', locale:'en-SG'}`, but `formatCents` (unchanged) renders `$50.00` for `en-SG` on Node 22 (`en-US` would give `SGD 50.00`; only the `S$` in `money.test.ts` is wrong; `core/money.test.ts` `S$12.50` is parsing). `buildTodayText` produces `20 Oct – 19 Nov: $50.00 of $1,500.00` and day 1 `This month: $50.00 …` as intended. Planner/test-writer must fix the expected string (e.g. `$50.00 of $1,500.00`) or the user fixture locale.
 - **Screenshots (P1-AC26):** not taken: the Today screen needs `/api/today` and there is no API/DB wired to a preview here; the change is copy only (heading/`received this cycle`). Not faked.
 - **Parked ideas:** none
+- **Follow-up (review finding 1, perf):** the active space is loaded once per request and passed through (`computeSafeToSpend` takes optional `settings`); independent queries run in `Promise.all`. Sequential DB stages after auth: `/api/today` 3 to 2 (settings runs alongside list/recent/streak, then all totals in parallel; 1 is impossible while the cycle start depends on the space row), text and photo-OCR captures 2 to 1 (settings runs alongside the category lookup or the insert), `/api/me` reads the space 2 times to 1. Behaviour identical; `ci:local` green, 501 tests. Parked: `currentCycle` in `service.ts` is now unused.
 
 ---
 

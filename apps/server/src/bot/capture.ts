@@ -17,7 +17,12 @@ import {
 } from '@spendlygo/core';
 import { categoriesRepo, transactionsRepo } from '@spendlygo/db';
 import type { AppContext } from '../context.js';
-import { activeHouseholdId, computeSafeToSpend, todayFor } from '../api/service.js';
+import {
+  activeHouseholdId,
+  activeSpaceSettings,
+  computeSafeToSpend,
+  todayFor,
+} from '../api/service.js';
 import { logger } from '../logger.js';
 import type { BotContext } from './middleware.js';
 import { escapeMarkdown } from './markdown.js';
@@ -123,7 +128,10 @@ export async function captureFromText(
   }
 
   const kind = parsed.direction === 'in' ? 'income' : 'expense';
-  const all = await categoriesRepo.listForUser(ctx.db, user.id);
+  const [all, settings] = await Promise.all([
+    categoriesRepo.listForUser(ctx.db, user.id),
+    activeSpaceSettings(ctx, user),
+  ]);
 
   // An explicit #tag wins; otherwise infer from the note (PRD F10.4).
   const slug =
@@ -154,7 +162,7 @@ export async function captureFromText(
     source: 'chat',
   });
 
-  const safeToSpend = await computeSafeToSpend(ctx, user, today);
+  const safeToSpend = await computeSafeToSpend(ctx, user, today, settings);
 
   let message = buildConfirmation({
     direction: parsed.direction,

@@ -54,7 +54,7 @@ import {
   type TodayResponse,
   type TransactionsResponse,
 } from '@spendlygo/shared';
-import { NotFoundError } from '@spendlygo/core';
+import { NotFoundError, cycleContaining } from '@spendlygo/core';
 import type { SpendlygoBot } from '../bot/index.js';
 import type { AppContext } from '../context.js';
 import { requireInitData, type ApiEnv } from '../middleware/auth.js';
@@ -63,9 +63,9 @@ import { buildExportCsv, exportFilename, parseExportRange } from './export.js';
 import { buildRecap } from './recap.js';
 import {
   activeHouseholdId,
+  activeSpaceSettings,
   computeSafeToSpend,
   computeStreak,
-  currentCycle,
   effectiveBudgetCents,
   recentDailySpend,
   toApiSavingsGoal,
@@ -125,11 +125,12 @@ export function createApiRouter(ctx: AppContext, bot: SpendlygoBot): Hono<ApiEnv
 
   api.get('/me', async (c) => {
     const user = c.get('user');
-    const [budgetCents, household, cycle] = await Promise.all([
-      effectiveBudgetCents(ctx, user),
+    const [settings, household] = await Promise.all([
+      activeSpaceSettings(ctx, user),
       loadHouseholdView(ctx, user),
-      currentCycle(ctx, user),
     ]);
+    const budgetCents = settings.budgetCents;
+    const cycle = cycleContaining(todayFor(ctx, user), settings.cycleStartDay);
 
     const body: MeResponse = {
       user: {
@@ -284,10 +285,10 @@ export function createApiRouter(ctx: AppContext, bot: SpendlygoBot): Hono<ApiEnv
     const today = todayFor(ctx, user);
 
     const spaceId = activeHouseholdId(user);
-    const safeToSpend = await computeSafeToSpend(ctx, user, today);
-    const cycle = safeToSpend.cycle;
-    const [monthTotals, todayTransactions, recentDays, streak] = await Promise.all([
-      transactionsRepo.totalsForPeriod(ctx.db, spaceId, cycle.start, cycle.end),
+    // Stage 1: the space settings, alongside everything that doesn't need the
+    // cycle. Stage 2: every total that does. The space is read once.
+    const [settings, todayTransactions, recentDays, streak] = await Promise.all([
+      activeSpaceSettings(ctx, user),
       transactionsRepo.list(ctx.db, spaceId, {
         from: today,
         to: today,
@@ -295,6 +296,11 @@ export function createApiRouter(ctx: AppContext, bot: SpendlygoBot): Hono<ApiEnv
       }),
       recentDailySpend(ctx, user, today),
       computeStreak(ctx, user, today),
+    ]);
+    const cycle = cycleContaining(today, settings.cycleStartDay);
+    const [safeToSpend, monthTotals] = await Promise.all([
+      computeSafeToSpend(ctx, user, today, settings),
+      transactionsRepo.totalsForPeriod(ctx.db, spaceId, cycle.start, cycle.end),
     ]);
 
     const body: TodayResponse = {

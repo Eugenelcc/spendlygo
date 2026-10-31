@@ -18,7 +18,12 @@
 import { formatCents, type AmountCents } from '@spendlygo/core';
 import { attachmentsRepo, transactionsRepo } from '@spendlygo/db';
 import type { PhotoSize } from 'grammy/types';
-import { activeHouseholdId, computeSafeToSpend, todayFor } from '../api/service.js';
+import {
+  activeHouseholdId,
+  activeSpaceSettings,
+  computeSafeToSpend,
+  todayFor,
+} from '../api/service.js';
 import type { AppContext } from '../context.js';
 import { guessReceiptAmount } from '../telegram/ocr.js';
 import { resolveFileUrl } from '../telegram/photos.js';
@@ -121,20 +126,23 @@ async function captureWithOcr(
   const user = botCtx.appUser;
   const today = todayFor(ctx, user);
 
-  const created = await transactionsRepo.create(ctx.db, {
-    userId: user.id,
-    householdId: activeHouseholdId(user),
-    direction: 'out',
-    amountCents: guessedCents,
-    categoryId: null,
-    note: null,
-    occurredOn: today,
-    source: 'chat',
-  });
+  const [created, settings] = await Promise.all([
+    transactionsRepo.create(ctx.db, {
+      userId: user.id,
+      householdId: activeHouseholdId(user),
+      direction: 'out',
+      amountCents: guessedCents,
+      categoryId: null,
+      note: null,
+      occurredOn: today,
+      source: 'chat',
+    }),
+    activeSpaceSettings(ctx, user),
+  ]);
 
   await attachPhoto(ctx, botCtx, created.id, photo, { status: 'done', amountCents: guessedCents });
 
-  const safeToSpend = await computeSafeToSpend(ctx, user, today);
+  const safeToSpend = await computeSafeToSpend(ctx, user, today, settings);
   const message = buildConfirmation({
     direction: 'out',
     amountCents: guessedCents,

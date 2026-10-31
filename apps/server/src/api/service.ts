@@ -155,8 +155,10 @@ export async function computeSafeToSpend(
   ctx: AppContext,
   user: User,
   today: IsoDate = todayFor(ctx, user),
+  // Pass settings already loaded for this request to skip the extra round trip.
+  settings?: ActiveSpaceSettings,
 ): Promise<SafeToSpendWithCycle> {
-  const { budgetCents, cycleStartDay } = await activeSpaceSettings(ctx, user);
+  const { budgetCents, cycleStartDay } = settings ?? (await activeSpaceSettings(ctx, user));
   const cycle = cycleContaining(today, cycleStartDay);
 
   const spaceId = activeHouseholdId(user);
