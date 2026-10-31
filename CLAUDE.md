@@ -101,6 +101,7 @@ spendlygo/
 │   │       ├── recurrence.ts    # F5 occurrence dates, month-end clamping
 │   │       ├── categories.ts    # F10 keyword inference
 │   │       ├── time.ts          # user-timezone period boundaries
+│   │       ├── cycle.ts         # F17 budget cycle boundaries
 │   │       ├── clock.ts         # injected Clock
 │   │       ├── savings.ts       # F14 savings goal progress
 │   │       ├── streaks.ts       # F15 logging streaks

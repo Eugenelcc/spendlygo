@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { calculateSafeToSpend, suggestBudgetFromHistory } from './safe-to-spend.js';
 import { centsOf } from './money.js';
-import type { IsoDate } from './time.js';
+import { addDays, daysBetween, monthRange, parseIsoDate, type IsoDate } from './time.js';
+import { ValidationError } from './errors.js';
 
 // Math.round, because `999.99 * 100` is 99998.99999999999 in binary floating
 // point — the very bug this module exists to prevent, and it bit the helper.
@@ -192,5 +193,102 @@ describe('suggestBudgetFromHistory', () => {
   it('declines to suggest from too little history', () => {
     expect(suggestBudgetFromHistory(budget(500), 13)).toBeNull();
     expect(suggestBudgetFromHistory(centsOf(0), 60)).toBeNull();
+  });
+});
+
+describe('pay cycles (F17)', () => {
+  const cycle20 = { start: '2026-10-20' as IsoDate, end: '2026-11-19' as IsoDate };
+
+  function calcCycle(opts: {
+    budget: number | null;
+    spentMtd: number;
+    spentToday?: number;
+    today: string;
+    cycle: { start: IsoDate; end: IsoDate };
+  }) {
+    return calculateSafeToSpend({
+      budgetCents: opts.budget === null ? null : budget(opts.budget),
+      spentMonthToDateCents: budget(opts.spentMtd),
+      spentTodayCents: budget(opts.spentToday ?? 0),
+      today: opts.today as IsoDate,
+      cycle: opts.cycle,
+    });
+  }
+
+  it('first day of a cycle splits the budget across the whole cycle', () => {
+    const result = calcCycle({ budget: 1500, spentMtd: 0, today: '2026-10-20', cycle: cycle20 });
+    expect(result.daysRemaining).toBe(31);
+    expect(result.daysInMonth).toBe(31);
+    expect(result.dayOfMonth).toBe(1);
+    expect(result.safeTodayCents).toBe(4838);
+  });
+
+  it('last day of a cycle gets the whole remainder', () => {
+    const result = calcCycle({ budget: 1500, spentMtd: 1400, today: '2026-11-19', cycle: cycle20 });
+    expect(result.daysRemaining).toBe(1);
+    expect(result.safeTodayCents).toBe(10000);
+  });
+
+  it('a calendar-month cycle gives exactly the old result', () => {
+    for (const [year, month] of [
+      [2026, 2],
+      [2024, 2],
+      [2026, 4],
+      [2026, 8],
+    ] as const) {
+      const range = monthRange(year, month);
+      let today = range.start;
+      while (today <= range.end) {
+        const base = {
+          budgetCents: budget(1234.56),
+          spentMonthToDateCents: budget(parseIsoDate(today).day * 13.37),
+          spentTodayCents: budget(5),
+          today,
+        };
+        expect(calculateSafeToSpend({ ...base, cycle: range })).toEqual(calculateSafeToSpend(base));
+        today = addDays(today, 1);
+      }
+    }
+  });
+
+  it('Σ daily allowance ≤ budget over every cycle shape', async () => {
+    // Dynamic import so a missing cycle.ts fails only this test, not the file.
+    const { cycleContaining } = await import('./cycle.js');
+    const budgets = [100, 999.99, 1500, 0.07, 12345.67];
+    const startDays = [1, 15, 20, 28, 29, 30, 31];
+    const anchors = ['2026-02-15', '2028-02-15', '2026-04-15', '2026-12-25'] as IsoDate[];
+    for (const b of budgets) {
+      for (const startDay of startDays) {
+        for (const anchor of anchors) {
+          const cycle = cycleContaining(anchor, startDay);
+          let spent = 0;
+          let day = cycle.start;
+          while (day <= cycle.end) {
+            const r = calcCycle({ budget: b, spentMtd: spent / 100, today: day, cycle });
+            spent += r.safeTodayCents;
+            day = addDays(day, 1);
+          }
+          expect(spent).toBeLessThanOrEqual(budget(b));
+          expect(daysBetween(cycle.start, cycle.end) + 1).toBe(cycle.days);
+        }
+      }
+    }
+  });
+
+  it('zero budget and overspend inside a cycle', () => {
+    const zero = calcCycle({ budget: 0, spentMtd: 0, today: '2026-11-01', cycle: cycle20 });
+    expect(zero.safeTodayCents).toBe(0);
+    expect(zero.budgetUsedRatio).toBe(1);
+
+    const over = calcCycle({ budget: 1500, spentMtd: 1600, today: '2026-11-01', cycle: cycle20 });
+    expect(over.safeTodayCents).toBe(0);
+    expect(over.overspentCents).toBe(10000);
+    expect(over.pace).toBe('over_budget');
+  });
+
+  it('rejects a today outside the cycle', () => {
+    expect(() =>
+      calcCycle({ budget: 1500, spentMtd: 0, today: '2026-10-19', cycle: cycle20 }),
+    ).toThrow(ValidationError);
   });
 });

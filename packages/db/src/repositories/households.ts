@@ -13,7 +13,7 @@
  */
 
 import { randomInt } from 'node:crypto';
-import { and, asc, desc, eq, isNull } from 'drizzle-orm';
+import { and, asc, desc, eq, isNull, ne } from 'drizzle-orm';
 import type { Database } from '../client.js';
 import {
   households,
@@ -291,4 +291,25 @@ export async function updateBudget(
   const household = rows[0];
   if (!household) throw new Error(`No household ${householdId}`);
   return household;
+}
+
+/**
+ * Set the space's budget-cycle start day (F17). Returns true when it changed,
+ * false when the space was already on that day (nothing written), so a repeated
+ * or redelivered change is detectable without a race.
+ */
+export async function updateCycleStartDay(
+  db: Database,
+  householdId: string,
+  cycleStartDay: number,
+): Promise<boolean> {
+  const rows = await db
+    .update(households)
+    .set({ cycleStartDay, updatedAt: new Date() })
+    .where(and(eq(households.id, householdId), ne(households.cycleStartDay, cycleStartDay)))
+    .returning({ id: households.id });
+  if (rows.length > 0) return true;
+  const existing = await findById(db, householdId);
+  if (!existing) throw new Error(`No household ${householdId}`);
+  return false;
 }

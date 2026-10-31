@@ -54,7 +54,7 @@ import {
   type TodayResponse,
   type TransactionsResponse,
 } from '@spendlygo/shared';
-import { NotFoundError } from '@spendlygo/core';
+import { NotFoundError, cycleContaining } from '@spendlygo/core';
 import type { SpendlygoBot } from '../bot/index.js';
 import type { AppContext } from '../context.js';
 import { requireInitData, type ApiEnv } from '../middleware/auth.js';
@@ -63,12 +63,14 @@ import { buildExportCsv, exportFilename, parseExportRange } from './export.js';
 import { buildRecap } from './recap.js';
 import {
   activeHouseholdId,
+  activeSpaceSettings,
   computeSafeToSpend,
   computeStreak,
   effectiveBudgetCents,
   recentDailySpend,
   toApiSavingsGoal,
   toApiTransaction,
+  toApiCycle,
   todayFor,
 } from './service.js';
 
@@ -123,10 +125,12 @@ export function createApiRouter(ctx: AppContext, bot: SpendlygoBot): Hono<ApiEnv
 
   api.get('/me', async (c) => {
     const user = c.get('user');
-    const [budgetCents, household] = await Promise.all([
-      effectiveBudgetCents(ctx, user),
+    const [settings, household] = await Promise.all([
+      activeSpaceSettings(ctx, user),
       loadHouseholdView(ctx, user),
     ]);
+    const budgetCents = settings.budgetCents;
+    const cycle = cycleContaining(todayFor(ctx, user), settings.cycleStartDay);
 
     const body: MeResponse = {
       user: {
@@ -148,6 +152,7 @@ export function createApiRouter(ctx: AppContext, bot: SpendlygoBot): Hono<ApiEnv
       // PRD F7.2: the client must never derive a period boundary from the
       // device clock — it is resolved here, in the user's timezone.
       today: isoDateOf(ctx.clock.now(), user.timezone),
+      cycle: toApiCycle(cycle),
     };
     return c.json(body);
   });
@@ -278,12 +283,12 @@ export function createApiRouter(ctx: AppContext, bot: SpendlygoBot): Hono<ApiEnv
   api.get('/today', async (c) => {
     const user = c.get('user');
     const today = todayFor(ctx, user);
-    const month = monthRange(parseIsoDate(today).year, parseIsoDate(today).month);
 
     const spaceId = activeHouseholdId(user);
-    const [safeToSpend, monthTotals, todayTransactions, recentDays, streak] = await Promise.all([
-      computeSafeToSpend(ctx, user, today),
-      transactionsRepo.totalsForPeriod(ctx.db, spaceId, month.start, month.end),
+    // Stage 1: the space settings, alongside everything that doesn't need the
+    // cycle. Stage 2: every total that does. The space is read once.
+    const [settings, todayTransactions, recentDays, streak] = await Promise.all([
+      activeSpaceSettings(ctx, user),
       transactionsRepo.list(ctx.db, spaceId, {
         from: today,
         to: today,
@@ -291,6 +296,11 @@ export function createApiRouter(ctx: AppContext, bot: SpendlygoBot): Hono<ApiEnv
       }),
       recentDailySpend(ctx, user, today),
       computeStreak(ctx, user, today),
+    ]);
+    const cycle = cycleContaining(today, settings.cycleStartDay);
+    const [safeToSpend, monthTotals] = await Promise.all([
+      computeSafeToSpend(ctx, user, today, settings),
+      transactionsRepo.totalsForPeriod(ctx.db, spaceId, cycle.start, cycle.end),
     ]);
 
     const body: TodayResponse = {
@@ -300,6 +310,7 @@ export function createApiRouter(ctx: AppContext, bot: SpendlygoBot): Hono<ApiEnv
       safeToSpend: serialiseSafeToSpend(safeToSpend),
       monthIn: monthTotals.inCents,
       monthOut: monthTotals.outCents,
+      cycle: toApiCycle(cycle),
       transactions: todayTransactions.map((row) => toApiTransaction(row, user.id)),
       recentDays,
       streak,

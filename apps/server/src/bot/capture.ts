@@ -17,7 +17,12 @@ import {
 } from '@spendlygo/core';
 import { categoriesRepo, transactionsRepo } from '@spendlygo/db';
 import type { AppContext } from '../context.js';
-import { activeHouseholdId, computeSafeToSpend, todayFor } from '../api/service.js';
+import {
+  activeHouseholdId,
+  activeSpaceSettings,
+  computeSafeToSpend,
+  todayFor,
+} from '../api/service.js';
 import { logger } from '../logger.js';
 import type { BotContext } from './middleware.js';
 import { escapeMarkdown } from './markdown.js';
@@ -52,6 +57,8 @@ export function buildConfirmation(options: {
   leftForTodayCents: AmountCents;
   hasBudget: boolean;
   overspentCents: AmountCents;
+  /** The space's cycle start day (F17). Default 1 keeps the month wording. */
+  cycleStartDay?: number;
 }): string {
   const money = (cents: AmountCents) =>
     formatCents(cents, { currency: options.currency, locale: options.locale });
@@ -74,7 +81,10 @@ export function buildConfirmation(options: {
     if (!options.hasBudget) {
       lines.push('', '_Set a monthly budget with /budget to see what is safe to spend._');
     } else if (options.overspentCents > 0) {
-      lines.push('', `⚠️ ${escapeMarkdown(money(options.overspentCents))} over budget this month`);
+      lines.push(
+        '',
+        `⚠️ ${escapeMarkdown(money(options.overspentCents))} over budget ${(options.cycleStartDay ?? 1) === 1 ? 'this month' : 'this cycle'}`,
+      );
     } else {
       lines.push('', `${escapeMarkdown(money(options.leftForTodayCents))} left to spend today`);
     }
@@ -118,7 +128,10 @@ export async function captureFromText(
   }
 
   const kind = parsed.direction === 'in' ? 'income' : 'expense';
-  const all = await categoriesRepo.listForUser(ctx.db, user.id);
+  const [all, settings] = await Promise.all([
+    categoriesRepo.listForUser(ctx.db, user.id),
+    activeSpaceSettings(ctx, user),
+  ]);
 
   // An explicit #tag wins; otherwise infer from the note (PRD F10.4).
   const slug =
@@ -149,7 +162,7 @@ export async function captureFromText(
     source: 'chat',
   });
 
-  const safeToSpend = await computeSafeToSpend(ctx, user, today);
+  const safeToSpend = await computeSafeToSpend(ctx, user, today, settings);
 
   let message = buildConfirmation({
     direction: parsed.direction,
@@ -165,6 +178,7 @@ export async function captureFromText(
     leftForTodayCents: safeToSpend.leftForTodayCents,
     hasBudget: safeToSpend.hasBudget,
     overspentCents: safeToSpend.overspentCents,
+    cycleStartDay: safeToSpend.cycle.startDay,
   });
 
   if (unknownTag) {

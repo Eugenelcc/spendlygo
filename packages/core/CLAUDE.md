@@ -13,6 +13,7 @@ to this folder.
 | `parser.ts` | Quick-text grammar | F1 |
 | `safe-to-spend.ts` | Daily allowance, pace, projection, budget suggestion | F6 |
 | `recurrence.ts` | Occurrence dates, month-end clamping | F5 |
+| `cycle.ts` | Budget cycle boundaries, start day 1–31 clamped in short months | F17 |
 | `time.ts` | `IsoDate`, user-timezone period boundaries | GUARDRAILS §9 |
 | `categories.ts` | Keyword inference | F10 |
 | `savings.ts` | Savings goal progress | F14 |
@@ -50,6 +51,7 @@ to this folder.
 - **Recurrence** must cover 28-, 29-, 30- and 31-day months, and anchors on
   days 29–31.
 - **Parser:** new behaviour adds a golden fixture.
+- **Cycles:** fixtures for start day 1 (must equal the calendar month), days 29–31 clamping, leap February and year end.
 - **Time:** cover late-night entries (a 00:30 spend belongs to that calendar
   day in the user's timezone).
 

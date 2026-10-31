@@ -1,0 +1,2 @@
+ALTER TABLE "households" ADD COLUMN "cycle_start_day" smallint DEFAULT 1 NOT NULL;--> statement-breakpoint
+ALTER TABLE "households" ADD CONSTRAINT "households_cycle_start_day_ck" CHECK ("households"."cycle_start_day" BETWEEN 1 AND 31);
