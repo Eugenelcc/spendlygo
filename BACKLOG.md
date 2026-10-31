@@ -95,6 +95,9 @@ shifts by more than 10% for two consecutive months. Nothing in the code
 implements this yet. Verify, then build or descope it.
 
 **B-010.** P6's definition of done is "ready to hand to a second person".
+Includes a known item: primary buttons use Telegram's `button_color` with white text,
+which measured 4.13:1 (light) and 3.72:1 (dark), below DESIGN §10's 4.5:1 (found
+in B-032 Part 2, 2026-11-01; the owner accepted it for that PR). Fix it app-wide here.
 Check every screen against DESIGN §11 (light/dark, 375/430px,
 loading/empty/error/populated). Each gap found becomes its own item.
 

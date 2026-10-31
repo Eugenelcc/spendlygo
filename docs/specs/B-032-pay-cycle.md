@@ -1283,3 +1283,5 @@ third copy. `alerts.ts:104` and `money.ts:66` have their own Part 1 formats.
 - [ ] Design (DESIGN §10): R1 contrast on "Try again"
 - [x] Docs: finding 3 wording in `apps/server/CLAUDE.md` and ADR 0007
 - [x] `pnpm ci:local` passed
+
+**Owner decision on R1 (2026-11-01):** after the fix (cb993e0), the main session measured "Try again" on the real stack: white on Telegram's button colour = **4.13:1 (light) / 3.72:1 (dark)** with Telegram-default-like theme values, still below DESIGN §10's 4.5:1. Every primary button in the app inherits the same Telegram `button_color`, so this is app-wide, not specific to Part 2. **The owner accepted it for Part 2**, and the app-wide fix is logged under BACKLOG B-010 (polish audit). R2 is verified: ‹ is disabled in the error state. With that waiver, Part 2 is **ready for owner**.
