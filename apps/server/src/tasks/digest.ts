@@ -10,6 +10,7 @@
 
 import {
   addDays,
+  cycleContaining,
   DEFAULT_CYCLE_START_DAY,
   formatCents,
   formatCycleRange,
@@ -23,10 +24,11 @@ import {
 } from '@spendlygo/core';
 import { recurringRepo, type User } from '@spendlygo/db';
 import {
+  activeSpaceSettings,
   computePeriodStats,
   computeSafeToSpend,
   computeStreak,
-  currentCycle,
+  type ActiveSpaceSettings,
 } from '../api/service.js';
 import { escapeMarkdown } from '../bot/markdown.js';
 import type { AppContext } from '../context.js';
@@ -126,13 +128,14 @@ async function buildPeriodSummary(
   ctx: AppContext,
   user: User,
   options: PeriodSummaryOptions,
+  settings?: ActiveSpaceSettings,
 ): Promise<DigestContent> {
   const money = (cents: number) =>
     escapeMarkdown(
       formatCents(cents as AmountCents, { currency: user.currency, locale: user.locale }),
     );
 
-  const stats = await computePeriodStats(ctx, user, options);
+  const stats = await computePeriodStats(ctx, user, options, settings);
 
   if (stats.totals.count === 0 && !stats.safeToSpend.hasBudget) {
     return { text: '', worthSending: false };
@@ -234,20 +237,28 @@ export async function buildMonthlyDigest(
   ctx: AppContext,
   user: User,
   today: IsoDate,
+  // Pass settings already loaded by the caller to skip the extra round trips.
+  settings?: ActiveSpaceSettings,
 ): Promise<DigestContent> {
-  const cycle = await currentCycle(ctx, user, today);
+  const loaded = settings ?? (await activeSpaceSettings(ctx, user));
+  const cycle = cycleContaining(today, loaded.cycleStartDay);
   const previous = previousCycle(cycle);
 
-  return buildPeriodSummary(ctx, user, {
-    heading:
-      cycle.startDay === 1
-        ? monthName(parseIsoDate(cycle.start).month) || 'This month'
-        : formatCycleRange(cycle),
-    from: cycle.start,
-    to: today,
-    previousFrom: previous.start,
-    previousTo: previous.end,
-  });
+  return buildPeriodSummary(
+    ctx,
+    user,
+    {
+      heading:
+        cycle.startDay === 1
+          ? monthName(parseIsoDate(cycle.start).month) || 'This month'
+          : formatCycleRange(cycle),
+      from: cycle.start,
+      to: today,
+      previousFrom: previous.start,
+      previousTo: previous.end,
+    },
+    loaded,
+  );
 }
 
 // send-digests.ts and the existing test suite import buildDigest for the

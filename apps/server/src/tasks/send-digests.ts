@@ -45,9 +45,9 @@ export async function sendDueDigests(ctx: AppContext, bot: Bot<BotContext>): Pro
 
     // Inside sendOne's error isolation: one user's failed lookup must not stop the loop.
     sent += await sendOne(bot, user, 'tick.monthly_digest_failed', async () => {
-      const { cycleStartDay } = await activeSpaceSettings(ctx, user);
-      return isMonthlyDigestDay(today, cycleStartDay)
-        ? buildMonthlyDigest(ctx, user, today)
+      const settings = await activeSpaceSettings(ctx, user);
+      return isMonthlyDigestDay(today, settings.cycleStartDay)
+        ? buildMonthlyDigest(ctx, user, today, settings)
         : { text: '', worthSending: false };
     });
   }

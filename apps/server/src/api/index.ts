@@ -3,7 +3,6 @@ import {
   addDays,
   cycleContaining,
   daysBetween,
-  formatCycleRange,
   inferCategorySlug,
   isoDateOf,
   monthName,
@@ -66,6 +65,7 @@ import { buildRecap } from './recap.js';
 import {
   activeHouseholdId,
   activeSpaceSettings,
+  cycleLabel,
   computeSafeToSpend,
   computeStreak,
   effectiveBudgetCents,
@@ -473,7 +473,10 @@ export function createApiRouter(ctx: AppContext, bot: SpendlygoBot): Hono<ApiEnv
     const today = todayFor(ctx, user);
     const period = statsPeriodSchema.parse(c.req.query('period') ?? 'month');
     const anchor = parseAnchor(c.req.query('anchor')) ?? today;
-    const { cycleStartDay } = await activeSpaceSettings(ctx, user);
+    // Only the month period depends on the space (its cycle start day); day and
+    // year queries start immediately.
+    const cycleStartDay =
+      period === 'month' ? (await activeSpaceSettings(ctx, user)).cycleStartDay : 1;
 
     const body = await buildStats(ctx, activeHouseholdId(user), period, anchor, cycleStartDay);
     return c.json(body);
@@ -766,10 +769,7 @@ async function buildStats(
     const previous = previousCycle(cycle);
     from = cycle.start;
     to = cycle.end;
-    label =
-      cycleStartDay === 1
-        ? `${monthName(parseIsoDate(cycle.start).month)} ${parseIsoDate(cycle.start).year}`
-        : formatCycleRange(cycle);
+    label = cycleLabel(cycle);
     previousFrom = previous.start;
     previousTo = previous.end;
   } else {
@@ -781,13 +781,12 @@ async function buildStats(
     previousTo = toIsoDate({ year: year - 1, month: 12, day: 31 });
   }
 
-  const [totals, byCategory, previous] = await Promise.all([
+  const [totals, byCategory, previous, series] = await Promise.all([
     transactionsRepo.totalsForPeriod(ctx.db, householdId, from, to),
     transactionsRepo.totalsByCategory(ctx.db, householdId, from, to),
     transactionsRepo.totalsForPeriod(ctx.db, householdId, previousFrom, previousTo),
+    buildSeries(ctx, householdId, period, from, to, year),
   ]);
-
-  const series = await buildSeries(ctx, householdId, period, from, to, year);
 
   return {
     period,

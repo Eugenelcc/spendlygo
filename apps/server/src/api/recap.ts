@@ -8,8 +8,6 @@
 
 import {
   cycleContaining,
-  formatCycleRange,
-  monthName,
   parseIsoDate,
   previousCycle,
   yearRange,
@@ -19,6 +17,7 @@ import type { User } from '@spendlygo/db';
 import type { AppContext } from '../context.js';
 import {
   activeSpaceSettings,
+  cycleLabel,
   computePeriodStats,
   computeStreak,
   type PeriodStats,
@@ -58,10 +57,7 @@ function rangeFor(period: RecapPeriod, anchor: IsoDate, cycleStartDay: number) {
     to: cycle.end,
     previousFrom: previous.start,
     previousTo: previous.end,
-    label:
-      cycleStartDay === 1
-        ? `${monthName(parseIsoDate(cycle.start).month)} ${parseIsoDate(cycle.start).year}`
-        : formatCycleRange(cycle),
+    label: cycleLabel(cycle),
   };
 }
 
@@ -77,20 +73,25 @@ export async function buildRecap(
   anchor: IsoDate,
   today: IsoDate,
 ): Promise<RecapData> {
-  const { cycleStartDay } = await activeSpaceSettings(ctx, user);
-  const range = rangeFor(period, anchor, cycleStartDay);
+  const settings = await activeSpaceSettings(ctx, user);
+  const range = rangeFor(period, anchor, settings.cycleStartDay);
   // A recap of a period still in progress must not read past today —
   // spending "dated in the future" can't exist, but the safe-to-spend figure
   // inside computePeriodStats still needs a real "as of" date.
   const to = range.to > today ? today : range.to;
 
   const [stats, streak] = await Promise.all([
-    computePeriodStats(ctx, user, {
-      from: range.from,
-      to,
-      previousFrom: range.previousFrom,
-      previousTo: range.previousTo,
-    }),
+    computePeriodStats(
+      ctx,
+      user,
+      {
+        from: range.from,
+        to,
+        previousFrom: range.previousFrom,
+        previousTo: range.previousTo,
+      },
+      settings,
+    ),
     computeStreak(ctx, user, today),
   ]);
 

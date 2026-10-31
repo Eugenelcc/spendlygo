@@ -102,6 +102,13 @@ export async function currentCycle(
   return cycleContaining(date, (await activeSpaceSettings(ctx, user)).cycleStartDay);
 }
 
+/** The period label for a cycle: "October 2026" for start day 1, else "20 Oct – 19 Nov". */
+export function cycleLabel(cycle: BudgetCycle): string {
+  if (cycle.startDay !== 1) return formatCycleRange(cycle);
+  const { year, month } = parseIsoDate(cycle.start);
+  return `${monthName(month)} ${year}`;
+}
+
 /** The wire shape of a cycle. The label is the month name for start day 1, else the range. */
 export function toApiCycle(cycle: BudgetCycle): ApiCycle {
   return {
@@ -256,6 +263,8 @@ export async function computePeriodStats(
   ctx: AppContext,
   user: User,
   options: PeriodStatsOptions,
+  // Pass settings already loaded for this request to skip the extra round trip.
+  settings?: ActiveSpaceSettings,
 ): Promise<PeriodStats> {
   const { from, to, previousFrom, previousTo } = options;
   const spaceId = activeHouseholdId(user);
@@ -265,7 +274,7 @@ export async function computePeriodStats(
     transactionsRepo.totalsForPeriod(ctx.db, spaceId, previousFrom, previousTo),
     transactionsRepo.totalsByCategory(ctx.db, spaceId, from, to),
     transactionsRepo.totalsByDay(ctx.db, spaceId, from, to),
-    computeSafeToSpend(ctx, user, to),
+    computeSafeToSpend(ctx, user, to, settings),
   ]);
 
   const deltaPct =
