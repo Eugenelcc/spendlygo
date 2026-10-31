@@ -8,7 +8,7 @@
 
 import { createHmac } from 'node:crypto';
 import { Bot } from 'grammy';
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { fixedClock } from '@spendlygo/core';
 import { createDatabase, schema, type DatabaseHandle } from '@spendlygo/db';
@@ -150,6 +150,104 @@ describeIfDb('transactions API', () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ direction: 'out', amountCents: 100 }),
       });
+      expect(response.status).toBe(401);
+    });
+  });
+
+  describe('POST /api/transactions — foreign currency (ADR 0007)', () => {
+    afterEach(() => {
+      vi.unstubAllGlobals();
+    });
+
+    function mockFxRate(rate: number): void {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockResolvedValue({
+          ok: true,
+          status: 200,
+          json: async () => ({ amount: 1, base: 'USD', rates: { SGD: rate } }),
+        }),
+      );
+    }
+
+    it('converts using the fetched rate and stores the original amount', async () => {
+      mockFxRate(1.35);
+
+      const response = await post(OWNER, {
+        direction: 'out',
+        originalCurrency: 'USD',
+        originalAmountCents: 10_000, // $100.00
+      });
+      expect(response.status).toBe(201);
+
+      const body = await json(response);
+      expect(body.transaction.amountCents).toBe(13_500); // $135.00 SGD
+      expect(body.transaction.originalCurrency).toBe('USD');
+      expect(body.transaction.originalAmountCents).toBe(10_000);
+      expect(body.transaction.fxRate).toBe(1.35);
+    });
+
+    it('502/503s when the rate cannot be fetched, rather than guessing', async () => {
+      vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('network unreachable')));
+
+      const response = await post(OWNER, {
+        direction: 'out',
+        originalCurrency: 'USD',
+        originalAmountCents: 10_000,
+      });
+      expect(response.status).toBe(503);
+
+      // And nothing was half-created.
+      const list = await json(await app.request('/api/transactions', { headers: auth(OWNER) }));
+      expect(list.transactions).toHaveLength(0);
+    });
+
+    it('rejects originalCurrency without originalAmountCents, and vice versa', async () => {
+      expect((await post(OWNER, { direction: 'out', originalCurrency: 'USD' })).status).toBe(400);
+      expect((await post(OWNER, { direction: 'out', originalAmountCents: 1000 })).status).toBe(400);
+    });
+
+    it('a plain amountCents entry stores no original-currency fields', async () => {
+      const body = await json(await post(OWNER, { direction: 'out', amountCents: 500 }));
+      expect(body.transaction.originalCurrency).toBeNull();
+      expect(body.transaction.originalAmountCents).toBeNull();
+      expect(body.transaction.fxRate).toBeNull();
+    });
+  });
+
+  describe('GET /api/fx-rate (ADR 0007)', () => {
+    afterEach(() => {
+      vi.unstubAllGlobals();
+    });
+
+    it('returns the fetched rate', async () => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockResolvedValue({
+          ok: true,
+          json: async () => ({ rates: { SGD: 1.35 } }),
+        }),
+      );
+
+      const body = await json(
+        await app.request('/api/fx-rate?currency=USD', { headers: auth(OWNER) }),
+      );
+      expect(body).toEqual({ from: 'USD', to: 'SGD', rate: 1.35 });
+    });
+
+    it('rejects a malformed currency code', async () => {
+      const response = await app.request('/api/fx-rate?currency=usd', { headers: auth(OWNER) });
+      expect(response.status).toBe(400);
+    });
+
+    it('503s when the rate is unavailable', async () => {
+      vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('down')));
+      const response = await app.request('/api/fx-rate?currency=USD', { headers: auth(OWNER) });
+      expect(response.status).toBe(503);
+    });
+
+    it('rejects an unauthenticated request', async () => {
+      const response = await app.request('/api/fx-rate?currency=USD');
       expect(response.status).toBe(401);
     });
   });

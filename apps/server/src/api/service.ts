@@ -87,6 +87,9 @@ export function toApiTransaction(
     authorName: row.authorFirstName ?? 'Someone',
     isOwn: row.userId === viewerUserId,
     hasPhoto: row.hasPhoto,
+    originalCurrency: row.originalCurrency,
+    originalAmountCents: row.originalAmountCents,
+    fxRate: row.fxRate,
   };
 }
 

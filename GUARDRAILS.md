@@ -46,6 +46,7 @@ Legend: 🔴 **NEVER** — violating this is a defect, no exceptions.
 | Database | Supabase Postgres | 500 MB DB, project pauses after 7 days idle |
 | Photo storage | **Telegram itself** | Unlimited; we store `file_id` only |
 | Receipt OCR | **OCR.space** (free API key) | No card required; ~500 requests/day, non-commercial use — verify against current limits before relying on it (ADR 0005) |
+| FX rates (multi-currency capture) | **Frankfurter** (frankfurter.app, no key) | No card, no published hard limit at time of writing — verify before relying on it harder than single-household volume (ADR 0007) |
 | Scheduling | cron-job.org / UptimeRobot | Free tier |
 | CI | GitHub Actions | Free for public repos |
 

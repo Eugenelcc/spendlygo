@@ -48,6 +48,17 @@ export function TransactionRow({
               always the viewer's own. This is the whole point of sharing:
               seeing what your partner logged, not just a combined total. */}
           {!transaction.isOwn && ` · ${transaction.authorName}`}
+          {/* Paid in a foreign currency (ADR 0007) — the amount column is
+              always the converted, home-currency figure every total uses. */}
+          {transaction.originalCurrency && transaction.originalAmountCents !== null && (
+            <>
+              {' · '}
+              {formatMoney(transaction.originalAmountCents, {
+                currency: transaction.originalCurrency,
+                locale,
+              })}
+            </>
+          )}
         </span>
       </span>
       <span className={`txn__amount ${isIncome ? 'txn__amount--in' : ''}`}>

@@ -36,6 +36,10 @@ export interface CreateTransactionInput {
   source: TransactionSource;
   /** Set to fund a savings goal — see `packages/db/src/schema.ts`. */
   savingsGoalId?: string | null;
+  /** Logged in a foreign currency (PRD-adjacent, ADR 0007) — all three or none. */
+  originalCurrency?: string | null;
+  originalAmountCents?: number | null;
+  fxRate?: number | null;
 }
 
 /** A transaction with its category and author joined — what every screen shows. */
@@ -55,6 +59,9 @@ export interface TransactionView {
   categoryColorToken: string | null;
   authorFirstName: string | null;
   hasPhoto: boolean;
+  originalCurrency: string | null;
+  originalAmountCents: number | null;
+  fxRate: number | null;
 }
 
 /** Rows this exact author may edit or delete. Never space-widened. */
@@ -82,6 +89,9 @@ const viewColumns = {
   categoryEmoji: categories.emoji,
   categoryColorToken: categories.colorToken,
   authorFirstName: users.firstName,
+  originalCurrency: transactions.originalCurrency,
+  originalAmountCents: transactions.originalAmountCents,
+  fxRate: transactions.fxRate,
   // A correlated EXISTS, not a join — a transaction with several photos must
   // still be exactly one row (PRD F4.3 allows up to 5 per transaction).
   hasPhoto: sql<boolean>`exists(
@@ -111,6 +121,9 @@ export async function create(db: Database, input: CreateTransactionInput): Promi
       occurredOn: input.occurredOn,
       source: input.source,
       savingsGoalId: input.savingsGoalId ?? null,
+      originalCurrency: input.originalCurrency ?? null,
+      originalAmountCents: input.originalAmountCents ?? null,
+      fxRate: input.fxRate ?? null,
     })
     .returning();
 

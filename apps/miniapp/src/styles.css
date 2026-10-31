@@ -1469,6 +1469,26 @@ button {
   text-align: center;
 }
 
+.capture__fx {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+.capture__fx-select {
+  width: auto;
+  min-height: 32px;
+  padding: 6px 8px;
+  font-size: 13px;
+}
+
+.capture__fx-preview {
+  margin: -6px 0 0;
+  font-size: 13px;
+  color: var(--text-subtle);
+  text-align: center;
+}
+
 .pad {
   display: grid;
   grid-template-columns: repeat(3, 1fr);

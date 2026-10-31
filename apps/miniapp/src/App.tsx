@@ -84,6 +84,7 @@ function Shell(): JSX.Element {
   const queryClient = useQueryClient();
   const [tab, setTab] = useState<Tab>('today');
   const [captureOpen, setCaptureOpen] = useState(false);
+  const [foreignCurrency, setForeignCurrency] = useState<string | null>(null);
   const [selected, setSelected] = useState<Transaction | null>(null);
   const [period, setPeriod] = useState<StatsPeriod>('month');
   const [toast, setToast] = useState<string | null>(null);
@@ -200,6 +201,15 @@ function Shell(): JSX.Element {
     enabled: expandedGoalId !== null,
   });
 
+  // ADR 0007: a live preview only — POST /api/transactions fetches its own
+  // rate again at save time, so a stale preview here is harmless.
+  const fxPreview = useQuery({
+    queryKey: ['fxRate', foreignCurrency],
+    queryFn: () => api.fxRate(foreignCurrency as string),
+    enabled: foreignCurrency !== null,
+    staleTime: 5 * 60_000,
+  });
+
   const spaces = useQuery({ queryKey: ['spaces'], queryFn: api.spaces });
 
   /** Everything money-related is invalidated together — the figures interlock. */
@@ -242,6 +252,7 @@ function Shell(): JSX.Element {
     onSuccess: (result) => {
       haptics.success();
       setCaptureOpen(false);
+      setForeignCurrency(null);
       refreshAll();
       const money = formatMoney(result.transaction.amountCents, {
         currency: me.data?.user.currency,
@@ -551,7 +562,14 @@ function Shell(): JSX.Element {
         ))}
       </nav>
 
-      <Sheet open={captureOpen} onClose={() => setCaptureOpen(false)} title="Add a transaction">
+      <Sheet
+        open={captureOpen}
+        onClose={() => {
+          setCaptureOpen(false);
+          setForeignCurrency(null);
+        }}
+        title="Add a transaction"
+      >
         <Capture
           categories={categories.data?.categories ?? []}
           currency={currency}
@@ -565,6 +583,10 @@ function Shell(): JSX.Element {
                 : "Couldn't save — tap to retry."
               : null
           }
+          foreignCurrency={foreignCurrency}
+          onForeignCurrencyChange={setForeignCurrency}
+          fxRate={fxPreview.data?.rate}
+          fxRateLoading={fxPreview.isPending}
           onSubmit={(input) => create.mutate(input)}
         />
       </Sheet>
@@ -580,6 +602,17 @@ function Shell(): JSX.Element {
               {selected.categoryEmoji ?? '•'} {selected.categoryName ?? 'Uncategorised'} ·{' '}
               {selected.occurredOn}
             </div>
+            {selected.originalCurrency && selected.originalAmountCents !== null && (
+              <p className="detail__note">
+                Paid{' '}
+                {formatMoney(selected.originalAmountCents, {
+                  currency: selected.originalCurrency,
+                  locale,
+                })}
+                {selected.fxRate !== null &&
+                  ` at ${selected.fxRate.toFixed(4)} ${selected.originalCurrency}/${currency}`}
+              </p>
+            )}
             {selected.note && <p className="detail__note">{selected.note}</p>}
             {selected.hasPhoto && (
               <div className="detail__photos">

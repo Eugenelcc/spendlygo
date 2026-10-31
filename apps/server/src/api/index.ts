@@ -8,6 +8,7 @@ import {
   monthName,
   monthRange,
   parseIsoDate,
+  ServiceUnavailableError,
   toIsoDate,
   ValidationError,
   yearRange,
@@ -37,6 +38,7 @@ import {
   updateSettingsSchema,
   updateTransactionSchema,
   type CategoriesResponse,
+  type FxRateResponse,
   type GoalProgressResponse,
   type HeatmapResponse,
   type Household as ApiHousehold,
@@ -58,6 +60,7 @@ import {
 import { NotFoundError } from '@spendlygo/core';
 import type { SpendlygoBot } from '../bot/index.js';
 import type { AppContext } from '../context.js';
+import { fetchFxRate } from '../fx.js';
 import { requireInitData, type ApiEnv } from '../middleware/auth.js';
 import { resolveFileUrl } from '../telegram/photos.js';
 import { buildExportCsv, exportFilename, parseExportRange } from './export.js';
@@ -274,6 +277,27 @@ export function createApiRouter(ctx: AppContext, bot: SpendlygoBot): Hono<ApiEnv
     return c.json(body);
   });
 
+  // ADR 0007: a live preview for the Mini App's foreign-currency capture form
+  // — display only. The actual POST /api/transactions always fetches its own
+  // rate again at save time, so nothing here is trusted back from the client.
+  api.get('/fx-rate', async (c) => {
+    const user = c.get('user');
+    const from = c.req.query('currency');
+    if (!from || !/^[A-Z]{3}$/.test(from)) {
+      throw new ValidationError('A 3-letter currency code is required');
+    }
+
+    const rate = await fetchFxRate(from, user.currency);
+    if (rate === null) {
+      throw new ServiceUnavailableError(
+        'Could not fetch an exchange rate right now — try again in a moment.',
+      );
+    }
+
+    const body: FxRateResponse = { from, to: user.currency, rate };
+    return c.json(body);
+  });
+
   // --- the home screen ------------------------------------------------------
 
   api.get('/today', async (c) => {
@@ -337,15 +361,30 @@ export function createApiRouter(ctx: AppContext, bot: SpendlygoBot): Hono<ApiEnv
     // Mini App and the chat behave identically (PRD F10.4).
     const categoryId = input.categoryId ?? (await guessCategoryId(ctx, user.id, input));
 
+    // ADR 0007: a foreign-currency capture is converted here, server-side,
+    // from a rate fetched fresh for this transaction — never from a
+    // client-supplied amountCents, and never from a guess if the fetch fails.
+    const fx =
+      input.originalCurrency !== undefined && input.originalAmountCents !== undefined
+        ? await convertForeignAmount(
+            user.currency,
+            input.originalCurrency,
+            input.originalAmountCents,
+          )
+        : null;
+
     const created = await transactionsRepo.create(ctx.db, {
       userId: user.id,
       householdId: activeHouseholdId(user),
       direction: input.direction,
-      amountCents: input.amountCents,
+      amountCents: fx ? fx.amountCents : (input.amountCents as number),
       categoryId,
       note: input.note ?? null,
       occurredOn: input.occurredOn ?? today,
       source: 'miniapp',
+      originalCurrency: fx ? input.originalCurrency : null,
+      originalAmountCents: fx ? input.originalAmountCents : null,
+      fxRate: fx ? fx.rate : null,
     });
 
     const [view, safeToSpend] = await Promise.all([
@@ -728,6 +767,32 @@ async function guessCategoryId(
   );
   if (!slug) return null;
   return all.find((c) => c.slug === slug)?.id ?? null;
+}
+
+/**
+ * ADR 0007: converts a foreign-currency capture into the user's home
+ * currency with a rate fetched fresh for this one transaction. Never
+ * degrades to a guess — `fetchFxRate` failing means there is nothing honest
+ * to store, so this throws rather than returning a made-up figure.
+ */
+async function convertForeignAmount(
+  homeCurrency: string,
+  originalCurrency: string,
+  originalAmountCents: number,
+): Promise<{ amountCents: number; rate: number }> {
+  const rate = await fetchFxRate(originalCurrency, homeCurrency);
+  if (rate === null) {
+    throw new ServiceUnavailableError(
+      'Could not fetch an exchange rate right now — try again in a moment.',
+    );
+  }
+
+  const amountCents = Math.round(originalAmountCents * rate);
+  if (amountCents <= 0) {
+    throw new ValidationError('That converts to less than one cent — check the amount.');
+  }
+
+  return { amountCents, rate };
 }
 
 async function buildStats(

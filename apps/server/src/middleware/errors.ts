@@ -4,17 +4,19 @@ import {
   DomainError,
   ForbiddenError,
   NotFoundError,
+  ServiceUnavailableError,
   UnauthorizedError,
   ValidationError,
 } from '@spendlygo/core';
 import { JoinHouseholdError } from '@spendlygo/db';
 import { describeError, logger } from '../logger.js';
 
-function statusFor(error: DomainError): 400 | 401 | 403 | 404 {
+function statusFor(error: DomainError): 400 | 401 | 403 | 404 | 503 {
   if (error instanceof ValidationError) return 400;
   if (error instanceof UnauthorizedError) return 401;
   if (error instanceof ForbiddenError) return 403;
   if (error instanceof NotFoundError) return 404;
+  if (error instanceof ServiceUnavailableError) return 503;
   return 400;
 }
 

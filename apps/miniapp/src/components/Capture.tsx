@@ -1,6 +1,6 @@
 import { useMemo, useState, type JSX } from 'react';
 import type { Category, Direction } from '@spendlygo/shared';
-import { currencySymbol } from '../lib/format';
+import { currencySymbol, formatMoney } from '../lib/format';
 import { haptics } from '../lib/telegram';
 
 export interface CaptureProps {
@@ -10,9 +10,17 @@ export interface CaptureProps {
   today: string;
   busy: boolean;
   error: string | null;
+  /** The foreign-currency picker's selection, or null in normal (home-currency) mode — ADR 0007. */
+  foreignCurrency: string | null;
+  onForeignCurrencyChange: (currency: string | null) => void;
+  /** A live preview of the rate for `foreignCurrency`; the server fetches its own at save time regardless. */
+  fxRate: number | undefined;
+  fxRateLoading: boolean;
   onSubmit: (input: {
     direction: Direction;
-    amountCents: number;
+    amountCents?: number;
+    originalCurrency?: string;
+    originalAmountCents?: number;
     categoryId: string | null;
     note: string | null;
     occurredOn: string;
@@ -20,6 +28,28 @@ export interface CaptureProps {
 }
 
 const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '.', '0', '⌫'];
+
+/**
+ * 2-decimal ISO 4217 currencies only (ADR 0007) — a zero-decimal currency
+ * (JPY, KRW, VND, …) treated as "amount × 100 cents" would misconvert by
+ * 100x, so it's left out of the picker rather than silently mishandled.
+ */
+const FOREIGN_CURRENCIES = [
+  'USD',
+  'EUR',
+  'GBP',
+  'AUD',
+  'CAD',
+  'CHF',
+  'CNY',
+  'HKD',
+  'INR',
+  'MYR',
+  'NZD',
+  'PHP',
+  'THB',
+  'ZAR',
+];
 
 /** Digits typed on the pad, held as a string so "12." is a valid in-between state. */
 function toCents(raw: string): number {
@@ -61,6 +91,10 @@ export function Capture({
   today,
   busy,
   error,
+  foreignCurrency,
+  onForeignCurrencyChange,
+  fxRate,
+  fxRateLoading,
   onSubmit,
 }: CaptureProps): JSX.Element {
   const [direction, setDirection] = useState<Direction>('out');
@@ -70,14 +104,22 @@ export function Capture({
   const [occurredOn, setOccurredOn] = useState(today);
 
   const cents = toCents(raw);
-  const canSave = cents > 0 && !busy;
+  const canSave = cents > 0 && !busy && (!foreignCurrency || (!fxRateLoading && !!fxRate));
 
   const visible = useMemo(
     () => categories.filter((c) => c.kind === (direction === 'in' ? 'income' : 'expense')),
     [categories, direction],
   );
 
+  const otherCurrencies = useMemo(
+    () => FOREIGN_CURRENCIES.filter((code) => code !== currency),
+    [currency],
+  );
+
   const display = raw === '' ? '0.00' : raw;
+  const activeSymbol = foreignCurrency
+    ? currencySymbol(foreignCurrency, locale)
+    : currencySymbol(currency, locale);
 
   return (
     <div className="capture">
@@ -102,11 +144,48 @@ export function Capture({
       </div>
 
       <div className="capture__amount">
-        <span className="capture__symbol">{currencySymbol(currency, locale)}</span>
+        <span className="capture__symbol">{activeSymbol}</span>
         <span className={`capture__digits ${raw === '' ? 'capture__digits--empty' : ''}`}>
           {display}
         </span>
       </div>
+
+      <div className="capture__fx">
+        <button
+          type="button"
+          className="link"
+          onClick={() => {
+            haptics.tap();
+            onForeignCurrencyChange(foreignCurrency ? null : (otherCurrencies[0] ?? 'USD'));
+          }}
+        >
+          {foreignCurrency ? '✕ Use home currency' : `🌍 Paid in another currency`}
+        </button>
+        {foreignCurrency && (
+          <select
+            className="input capture__fx-select"
+            value={foreignCurrency}
+            aria-label="Foreign currency"
+            onChange={(event) => onForeignCurrencyChange(event.target.value)}
+          >
+            {otherCurrencies.map((code) => (
+              <option key={code} value={code}>
+                {code}
+              </option>
+            ))}
+          </select>
+        )}
+      </div>
+
+      {foreignCurrency && cents > 0 && (
+        <p className="capture__fx-preview">
+          {fxRateLoading
+            ? 'Converting…'
+            : fxRate
+              ? `≈ ${formatMoney(Math.round(cents * fxRate), { currency, locale })}`
+              : "Couldn't fetch a rate — try again"}
+        </p>
+      )}
 
       <div className="chips" role="group" aria-label="Category">
         {visible.map((category) => (
@@ -190,14 +269,16 @@ export function Capture({
           haptics.press();
           onSubmit({
             direction,
-            amountCents: cents,
+            ...(foreignCurrency
+              ? { originalCurrency: foreignCurrency, originalAmountCents: cents }
+              : { amountCents: cents }),
             categoryId,
             note: note.trim() === '' ? null : note.trim(),
             occurredOn,
           });
         }}
       >
-        {busy ? 'Saving…' : `Save ${currencySymbol(currency, locale)}${display}`}
+        {busy ? 'Saving…' : `Save ${activeSymbol}${display}`}
       </button>
     </div>
   );

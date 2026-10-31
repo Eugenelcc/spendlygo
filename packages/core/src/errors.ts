@@ -31,3 +31,8 @@ export class ForbiddenError extends DomainError {
 export class UnauthorizedError extends DomainError {
   readonly code = 'unauthorized';
 }
+
+/** A dependency this request needed (e.g. a live FX rate, ADR 0007) is down. */
+export class ServiceUnavailableError extends DomainError {
+  readonly code = 'service_unavailable';
+}

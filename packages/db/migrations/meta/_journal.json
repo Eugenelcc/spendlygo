@@ -36,6 +36,13 @@
       "when": 1788169200000,
       "tag": "0004_multi_space_households",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1793442114195,
+      "tag": "0005_classy_absorbing_man",
+      "breakpoints": true
     }
   ]
 }

@@ -4,6 +4,7 @@ import type {
   CreateRecurringRuleBody,
   CreateSavingsGoalBody,
   CreateTransactionBody,
+  FxRateResponse,
   GoalProgressResponse,
   HeatmapResponse,
   HouseholdInviteResponse,
@@ -126,6 +127,9 @@ export interface MutationResult {
 export const api = {
   me: () => request<MeResponse>('/api/me'),
   categories: () => request<CategoriesResponse>('/api/categories'),
+
+  fxRate: (currency: string) =>
+    request<FxRateResponse>(`/api/fx-rate?currency=${encodeURIComponent(currency)}`),
   today: () => request<TodayResponse>('/api/today'),
 
   stats: (period: 'day' | 'month' | 'year', anchor?: string) =>

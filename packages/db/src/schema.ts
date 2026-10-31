@@ -22,6 +22,7 @@ import {
   jsonb,
   pgEnum,
   pgTable,
+  real,
   smallint,
   text,
   timestamp,
@@ -242,6 +243,18 @@ export const transactions = pgTable(
     savingsGoalId: uuid('savings_goal_id').references((): AnyPgColumn => savingsGoals.id, {
       onDelete: 'set null',
     }),
+    /**
+     * Logged in a foreign currency while traveling (PRD-adjacent). `amountCents`
+     * above is always the converted, home-currency figure every aggregate
+     * already uses — these three columns are purely a receipt of what was
+     * actually paid: the original 2-decimal amount, its ISO 4217 code, and the
+     * rate used, fetched once at capture time and frozen here so a later rate
+     * move never silently re-prices old history (ADR 0007). All three are set
+     * together or not at all — see the pair check constraint below.
+     */
+    originalCurrency: varchar('original_currency', { length: 3 }),
+    originalAmountCents: integer('original_amount_cents'),
+    fxRate: real('fx_rate'),
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
@@ -263,6 +276,14 @@ export const transactions = pgTable(
       .on(t.savingsGoalId)
       .where(sql`${t.deletedAt} IS NULL AND ${t.savingsGoalId} IS NOT NULL`),
     check('transactions_amount_positive_ck', sql`${t.amountCents} > 0`),
+    check(
+      'transactions_original_amount_positive_ck',
+      sql`${t.originalAmountCents} IS NULL OR ${t.originalAmountCents} > 0`,
+    ),
+    check(
+      'transactions_original_fields_pair_ck',
+      sql`(${t.originalCurrency} IS NULL) = (${t.originalAmountCents} IS NULL) AND (${t.originalCurrency} IS NULL) = (${t.fxRate} IS NULL)`,
+    ),
   ],
 );
 

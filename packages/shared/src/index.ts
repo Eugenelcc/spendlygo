@@ -156,6 +156,17 @@ export const categoriesResponseSchema = z.object({
 });
 export type CategoriesResponse = z.infer<typeof categoriesResponseSchema>;
 
+// --- GET /api/fx-rate (ADR 0007) ---------------------------------------------
+
+/** A live preview before capture — the server re-fetches its own rate at
+ * creation time regardless, so this is for display only, never trusted back. */
+export const fxRateResponseSchema = z.object({
+  from: z.string().length(3),
+  to: z.string().length(3),
+  rate: z.number().positive(),
+});
+export type FxRateResponse = z.infer<typeof fxRateResponseSchema>;
+
 // --- transactions -----------------------------------------------------------
 
 export const transactionSchema = z.object({
@@ -182,20 +193,54 @@ export const transactionSchema = z.object({
   isOwn: z.boolean(),
   /** Whether to show the photo badge — avoids a round trip per row to find out. */
   hasPhoto: z.boolean(),
+  /**
+   * Logged in a foreign currency (PRD-adjacent, ADR 0007) — `amountCents`
+   * above is always the converted home-currency figure; these three are a
+   * receipt of what was actually paid, all present together or all null.
+   */
+  originalCurrency: z.string().length(3).nullable(),
+  originalAmountCents: z.number().int().positive().nullable(),
+  fxRate: z.number().positive().nullable(),
 });
 export type Transaction = z.infer<typeof transactionSchema>;
 
-export const createTransactionSchema = z.object({
+/** ISO 4217, 2-decimal currencies only — see ADR 0007's scope note. */
+const currencyCodeSchema = z.string().regex(/^[A-Z]{3}$/, 'Expected a 3-letter currency code');
+
+const createTransactionObjectSchema = z.object({
   direction: directionSchema,
-  amountCents: amountCentsSchema,
+  /** Required unless `originalCurrency`/`originalAmountCents` are both set — the server computes this from a live rate instead (ADR 0007). */
+  amountCents: amountCentsSchema.optional(),
   categoryId: z.string().uuid().nullable().optional(),
   note: z.string().trim().max(280).nullable().optional(),
   /** Defaults to today in the user's timezone when omitted. */
   occurredOn: isoDateSchema.optional(),
+  originalCurrency: currencyCodeSchema.optional(),
+  originalAmountCents: amountCentsSchema.optional(),
+});
+
+export const createTransactionSchema = createTransactionObjectSchema.superRefine((value, ctx) => {
+  const hasOriginal =
+    value.originalCurrency !== undefined || value.originalAmountCents !== undefined;
+  if (
+    hasOriginal &&
+    (value.originalCurrency === undefined || value.originalAmountCents === undefined)
+  ) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['originalCurrency'],
+      message: 'originalCurrency and originalAmountCents must both be set',
+    });
+  }
+  if (!hasOriginal && value.amountCents === undefined) {
+    ctx.addIssue({ code: 'custom', path: ['amountCents'], message: 'amountCents is required' });
+  }
 });
 export type CreateTransactionBody = z.infer<typeof createTransactionSchema>;
 
-export const updateTransactionSchema = createTransactionSchema.partial();
+export const updateTransactionSchema = createTransactionObjectSchema
+  .omit({ originalCurrency: true, originalAmountCents: true })
+  .partial();
 export type UpdateTransactionBody = z.infer<typeof updateTransactionSchema>;
 
 export const transactionsResponseSchema = z.object({
