@@ -325,7 +325,7 @@ sequence, `Σ safeToSpend` over the month never exceeds `budget`.
   current and previous pay cycle (F17). `/export 2026`, `/export 2026-08` and
   `/export 2026-08-05` are always **calendar** ranges, whatever the start day.
   `from..to` (`2026-10-05..2026-10-24`) is a custom range, offered by the Mini App
-  only. Every bounded export is named `spendlygo_<from>_to_<to>.csv` (full ISO
+  and typed in the bot (`/export 2026-10-05..2026-10-24`). Every bounded export is named `spendlygo_<from>_to_<to>.csv` (full ISO
   dates); everything stays `spendlygo-all-time.csv`. Labels carry both years when
   a range spans New Year (`20 Dec 2026 – 19 Jan 2027`); start day 1 uses month
   names ("October 2026").
@@ -520,7 +520,7 @@ it, so safe-to-spend resets when the salary lands. B-032; ADR 0007.
 | `/budget [amount]` | Show or set the active space's monthly budget |
 | `/recent` | Last 10 transactions with edit buttons |
 | `/undo` | Undo the most recent transaction |
-| `/export [cycle \| last cycle \| YYYY \| YYYY-MM \| YYYY-MM-DD]` | CSV export (nothing typed = everything) |
+| `/export [cycle \| last cycle \| YYYY \| YYYY-MM \| YYYY-MM-DD \| YYYY-MM-DD..YYYY-MM-DD]` | CSV export (nothing typed = everything) |
 | `/recurring` | List and manage rules |
 | `/household [invite\|leave]` | Show, share, or stop sharing the active space |
 | `/join CODE` | Join a shared space and switch into it |

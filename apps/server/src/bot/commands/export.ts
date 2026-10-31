@@ -9,6 +9,7 @@
  *   /export last cycle  the previous pay cycle
  *   /export 2026        one calendar year
  *   /export 2026-08     one calendar month
+ *   /export 2026-10-05..2026-10-24  custom dates
  */
 
 import { InputFile } from 'grammy';
@@ -34,6 +35,7 @@ export function exportUsageText(cycle: BudgetCycle): string {
     `\`/export last cycle\` — ${named ? `last cycle (${formatCycleRange(previous)})` : 'last month'}`,
     '`/export 2026` — one year',
     '`/export 2026-08` — one month',
+    '`/export 2026-10-05..2026-10-24` — custom dates',
   ].join('\n');
 }
 

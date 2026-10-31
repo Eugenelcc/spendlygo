@@ -50,7 +50,7 @@ export interface SettingsScreenProps {
   onContributeGoal: (id: string, amountCents: number) => void;
   onArchiveGoal: (id: string) => void;
   exportBusy: boolean;
-  onExportCsv: (range?: string) => void;
+  onExportCsv: (range: string | undefined, onDone: () => void) => void;
 }
 
 const CADENCE_LABEL: Record<Cadence, string> = {
@@ -405,7 +405,7 @@ export function SettingsScreen({
           me={me}
           today={today}
           busy={exportBusy}
-          onExport={onExportCsv}
+          onExport={(range) => onExportCsv(range, () => setExportOpen(false))}
         />
       </section>
 

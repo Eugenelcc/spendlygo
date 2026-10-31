@@ -1363,3 +1363,5 @@ minimal. Nothing else was built.
 - [x] **Telegram (§10):** the same single `replyWithDocument`. No new send paths
 - [x] **Docs:** PRD, `/help`, server CLAUDE.md gotcha
 - [x] `pnpm ci:local` passed (545 tests)
+
+- **Part 3 review follow-ups (owner-approved):** export failure now toasts "Couldn't export — try again" and keeps the sheet open with the choice kept (closes only on success, via an `onDone` callback); the month text-box fallback is validated as `YYYY-MM` with an inline "Use the format 2026-10" hint and Download disabled; bot `/export YYYY-MM-DD..YYYY-MM-DD` documented in the usage hint, `/help` and PRD F8.4/§8. No test edits.

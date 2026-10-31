@@ -4,6 +4,8 @@ import { Sheet } from '../../components/Sheet';
 import { haptics } from '../../lib/telegram';
 import './export-sheet.css';
 
+const MONTH_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
+
 type Choice = 'all' | 'cycle' | 'last-cycle' | 'month' | 'custom';
 
 export interface ExportSheetProps {
@@ -68,7 +70,7 @@ export function ExportSheet({
       case 'last-cycle':
         return choice;
       case 'month':
-        return month === '' ? null : month;
+        return MONTH_RE.test(month) ? month : null;
       case 'custom':
         return from !== '' && to !== '' && from <= to ? `${from}..${to}` : null;
     }
@@ -108,6 +110,7 @@ export function ExportSheet({
             max={thisMonth}
             onChange={(event) => setMonth(event.target.value)}
           />
+          {!MONTH_RE.test(month) && <p className="export-sheet__hint">Use the format 2026-10</p>}
         </div>
       )}
       {choice === 'custom' && (
@@ -139,7 +142,6 @@ export function ExportSheet({
         onClick={() => {
           haptics.select();
           onExport(range ?? undefined);
-          onClose();
         }}
       >
         {busy ? 'Preparing…' : 'Download'}

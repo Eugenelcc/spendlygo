@@ -49,3 +49,9 @@
 .export-sheet__extra {
   padding: 4px 0 8px;
 }
+
+.export-sheet__hint {
+  margin: 6px 0 0;
+  font-size: 13px;
+  color: var(--text-hint);
+}
