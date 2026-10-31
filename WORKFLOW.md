@@ -271,8 +271,10 @@ and push → check the GitHub CI run for that push → report to the owner:
   platform problem, not a code problem: report the exact message to the
   owner. A step failure → reproduce it with `pnpm ci:local`, fix it, and show
   the same check passing. Never skip, disable or loosen a check to get green.
-- As of 2026-10-31, GitHub CI can't run at all: the account has a billing lock
-  (BACKLOG B-030). Until the owner clears it, `ci:local` passing is the gate.
+- GitHub CI first ran green on 2026-10-31, after the owner cleared an account
+  billing lock that had blocked every run since 2026-08-27 (BACKLOG B-030).
+  If jobs ever fail again with *"account is locked due to a billing issue"*,
+  that's an owner action, and `ci:local` is the gate until it's cleared.
 
 ## 6. When production breaks
 
