@@ -18,7 +18,7 @@ before starting any new feature.
 | B-001 | Soft-deleted transactions are purged after 30 days | F11.3 | todo |
 | B-002 | Full account deletion on request | §12, GUARDRAILS §6 | todo |
 | B-003 | `/month` bot command | F7, §8 | todo |
-| B-032 | **Pay cycle:** budget month starts on a chosen day (e.g. the 20th) | F17 (new) | spec |
+| B-032 | **Pay cycle:** budget month starts on a chosen day (e.g. the 20th) | F17 (new) | planned: Part 1 in progress (Parts 1–4 approved; Part 5 budget history to be planned) |
 
 **B-032 — Pay cycle.** Grilled with the owner 2026-10-31. The confirmed
 recap is in `docs/specs/B-032-pay-cycle.md`. Each space gets a cycle start day

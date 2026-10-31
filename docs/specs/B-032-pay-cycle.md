@@ -1,6 +1,9 @@
 # B-032 — Pay cycle: the budget month starts on a chosen day
 
-**Feature:** F17 (new: pay cycle) · **Branch:** `feat/B-032-pay-cycle` · **Status:** awaiting owner approval
+**Feature:** F17 (new: pay cycle) · **Branch:** `feat/B-032-pay-cycle` · **Status:** approved — Part 1 in progress
+
+Requirements approved by owner, 2026-10-31
+Build plan approved by owner, 2026-10-31 (Parts 1–4; Part 5 to be planned and approved separately)
 <!-- After each approval, Claude adds a line:
      Requirements approved by owner, YYYY-MM-DD
      Build plan approved by owner, YYYY-MM-DD -->
@@ -330,6 +333,21 @@ questions and the challenger's options where they differ.
 | F5 (partner) | When a member changes a shared space's start day, the other members get one short message |
 | F5 (tidy-ups) | Include the year in export ranges that span New Year; add the `/recap` footer (`commands/recap.ts:89`) to the Part 2 files; place the History chip per the target Mini App layout (`apps/miniapp/CLAUDE.md`), not in `App.tsx`; fix the day-1 "last cycle" caption against the copy rule |
 | Q6 (`budget_periods`) | **Still open:** to be asked at final approval |
+
+---
+
+**Final owner answers (2026-10-31, at approval):**
+- **Q6 `budget_periods`: re-shape it, as a new Part 5** (owner chose this over "leave it alone").
+  Purpose: **past cycles show the budget that applied then**, per space. Example:
+  $350 until March, then $500 → the 20 Jan – 19 Feb cycle shows "of $350" and its
+  real pace. DB approach: **rebuild the existing table in place** (owner's choice).
+  This is destructive, so per GUARDRAILS §3 Part 5's Build plan must include an
+  explicit backup step, and the owner approves that migration separately. Part 5 gets
+  its own grilling → Requirements → Build plan → `challenger` before any code.
+  Parts 1–4 don't depend on it.
+- **Export file names:** "Everything" keeps `spendlygo-all-time.csv`; every bounded
+  export (including `/export 2026-10` and `/export 2026` for day-1 users) gets a dated
+  name `spendlygo_<from>_to_<to>.csv`. Confirmed.
 
 ---
 
