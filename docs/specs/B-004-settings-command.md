@@ -293,9 +293,9 @@ Out of scope: the same pattern in `handleUndo` (tracked as B-026).
 | AC16 | settings.test.ts › a callback only changes the sender's own settings | ❌ failing (expected) | ✅ |
 | AC17 | settings.test.ts › opening the hour picker edits the keyboard without writing | ❌ failing (expected) | ✅ |
 | AC18 | settings.test.ts › /settings is in the bot's command menu | ❌ failing (expected) | ✅ |
-| AC19 | settings.test.ts › a rejected "Saved" answer still saves and redraws | ❌ failing (expected) | |
+| AC19 | settings.test.ts › a rejected "Saved" answer still saves and redraws | ❌ failing (expected) | ✅ |
 
-**Checks (after build):** typecheck ✓ lint ✓ test 468 passed / 0 skipped.
+**Checks (after build):** typecheck ✓ lint ✓ test 469 passed / 0 skipped (ci:local green, incl. AC19 follow-up).
 
 **Checks (before build):** all 18 fail at import (`./settings.js` missing); `pnpm typecheck` fails on the same missing module (expected while red).
 **Screenshots:** n/a (bot only)
@@ -306,6 +306,7 @@ Out of scope: the same pattern in `handleUndo` (tracked as B-026).
 
 - **Deviations from plan:** `logger.info` field `fields` is a comma-joined string (the logger type rejects arrays). No other deviation.
 - **Parked ideas:** none.
+- **Review follow-up (2026-10-31):** AC19 - success-path `answerCallbackQuery({ text: 'Saved' })` in `settings.ts` now has `.catch(() => {})`, so the redraw and log still run. `handleUndo`'s similar pattern left alone (B-026).
 
 ---
 

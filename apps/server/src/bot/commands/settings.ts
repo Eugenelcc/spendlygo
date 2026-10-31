@@ -132,7 +132,7 @@ export async function handleSettingsCallback(ctx: AppContext, botCtx: BotContext
     throw error;
   }
 
-  await botCtx.answerCallbackQuery({ text: 'Saved' });
+  await botCtx.answerCallbackQuery({ text: 'Saved' }).catch(() => {});
   // "message is not modified" on a replayed button is expected; swallow it.
   await botCtx
     .editMessageText(buildSettingsText(updated, ctx.config), {
