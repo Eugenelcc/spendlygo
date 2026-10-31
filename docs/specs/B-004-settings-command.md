@@ -338,3 +338,16 @@ Out of scope: the same pattern in `handleUndo` (tracked as B-026).
 - [x] **Auth + cross-user test:** identity only from `botCtx.appUser` (`withUser`, after `allowlist`); the repository update is keyed by user id; the AC16 cross-user test is present (§4)
 - [x] **Privacy:** the log holds the user id and field names only (§6)
 - [x] **Time:** no boundary maths. The hour is shown next to the user's timezone and interpreted by the existing `send-digests.ts`; no `new Date()` added in domain logic (§9)
+
+### Re-review (follow-up, 2026-10-31)
+
+Scope: commits 00375e7, 08c6f93 and d17bfd8 (`apps/` and this spec only).
+
+- **AC19 proves the fix.** The test makes the success-path `answerCallbackQuery` reject once and expects the handler to resolve, the row to be saved, and the message to be redrawn with "Daily digest: *off*" and a `set:d:1` button. Without `.catch`, the rejection propagates before `editMessageText`, so `resolves.toBeUndefined()` and the redraw assertions fail. The test also fails for the right reason before the fix.
+- **AC13 tightening is real:** it asserts `second.editMessageText` was called once, which proves the replay reaches the edit, whose rejection is swallowed.
+- **AC15 tightening is real:** it asserts the exact error text `"Couldn't save that — try again."`.
+- **Fix is minimal:** `settings.ts:135` is the only code change (`.catch(() => {})` added). Every other `fakeBotCtx` answer resolves (`mockResolvedValue(true)`), so `.catch` always has a promise. The write, the redraw, the log line and the error path are unchanged.
+- **Info, not blocking:** the view path's `answerCallbackQuery()` (`settings.ts:116`) still has no `.catch`. It writes nothing, so a rejection costs only a redraw. It is out of scope under the owner's decision and sits with the `handleUndo` pattern in B-026.
+- **Checks (run by reviewer):** `TEST_DATABASE_URL=… pnpm ci:local` passed: 32 test files, 469/469 tests with the DB tests running, the build succeeded, and the bundle is 86.1 KB of the 200 KB budget.
+
+**Verdict: ready for owner.**
