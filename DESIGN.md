@@ -109,7 +109,10 @@ font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI",
 - 🟢 All numeric displays use `font-variant-numeric: tabular-nums`, so digits
   don't jitter while animating.
 - 🟢 Minimum body size is 13px. Nothing smaller, ever.
-- 🟢 Amounts render as `S$1,234.56` — grouped thousands, always two decimals.
+- 🟢 Amounts render as `$1,234.56`: grouped thousands, always two decimals, via
+  `formatCents` (SGD, `en-SG` locale, which prints `$`). The owner chose `$` over
+  `$` on 2026-10-31. The app is SGD-only, so `$` is unambiguous; revisit if
+  multi-currency (PRD §5.2) ever ships.
   In the display style, cents render at 60% size and aligned to the top of the
   dollar digits.
 
@@ -221,20 +224,20 @@ The screen that justifies the app.
 │  Tuesday, 27 August         │  caption, --text-hint
 │                             │
 │        ╭─────────╮          │  Ring: today's spend vs allowance
-│       │  S$42    │          │  display type, odometer
+│       │  $42    │          │  display type, odometer
 │       │  ╰──────╯ safe today│  caption
 │        ╰─────────╯          │
 │                             │
-│   ● On track  ·  S$18 spent │  pace pill + today's total
+│   ● On track  ·  $18 spent │  pace pill + today's total
 │                             │
 │  ┌───────────────────────┐  │
-│  │ August    S$847 / 1,500│  │  month progress bar
+│  │ August    $847 / 1,500│  │  month progress bar
 │  │ ▓▓▓▓▓▓▓▓▓░░░░░░  56%  │  │  bar animates on mount
 │  └───────────────────────┘  │
 │                             │
 │  TODAY                      │  label
-│  🍜 Lunch          −S$12.50 │  rows stagger in
-│  🚇 MRT             −S$2.30 │
+│  🍜 Lunch          −$12.50 │  rows stagger in
+│  🚇 MRT             −$2.30 │
 │                             │
 │         ╭───────╮           │
 │         │   +   │           │  FAB → capture sheet
@@ -256,7 +259,7 @@ Opens straight to the numpad (PRD F2.1).
 - Note field — one line, optional, never blocks save.
 - Date pill — "Today", tap to change.
 - Camera button to attach a photo.
-- Telegram `MainButton` reads `Save S$12.50` and updates live with the amount.
+- Telegram `MainButton` reads `Save $12.50` and updates live with the amount.
 
 ### 7.3 Stats
 
@@ -290,7 +293,7 @@ categories (reorder, rename, archive), recurring rules, export CSV, about.
 |---|---|
 | `<Ring>` | SVG donut, animated `stroke-dashoffset`, colour driven by pace state |
 | `<Odometer>` | Per-digit rolling number, tabular figures, reduced-motion aware |
-| `<Money>` | The only component that formats cents → `S$1,234.56` |
+| `<Money>` | The only component that formats cents → `$1,234.56` |
 | `<CategoryChip>` | Emoji + label, shared-layout selected state |
 | `<TransactionRow>` | Emoji, note, category, amount, photo badge, swipe actions |
 | `<Sheet>` | Bottom sheet, drag-to-dismiss, focus trap, safe-area aware |
@@ -303,9 +306,9 @@ categories (reorder, rename, archive), recurring rules, export CSV, about.
 
 ## 9. Voice & copy
 
-- Second person, present tense, contractions. "You've got S$42 left today."
-- Never scold. "You're S$60 over this month" — not "You overspent!"
-- Numbers before words: "S$42 safe today", not "You can safely spend S$42".
+- Second person, present tense, contractions. "You've got $42 left today."
+- Never scold. "You're $60 over this month" — not "You overspent!"
+- Numbers before words: "$42 safe today", not "You can safely spend $42".
 - Errors say what happened and what to do: "Couldn't save — tap to retry."
 - No exclamation marks except a genuine milestone (first month under budget).
 - Emoji: exactly one per category, none in body copy.
