@@ -80,16 +80,21 @@ Keep it lean: summaries and tables, never raw logs.
 
 ## Requirements — *what* (Stage 1)
 
+*Revised 2026-10-31 to the owner's decisions below ("Owner decisions on open
+questions and second opinion"). Where the recap and those decisions differ,
+the decisions win (export, alerts).*
+
 ### Problem
 
 PRD F6 defines safe-to-spend over the **calendar month** (`daysInMonth − dayOfMonth + 1`),
-and F7, F8.4, F9.5, F13.3 and F16.1 inherit that month. Someone paid on the 20th
+and F7, F9.5, F13.3 and F16.1 inherit that month. Someone paid on the 20th
 (the owner) gets a budget that "resets" on the 1st, eleven days after the money
 arrives and eleven days before it runs out. The daily number is then wrong in
 exactly the stretch where it matters. This item adds **F17 — Pay cycle**: each
 space has a cycle start day (1–31, clamped in short months), and every
-month-based figure follows that cycle (recap decisions 1–9). Default 1 means no
-change for anyone who doesn't set it.
+month-based figure follows that cycle (recap decisions 1–7, 9). Export keeps
+its current default and gains cycle ranges (owner decision Q1 + F1). Default 1
+means no change for anyone who doesn't set it.
 
 ### Terms used below
 
@@ -98,33 +103,41 @@ change for anyone who doesn't set it.
   End = the day before the next cycle's start. Example: day 20 → 20 Oct – 19 Nov.
   Day 31 → 31 Jan – 27 Feb, then 28 Feb – 30 Mar (2026).
 - **Current cycle:** the cycle containing *today in the user's timezone*.
-- **Range label:** `"20 Oct – 19 Nov"` (en dash, spaces, three-letter month, no
-  year). Decision 7: used when start day ≠ 1. With start day 1, every surface
-  keeps the wording it has today ("This month", "October", "October 2026",
-  "2026-10").
+- **Range label (on screen):** `"20 Oct – 19 Nov"` (en dash, spaces, three-letter
+  month, **never a year**, Q5). Used only when start day ≠ 1. With start day 1,
+  every surface keeps the wording it has today ("This month", "October",
+  "October 2026", "2026-10").
+- **Export label:** the same, except a range whose two dates fall in different
+  years carries both years: `"20 Dec 2026 – 19 Jan 2027"` (F5 tidy-up). For
+  start day 1, "this/last cycle" exports are labelled with the month name and
+  year (`"October 2026"`), never `"1 Oct – 31 Oct"` (copy rule).
+- **Copy rule (every surface):** start day 1 → wording exactly as today. Start
+  day ≠ 1 → a heading that says "This month" or a month name shows the range
+  label; prose that says "this month" says "this cycle".
 
 ### User stories
 
 - As someone paid on the 20th, I want my budget month to run 20th to 19th, so
   safe-to-spend starts fresh when my salary lands.
 - As a member of a shared space, I want the cycle to be part of the space like
-  the budget, so my partner and I see the same number (F12.5).
+  the budget, so my partner and I see the same number (F12.5), and I want to be
+  told when my partner changes it.
 - As someone who changes the start day mid-cycle, I want it to take effect at
   once, so I don't wait a month for the number to be right (decision 4).
-- As anyone exporting, I want `/export` to give me this cycle, a typed month
-  to give me that calendar month, and the file name to spell out the dates
-  (decision 8).
+- As anyone exporting, I want `/export` to keep giving me everything, plus a
+  quick way to get this cycle or the last one, a typed month to mean that
+  calendar month, and file names that spell out the dates.
 - As a user who never sets a start day, I want nothing to change.
 
 ### Acceptance criteria
 
 The ACs are grouped by PR part (see *PR split*). Each has one test, named in
-the Plan › Tests table. The fixed scenario **"Owner's October"** is used
+the Build plan › Tests table. The fixed scenario **"Owner's October"** is used
 throughout: timezone `Asia/Singapore`, clock `2026-10-31T04:00:00Z` (noon on
 Sat 31 Oct), active space budget S$1,500 (150 000 cents), and two expenses in
 that space: S$100 on 2026-10-05 and S$50 on 2026-10-25.
 
-#### Part 1 — cycle maths, data model, safe-to-spend, Today
+#### Part 1 — cycle maths, data model, safe-to-spend, Today (28 ACs)
 
 | # | Given | When | Then |
 |---|---|---|---|
@@ -136,7 +149,7 @@ that space: S$100 on 2026-10-05 and S$50 on 2026-10-25.
 | P1-AC6 | Start day 20 | cycleContaining for 2026-12-25 and 2027-01-05 | Both are in 20 Dec 2026 – 19 Jan 2027 (31 days) |
 | P1-AC7 | Any start day 1–31 | Walking from the cycle containing 2024-01-01 with `nextCycle` until past 2028-12-31 | Each cycle's start is the day after the previous end (no gaps, no overlaps), `days` = end − start + 1, and `previousCycle(nextCycle(c))` equals c |
 | P1-AC8 | A start day of 0, 32, 1.5 or NaN | cycleContaining is called | It throws `ValidationError` |
-| P1-AC9 | Cycles 20 Oct – 19 Nov 2026 and 20 Dec 2026 – 19 Jan 2027 | `formatCycleRange` | `"20 Oct – 19 Nov"` and `"20 Dec – 19 Jan"` |
+| P1-AC9 | Cycles 20 Oct – 19 Nov 2026 and 20 Dec 2026 – 19 Jan 2027 | `formatCycleRange` | `"20 Oct – 19 Nov"` and `"20 Dec – 19 Jan"` (no year on screen, Q5) |
 | P1-AC10 | The instant 2026-10-19T16:30:00Z (00:30 on 20 Oct in Singapore), start day 20 | `cycleContaining(isoDateOf(instant, 'Asia/Singapore'), 20)` | 20 Oct – 19 Nov, not 20 Sep – 19 Oct |
 | P1-AC11 | Budget S$1,500, cycle 20 Oct – 19 Nov 2026, nothing spent | `calculateSafeToSpend` with today = 2026-10-20 (first day) | `daysRemaining` 31, `daysInMonth` 31, `dayOfMonth` 1, `safeTodayCents` 4838 |
 | P1-AC12 | Same cycle, S$1,400 spent | today = 2026-11-19 (last day) | `daysRemaining` 1, `safeTodayCents` 10000 (the whole remainder) |
@@ -144,7 +157,7 @@ that space: S$100 on 2026-10-05 and S$50 on 2026-10-25.
 | P1-AC14 | Budgets {S$100, S$999.99, S$1,500, S$0.07, S$12,345.67}, start days {1, 15, 20, 28, 29, 30, 31}, cycles containing 2026-02-15, 2028-02-15, 2026-04-15, 2026-12-25 | Every day of the cycle, spend all of that day's allowance | Σ `safeTodayCents` ≤ budget (**GUARDRAILS §2 property**) |
 | P1-AC15 | Cycle 20 Oct – 19 Nov, today 2026-11-01 | Budget 0 with nothing spent; or S$1,600 spent against S$1,500 | Budget 0 → `safeTodayCents` 0 and `budgetUsedRatio` 1; overspent → `safeTodayCents` 0, `overspentCents` 10000, `pace` `over_budget` (F6.3) |
 | P1-AC16 | Cycle 20 Oct – 19 Nov | today = 2026-10-19 (outside it) | `calculateSafeToSpend` throws `ValidationError` |
-| P1-AC17 | The migration is applied | A household is created without a start day; then an update sets 0 or 32 | It defaults to 1; 0 and 32 are rejected by the CHECK constraint |
+| P1-AC17 | The migration is applied | A household is created without a start day; then a raw update sets 0 or 32 | It defaults to 1; 0 and 32 are rejected by the CHECK constraint |
 | P1-AC18 | Owner's October, start day 20 | `GET /api/today` | `safeToSpend.spentMonthToDateCents` 5000, `dayOfMonth` 12, `daysInMonth` 31, `daysRemaining` 20, `safeTodayCents` 7250, `monthOut` 5000; `cycle` = {startDay 20, start 2026-10-20, end 2026-11-19, days 31, label "20 Oct – 19 Nov"} |
 | P1-AC19 | Owner's October, start day 1 (default) | `GET /api/today` | `spentMonthToDateCents` 15000, `dayOfMonth` 31, `daysInMonth` 31, `daysRemaining` 1, `safeTodayCents` 135000, `monthOut` 15000; `cycle` = {startDay 1, start 2026-10-01, end 2026-10-31, days 31, label "October"} |
 | P1-AC20 | Start day 20, clock 2026-10-19T16:30:00Z (00:30 on 20 Oct, Singapore), budget S$1,500, an expense of S$40 dated 2026-10-19 | The user logs S$12 via `POST /api/transactions` without a date, then `GET /api/today` | `today` 2026-10-20, `cycle.start` 2026-10-20, `spentMonthToDateCents` 1200, `daysRemaining` 31 |
@@ -154,49 +167,81 @@ that space: S$100 on 2026-10-05 and S$50 on 2026-10-25.
 | P1-AC24 | Start day 20 and a budget, owner's October | The bot builds the `/today` reply | It says `20 Oct – 19 Nov: S$50.00 of S$1,500.00` where today it says `This month: …`; with start day 1 the reply is unchanged, byte for byte |
 | P1-AC25 | Start day 20, over budget | The capture confirmation is built | It says `over budget this cycle`; with start day 1 it still says `over budget this month` |
 | P1-AC26 | Start day 20 | The Mini App Today screen renders | The budget card heading reads `20 Oct – 19 Nov` and the income line reads `received this cycle`; with start day 1 it reads `This month` / `received this month` (screenshot check, light and dark, 375px) |
+| P1-AC27 | Owner's October, budget S$1,500 | `PATCH /api/settings {"monthlyBudgetCents": 100000, "colour": "blue"}` (an unknown key) | 400, and the budget is still S$1,500. Every existing PATCH test (known keys only) still passes. *Why:* `updateSettingsSchema` becomes `.strict()`, so during the Part 4 deploy the old server rejects `cycleStartDay` instead of silently dropping it (owner decision F4 + F5) |
+| P1-AC28 | A household at start day 1 | `householdsRepo.updateCycleStartDay(db, id, 20)`, then the same call again, then with an unknown id | First call returns `true` and stores 20; second returns `false` and doesn't touch `updated_at`; unknown id throws (as `updateBudget` does) |
 
-#### Part 2 — Stats, History, recap, digests, alerts
+#### Part 2 — Stats, History, recap, digests, alerts (23 ACs)
 
 | # | Given | When | Then |
 |---|---|---|---|
 | P2-AC1 | Owner's October, start day 20 | `GET /api/stats?period=month` | `from` 2026-10-20, `to` 2026-11-19, `label` "20 Oct – 19 Nov", `outCents` 5000, `previousOutCents` 10000 (20 Sep – 19 Oct), `series` has 31 entries from key 2026-10-20 (label "20") to key 2026-11-19 (label "19") |
 | P2-AC2 | Owner's October, start day 1 | `GET /api/stats?period=month` | Unchanged from today: 1–31 Oct, label "October 2026", `outCents` 15000, 31 series entries labelled "1"…"31" |
-| P2-AC3 | Owner's October, start day 20 | `GET /api/stats?period=month&anchor=2026-10-05` | The past cycle 20 Sep – 19 Oct, `outCents` 10000 (history re-grouped by the current rule, decision 5) |
-| P2-AC4 | Owner's October, start day 20 | `buildRecap(ctx, user, 'month', '2026-10-31', '2026-10-31')` | `from` 2026-10-20, `to` 2026-10-31 (never past today), `label` "20 Oct – 19 Nov", out 5000, `previousOutCents` 10000 |
-| P2-AC5 | Start day 20 | `isMonthlyDigestDay(date, 20)` | True on 2026-11-19 and 2027-01-19; false on 2026-10-31 and 2026-11-30 |
-| P2-AC6 | Start day 31 | `isMonthlyDigestDay(date, 31)` | True on 2026-02-27 and 2028-02-28; false on 2026-02-28 and 2028-02-29 |
-| P2-AC7 | Start day 1 | `isMonthlyDigestDay(date)` (no start day) and `isMonthlyDigestDay(date, 1)` | Same as today: true only on the calendar month's last day (existing tests keep passing) |
-| P2-AC8 | Start day 20, expenses S$100 on 2026-10-05 and S$50 on 2026-10-25, today 2026-11-19 | `buildMonthlyDigest` | Heading `*20 Oct – 19 Nov*`, total S$50.00, compared against 20 Sep – 19 Oct |
-| P2-AC9 | Start day 20, digest at 21:00, budget set | `sendDueDigests` at 2026-10-31T13:00:00Z, then at 2026-11-19T13:00:00Z | 31 Oct: one message (daily only, no monthly). 19 Nov: two messages (daily and monthly) |
-| P2-AC10 | Owner's October with budget S$1,000, start day 20, S$900 spent on 2026-10-05, S$500 on 2026-10-25 | `checkBudgetAlerts` | No alert (50% of this cycle; 1–19 Oct don't count) |
-| P2-AC11 | As P2-AC10 plus S$350 on 2026-10-31 (85%) | `checkBudgetAlerts` runs twice (a double-fired tick) | Exactly one 80% message is sent |
-| P2-AC12 | As P2-AC11, the 80% alert already sent | The clock moves to 2026-11-20 (the next cycle) and S$850 is spent on 2026-11-20 | A new 80% alert is sent for 20 Nov – 19 Dec |
-| P2-AC13 | Start day 20, spend ≥ 100% of this cycle | The 100% alert text is built | It says `over for 20 Oct – 19 Nov`; with start day 1 it still says `over for 2026-10` |
-| P2-AC14 | Start day 1, a `budget_alerts` row (user, 2026, 10, 80) written by the server running before this change | `checkBudgetAlerts` on 2026-10-31 at 85% | No new 80% alert (old rows still count: backward compatible) |
-| P2-AC15 | *(Depends on Q2.)* Start day 1, 80% alert already sent for October; the owner switches to day 20 on 31 Oct; this cycle later reaches 85% | `checkBudgetAlerts` | The 80% alert for 20 Oct – 19 Nov is sent |
-| P2-AC16 | *(Depends on Q3.)* Start day 20 | `GET /api/cycle?anchor=2026-10-05` | `{ cycle: { startDay 20, start 2026-09-20, end 2026-10-19, days 30, label "20 Sep – 19 Oct" } }`; unauthenticated → 401; an invalid anchor → 400 |
-| P2-AC17 | *(Depends on Q3.)* Start day 20 | The Mini App History "Month" chip is used | It reads "Cycle", shows `20 Oct – 19 Nov`, and the arrows step one cycle back or forward, never past the current cycle; with start day 1 it is the existing month picker, unchanged (screenshot check) |
-| P2-AC18 | Start day 20 | The Mini App Stats month tab and the recap card render | The Stats card heading shows `20 Oct – 19 Nov`, and the recap card's first tab reads "This cycle"; with start day 1 they read "October 2026" and "This month" (screenshot check) |
+| P2-AC3 | Owner's October, start day 20 | `GET /api/stats?period=month&anchor=2026-10-05`, and `anchor=2026-11-20` | 20 Sep – 19 Oct with `outCents` 10000 (history re-grouped by the current rule, decision 5); 20 Nov – 19 Dec with `outCents` 0. (These are the anchors History's arrows send: the day before `from`, the day after `to`) |
+| P2-AC4 | A has start day 20 and owner's October data; stranger B is at day 1 | B calls `GET /api/stats?period=month`; A calls it with `anchor=2026-02-30`; and an unauthenticated call | B gets 1–31 Oct of B's own space with none of A's spend; the bad anchor is 400; unauthenticated is 401 |
+| P2-AC5 | Owner's October, start day 20 | `GET /api/stats?period=year` | Calendar year (Q4 A): `from` 2026-01-01, `to` 2026-12-31, `label` "2026", 12 monthly series entries, `outCents` 15000 |
+| P2-AC6 | Owner's October, start day 20 | `buildRecap(ctx, user, 'month', '2026-10-31', '2026-10-31')` | `from` 2026-10-20, `to` 2026-10-31 (never past today), `label` "20 Oct – 19 Nov", out 5000, `previousOutCents` 10000 |
+| P2-AC7 | Owner's October, start day 20 | `buildRecap(ctx, user, 'year', '2026-10-31', '2026-10-31')` | Calendar year (Q4 A): `from` 2026-01-01, `to` 2026-10-31, label "2026", out 15000 |
+| P2-AC8 | Start day 20 / start day 1 | The bot `/recap` footer is built (`recapFooter(period, startDay)`) | Day 20: month → `` `/recap year` for the whole year `` (unchanged), year → `` `/recap` for this cycle instead ``. Day 1: both exactly as today (`` `/recap` for this month instead ``) |
+| P2-AC9 | Start day 20 | `isMonthlyDigestDay(date, 20)` | True on 2026-11-19 and 2027-01-19; false on 2026-10-31 and 2026-11-30 |
+| P2-AC10 | Start day 31 | `isMonthlyDigestDay(date, 31)` | True on 2026-02-27 and 2028-02-28; false on 2026-02-28 and 2028-02-29 |
+| P2-AC11 | Start day 1 | `isMonthlyDigestDay(date)` (no start day) and `isMonthlyDigestDay(date, 1)` | Same as today: true only on the calendar month's last day (existing tests keep passing) |
+| P2-AC12 | Start day 20, expenses S$100 on 2026-10-05 and S$50 on 2026-10-25, today 2026-11-19 | `buildMonthlyDigest` | Heading `*20 Oct – 19 Nov*`, total S$50.00, compared against 20 Sep – 19 Oct (Q7) |
+| P2-AC13 | Start day 20, digest at 21:00, budget set | `sendDueDigests` at 2026-10-31T13:00:00Z, then at 2026-11-19T13:00:00Z | 31 Oct: one message (daily only, no monthly). 19 Nov: two messages (daily and monthly) |
+| P2-AC14 | Owner's October with budget S$1,000, start day 20, S$900 spent on 2026-10-05, S$500 on 2026-10-25 | `checkBudgetAlerts` | No alert (50% of this cycle; 1–19 Oct don't count) |
+| P2-AC15 | As P2-AC14 plus S$350 on 2026-10-31 (85%) | `checkBudgetAlerts` runs twice (a double-fired tick) | Exactly one 80% message is sent |
+| P2-AC16 | As P2-AC15, the 80% alert already sent | The clock moves to 2026-11-20 (the next cycle) and S$850 is spent on 2026-11-20 | A new 80% alert is sent for 20 Nov – 19 Dec |
+| P2-AC17 | Start day 20, spend ≥ 100% of this cycle | The 100% alert text is built | It says `over for 20 Oct – 19 Nov`; with start day 1 it still says `over for 2026-10` |
+| P2-AC18 | Start day 1, a `budget_alerts` row (user, 2026, 10, 80) written by the server running before this change | `checkBudgetAlerts` on 2026-10-31 at 85% | No new 80% alert (old rows still count: backward compatible) |
+| P2-AC19 | Start day 1, 80% alert already sent for October; the space switches to day 20 on 31 Oct; this cycle is at 85% | `checkBudgetAlerts` | The 80% alert for 20 Oct – 19 Nov is sent (key November ≠ October) |
+| P2-AC20 | **Documented skip (Q2 A limitation).** Start day 20, budget S$1,000, S$850 spent on 2026-10-15; the 80% alert for 20 Sep – 19 Oct went out on 15 Oct | On 2026-10-25 the space switches to day 1 (cycle 1–31 Oct, 85% used) and `checkBudgetAlerts` runs | **No** 80% message: 1–31 Oct shares the key (2026, 10) with 20 Sep – 19 Oct. The test name says this is the accepted limitation |
+| P2-AC21 | **Never double-sends.** Budget S$1,000, S$850 spent on 2026-10-31 (≥ 80%, < 100% of every possible cycle containing that day), clock 2026-10-31 | The start day is set to 20, then 1, then 2, 3 … 31, then 20 again, with `checkBudgetAlerts` after each change (33 runs) | Exactly **2** 80% messages in total (one for key November, sent at day 20; one for key October, sent at day 1), and no 100% message |
+| P2-AC22 | Start day 20 | The Mini App History date chips are used | The "Month" chip reads "Cycle", shows `20 Oct – 19 Nov` (the `label` from `/api/stats`), lists 20–31 Oct, and its arrows step one cycle back or forward, never past the current cycle; with start day 1 it is the existing month picker, unchanged (screenshot check) |
+| P2-AC23 | Start day 20 | The Mini App Stats month tab and the recap card render | The Stats card heading shows `20 Oct – 19 Nov`, and the recap card's first tab reads "This cycle"; with start day 1 they read "October 2026" and "This month" (screenshot check) |
 
-#### Part 3 — Export
+**Alerts: the honest limitation (owner decision Q2 A).** "Once per cycle" is
+remembered by the calendar month the cycle *ends* in. That needs no migration
+and can **never send the same threshold twice** for one key (P2-AC15,
+P2-AC21). But after the start day moves *earlier*, or *later before the new
+day has arrived*, the new cycle can end in a month whose threshold was already
+used by the old rule, so **that threshold is skipped once in that cycle**
+(P2-AC20). A similar overlap already exists today: alerts are keyed by user,
+not space, so switching between a day-1 personal space and a day-20 shared
+space can share keys. The next cycle always alerts normally (P2-AC16). This
+wording goes into PRD F13 and `apps/server/CLAUDE.md`.
+
+#### Part 3 — Export (17 ACs)
 
 | # | Given | When | Then |
 |---|---|---|---|
-| P3-AC1 | Owner's October, start day 20 | `/export` with no argument (bot) | A CSV of 20 Oct – 19 Nov (1 row: the S$50) named `spendlygo_2026-10-20_to_2026-11-19.csv`, caption `1 entry · 20 Oct – 19 Nov` |
-| P3-AC2 | Owner's October, start day 20 | `/export last cycle` | A CSV of 20 Sep – 19 Oct (the S$100), named `spendlygo_2026-09-20_to_2026-10-19.csv` |
-| P3-AC3 | Owner's October, start day 20 | `/export 2026-10` | A CSV of calendar 1–31 Oct (both rows), named `spendlygo_2026-10-01_to_2026-10-31.csv` |
-| P3-AC4 | Any start day | `/export 2026` | Calendar year, named `spendlygo_2026-01-01_to_2026-12-31.csv` |
-| P3-AC5 | Owner's October, start day 1 | `/export` with no argument | Calendar 1–31 Oct, named `spendlygo_2026-10-01_to_2026-10-31.csv` (deliberate change for every user, decision 8) |
-| P3-AC6 | Start day 20 | `GET /api/export?range=this-cycle`, `range=last-cycle`, and no `range` | The same ranges and file names as P3-AC1/AC2; no `range` = this cycle |
-| P3-AC7 | Any start day | `GET /api/export?range=2026-10-05..2026-10-24` | Rows dated 5–24 Oct inclusive, named `spendlygo_2026-10-05_to_2026-10-24.csv`. `2026-10-24..2026-10-05` (reversed) or `2026-10-05..garbage` → 400 |
-| P3-AC8 | *(Depends on Q1.)* Any start day | All-time export (`/export all`, `range=all`) | Every row in the space, named `spendlygo_all-time.csv` |
-| P3-AC9 | An unknown argument, e.g. `/export lastcycle2` | `/export` | The usage hint lists `/export`, `/export last cycle`, `/export 2026-10`, `/export 2026` (and `/export all` if Q1 = yes) |
-| P3-AC10 | Start day 20, nothing logged in 20 Sep – 19 Oct | `/export last cycle` | `Nothing logged for 20 Sep – 19 Oct.` |
-| P3-AC11 | Existing guarantees | `GET /api/export` unauthenticated, or by a stranger | 401; the stranger's CSV never contains the owner's rows (existing tests kept) |
-| P3-AC12 | Start day 20 | `GET /api/me` | Also returns `previousCycle` = 20 Sep – 19 Oct (label "20 Sep – 19 Oct"), for the picker's captions |
-| P3-AC13 | Start day 20 | Settings › Export CSV in the Mini App | A sheet offers This cycle (caption `20 Oct – 19 Nov`) · Last cycle (`20 Sep – 19 Oct`) · Pick a month (month input, defaults to this calendar month) · Custom dates (from/to, Download disabled until from ≤ to); Download saves the file with the server's name (screenshot check) |
+| P3-AC1 | Owner's October, start day 20 (and start day 1) | `parseExportRange('', { today, cycleStartDay })` | Everything, exactly as today: no `from`/`to`, label `all-time`, filename `spendlygo-all-time.csv` (owner decision Q1 + F1) |
+| P3-AC2 | Owner's October, start day 20 | `parseExportRange('cycle', …)` | 2026-10-20 to 2026-11-19, label `20 Oct – 19 Nov`, filename `spendlygo_2026-10-20_to_2026-11-19.csv` |
+| P3-AC3 | Owner's October, start day 20 | `parseExportRange` of `last cycle`, `last-cycle` and `Last  Cycle` | All three: 2026-09-20 to 2026-10-19, label `20 Sep – 19 Oct`, filename `spendlygo_2026-09-20_to_2026-10-19.csv` |
+| P3-AC4 | Owner's October, start day 1 | `parseExportRange` of `cycle` and `last cycle` | 1–31 Oct labelled `October 2026`, and 1–30 Sep labelled `September 2026` (copy rule: day 1 keeps month names), filenames `spendlygo_2026-10-01_to_2026-10-31.csv` and `spendlygo_2026-09-01_to_2026-09-30.csv` |
+| P3-AC5 | Owner's October, start day 20 | `parseExportRange('2026-10', …)` | Calendar 1–31 Oct whatever the start day, label `2026-10` (as today), filename `spendlygo_2026-10-01_to_2026-10-31.csv` |
+| P3-AC6 | Any start day | `parseExportRange` of `2026` and `2026-10-05` | Calendar year, label `2026`, filename `spendlygo_2026-01-01_to_2026-12-31.csv`; single day, label `2026-10-05`, filename `spendlygo_2026-10-05_to_2026-10-05.csv` |
+| P3-AC7 | Any start day | `parseExportRange` of `2026-10-05..2026-10-24`, `2026-10-24..2026-10-05`, `2026-10-05..garbage`, `2026-02-30..2026-03-01` | First: 5–24 Oct inclusive, label `5 Oct – 24 Oct`, filename `spendlygo_2026-10-05_to_2026-10-24.csv`. The other three: null |
+| P3-AC8 | Start day 20, today 2027-01-05 | `parseExportRange` of `cycle`, `last cycle`, and custom `2025-01-05..2026-03-10` | `20 Dec 2026 – 19 Jan 2027` (`spendlygo_2026-12-20_to_2027-01-19.csv`); `20 Nov – 19 Dec` (same year, no year); `5 Jan 2025 – 10 Mar 2026` (F5 tidy-up: year when spanning New Year) |
+| P3-AC9 | Owner's October, start day 20 | `GET /api/export` with no `range` | Both rows (everything in the space), `Content-Disposition` filename `spendlygo-all-time.csv`: identical to today |
+| P3-AC10 | Owner's October, start day 20 | `GET /api/export?range=cycle` and `range=last-cycle` | The S$50 row named `spendlygo_2026-10-20_to_2026-11-19.csv`; the S$100 row named `spendlygo_2026-09-20_to_2026-10-19.csv` |
+| P3-AC11 | Any start day | `GET /api/export?range=2026-10-05..2026-10-24`, then `range=2026-10-24..2026-10-05` | Rows dated 5–24 Oct inclusive, named `spendlygo_2026-10-05_to_2026-10-24.csv`; the reversed range is 400 |
+| P3-AC12 | Existing guarantees, plus a stranger B at day 1 | `GET /api/export` unauthenticated; B calls it with no range and with `range=cycle` | 401; B's CSVs never contain the owner's rows (the two existing tests stay, plus a `range=cycle` cross-user case) |
+| P3-AC13 | An unknown argument, e.g. `/export lastcycle2` | The bot `/export` | The usage hint lists `` `/export` — everything ``, `` `/export cycle` ``, `` `/export last cycle` ``, `` `/export 2026` ``, `` `/export 2026-08` ``. With start day 20 the two cycle lines say `this cycle (20 Oct – 19 Nov)` / `last cycle (20 Sep – 19 Oct)`; with start day 1 they say `this month` / `last month` |
+| P3-AC14 | Start day 20, nothing logged in 20 Sep – 19 Oct | `/export last cycle` | Reply `Nothing logged for 20 Sep – 19 Oct.`, no file |
+| P3-AC15 | Owner's October, start day 20 | `/export cycle` | One document named `spendlygo_2026-10-20_to_2026-11-19.csv`, caption `1 entry · 20 Oct – 19 Nov`. (`/export` with no argument still sends everything with caption `… · all-time`, as today) |
+| P3-AC16 | Start day 20 | `GET /api/me` | Also returns `previousCycle` = {startDay 20, start 2026-09-20, end 2026-10-19, days 30, label "20 Sep – 19 Oct"} for the picker's captions |
+| P3-AC17 | Start day 20 / start day 1 | Settings › Export CSV in the Mini App | A sheet offers **Everything** (selected by default) · **This cycle** (caption `20 Oct – 19 Nov`) · **Last cycle** (`20 Sep – 19 Oct`) · **Pick a month** (calendar month input, defaults to this calendar month) · **Custom dates** (from/to, Download disabled until from ≤ to). With start day 1 the second and third read **This month** (`October`) and **Last month** (`September`). Download saves the file with the server's name; the footnote "export everything as a CSV, any time" is unchanged (screenshot check) |
 
-#### Part 4 — Setting the start day
+**File names (owner decision Q1 + F1).** Every *bounded* export is named
+`spendlygo_<from>_to_<to>.csv` with full ISO dates, so the year is always in
+the file name. **Everything** keeps today's name, `spendlygo-all-time.csv`:
+it has no range to state, and the owner's decision is that `/export` with
+nothing typed stays exactly as today. *(Planner's reading; flagged in the
+hand-off summary for the owner to confirm at approval.)* As a side effect,
+`/export 2026-10` and `/export 2026` change file name only
+(`spendlygo-2026-10.csv` → `spendlygo_2026-10-01_to_2026-10-31.csv`); their
+rows and captions are unchanged.
+
+#### Part 4 — Setting the start day (18 ACs)
 
 | # | Given | When | Then |
 |---|---|---|---|
@@ -204,14 +249,20 @@ that space: S$100 on 2026-10-05 and S$50 on 2026-10-25.
 | P4-AC2 | Any | `PATCH /api/settings` with `cycleStartDay` 0, 32, 1.5 or `"20"` | 400, and the stored day is unchanged |
 | P4-AC3 | A shared space | The **partner** (not the creator) sets day 20 | Both members' `GET /api/me` show `cycle.startDay` 20 (decision 3) |
 | P4-AC4 | A user active in a shared space | They set day 20, then switch to their personal space | The personal space's `cycle.startDay` is still 1 |
-| P4-AC5 | User A, and stranger B in another space | B sends `PATCH /api/settings {"cycleStartDay": 20, "householdId": "<A's space id>"}`; and an unauthenticated PATCH | A's space stays at 1 (only B's active space changes); the unauthenticated call gets 401 |
+| P4-AC5 | User A, and stranger B in another space | B sends `PATCH /api/settings {"cycleStartDay": 20, "householdId": "<A's space id>"}`; and an unauthenticated PATCH | B's call is 400 (unknown key, strict schema) and neither space changes; the unauthenticated call is 401 |
 | P4-AC6 | Start day 20 / start day 1 | `/settings` text is built | Day 20: `Budget cycle: starts on the 20th (20 Oct – 19 Nov)`. Day 1: `Budget cycle: calendar month (starts on the 1st)` |
-| P4-AC7 | `/settings` | The "Change cycle start day" button (`set:cp`) is tapped | The keyboard shows days 1–31 in order, 7 per row, the current day marked `• `, and a `← Back` button (`set:back`); every callback_data ≤ 64 bytes |
-| P4-AC8 | `/settings` day picker | `set:c:20` is tapped, then the same button again (redelivery) | The active space's start day is 20, the callback is answered both times, and the second tap changes nothing |
-| P4-AC9 | Malformed data `set:c:0`, `set:c:32`, `set:c:x` | parseSettingsCallback | Returns null, so the handler answers with the "out of date" text and writes nothing |
-| P4-AC10 | Mini App Settings › Budget, start day 20 | The card renders | A "Budget month starts on" select (1st … 31st) sits under the amount, with the caption `This cycle: 20 Oct – 19 Nov`; for 29–31 a hint says short months start on their last day; in a shared space, a hint says it changes for everyone in the space (screenshot check) |
-| P4-AC11 | Start day 20, Daily mode, S$50/day typed | The daily → monthly preview renders | `= S$1,550/month (31 days this cycle)`, using `me.cycle.days`; with start day 1 it still says `days this month` (screenshot check) |
-| P4-AC12 | Mini App | The user picks day 20 in the select | `PATCH /api/settings {cycleStartDay: 20}` is sent once; Today, Stats, History, Me and Recap refetch; the haptic and "Saved" toast fire as for the digest hour (screenshot + manual dev-bot check) |
+| P4-AC7 | `/settings` for a user whose active space id is a real UUID | The main keyboard and the day picker are built | The main keyboard has `Change cycle start day` → `set:cp:<spaceId>`. The picker shows days 1–31 in order, 7 per row, the current day marked `• `, each button `set:c:<day>:<spaceId>`, and `← Back` (`set:back`). Every callback_data is ≤ 64 bytes (UTF-8), the longest being `set:c:31:<uuid>` = 45 (owner decision F3) |
+| P4-AC8 | `/settings` day picker, personal space | `set:c:20:<own space id>` is tapped, then the same button again (redelivery) | The space's start day is 20, the callback is answered both times, and the second tap writes nothing |
+| P4-AC9 | Malformed data: `set:c:20` (old format, no id), `set:c:0:<uuid>`, `set:c:32:<uuid>`, `set:c:x:<uuid>`, `set:c:20:not-a-uuid`, `set:cp` | `parseSettingsCallback` | Returns null for every one, so the handler answers with the "out of date" text and writes nothing |
+| P4-AC10 | A picker message built while the personal space P was active; the user has since switched to shared space S | `set:c:20:<P>` and `set:cp:<P>` are tapped | Both are answered `That button is out of date — send /settings again.`; neither P nor S changes; no message is sent to anyone (owner decision F3) |
+| P4-AC11 | Shared space (creator + partner), start day 1, owner's October | The partner sends `PATCH /api/settings {"cycleStartDay": 20}`, then sends it again | The first sends **exactly one** message, to the creator's chat: `<partner first name> set this shared space's budget month to start on the 20th. This cycle: 20 Oct – 19 Nov.` The partner gets none. The second PATCH sends nothing (no change) (owner decision F5) |
+| P4-AC12 | A user in their personal space | They set day 20 | No message is sent to anyone |
+| P4-AC13 | Shared space, partner's `/settings` picker | `set:c:20:<shared id>` is delivered twice (redelivery) | The creator gets exactly one message |
+| P4-AC14 | Shared space; sending to the creator fails with Telegram 403 (bot blocked) | The partner PATCHes day 20 | 200, the day is saved as 20, the failure is logged (`settings.cycle_notify_failed`, user id only), and nothing is retried |
+| P4-AC15 | Shared space; the first send to the creator fails with Telegram 429 `retry_after: 1` | The partner PATCHes day 20 | The helper waits 1 s (injected sleep, called with 1000) and sends once more; exactly 2 `sendMessage` calls; 200. A `retry_after` above 3 s is not waited for: logged and dropped (GUARDRAILS §10) |
+| P4-AC16 | Mini App Settings › Budget, start day 20 | The card renders | A "Budget month starts on" select (1st … 31st) sits under the amount, with the caption `This cycle: 20 Oct – 19 Nov`; for 29–31 a hint says short months start on their last day; in a shared space, a hint says it changes for everyone in the space and they'll get a message (screenshot check) |
+| P4-AC17 | Start day 20, Daily mode, S$50/day typed | The daily → monthly preview renders | `= S$1,550/month (31 days this cycle)`, using `me.cycle.days`; with start day 1 it still says `days this month` (screenshot check) |
+| P4-AC18 | Mini App | The user picks day 20; and separately, the server answers 400 (the old server during a deploy) | Success: the haptic and "Saved" toast fire as for the digest hour, and Today, Stats, History, Me and Recap refetch. 400: the select shows the previous day again, the error haptic fires, and there is no "Saved" toast (screenshot + dev-bot check). *That a repeated PATCH changes and sends nothing is proven server-side by P4-AC11, not by a screenshot (Q8)* |
 
 ### Edge cases
 
@@ -221,30 +272,40 @@ that space: S$100 on 2026-10-05 and S$50 on 2026-10-25.
 | Money | Over budget mid-cycle | Allowance 0, overage shown, never negative (P1-AC15) |
 | Money | Last day of a cycle | Gets the whole remainder (P1-AC12) |
 | Money | Σ allowance over a cycle | ≤ budget for every start day, including 28–31-day cycles (P1-AC14) |
-| Money | Mid-cycle budget change | Unchanged rule: the new budget applies to the whole current cycle (same as a mid-month change today; `budget_periods` stays unused, Q6) |
+| Money | Mid-cycle budget change | Unchanged rule: the new budget applies to the whole current cycle (same as a mid-month change today; `budget_periods` stays unused unless Q6 says otherwise) |
 | Dates | Feb, leap Feb, 30-day months, day 29–31 clamping | P1-AC3, P1-AC4, P1-AC5 |
-| Dates | Cycle across the new year | P1-AC6; label `20 Dec – 19 Jan` (P1-AC9) |
+| Dates | Cycle across the new year | P1-AC6; on screen `20 Dec – 19 Jan` (P1-AC9); in export `20 Dec 2026 – 19 Jan 2027` (P3-AC8) |
 | Dates | Cycle length varies from 28 to 31 days | `daysInMonth` in the API means *days in this cycle*; pace and projection use it |
+| Dates | Year views | Stay calendar years (Q4 A; P2-AC5, P2-AC7) |
 | Time | 00:30 on the start day, user's timezone | Belongs to the new cycle (P1-AC10, P1-AC20) |
 | Time | Start day changed mid-cycle | Applies at once; 1–19 Oct falls into the previous cycle (P4-AC1, P2-AC3) |
 | Time | Start day changed on a cycle's last day after the digest hour | That day's monthly digest has already gone (or not); the next one follows the new rule. No catch-up message |
+| Time | Start day moved later after a digest (20 → 25 on 20 Nov, after the 19 Nov digest) | The 24 Nov digest covers 25 Oct – 24 Nov, so it re-covers 25 Oct – 19 Nov. Accepted: no catch-up, no de-duplication |
+| Alerts | Start day moved earlier (or later before the new day) | One threshold may be skipped once in that cycle; never sent twice (P2-AC20, P2-AC21) |
 | Spaces | Personal vs shared | Per space; switching spaces switches cycles (P1-AC21, P4-AC4) |
 | Spaces | Alerts and digests in a shared space | Each member's alerts and digests use their *active* space's start day, exactly as they use its budget today |
-| Telegram | Redelivered `set:c:20` callback | Absolute value, so idempotent (P4-AC8) |
-| Telegram | Double-fired tick | One alert per threshold per cycle (P2-AC11) |
-| Deploy | New Mini App talking to the old server for a few minutes | `cycle` missing in `/api/today` and `/api/me` → the Mini App treats it as start day 1 |
+| Spaces | Partner changes the start day | Other members get one message each; none when nothing changed or the space is personal (P4-AC11 to AC13) |
+| Telegram | Redelivered `set:c:20:<id>` callback | Absolute value, so idempotent, and the partner is messaged once (P4-AC8, P4-AC13) |
+| Telegram | Stale `/settings` message after `/switch` | Answered "out of date"; nothing written (P4-AC10) |
+| Telegram | Double-fired tick | One alert per threshold per key (P2-AC15) |
+| Telegram | Partner message fails (blocked, 429, 5xx) | Never fails the change; 429 retried once if `retry_after` ≤ 3 s (P4-AC14, P4-AC15) |
+| Deploy | New Mini App talking to the old server for a few minutes | `cycle` missing in `/api/today` and `/api/me` → the Mini App treats it as start day 1. Part 3: a cycle export to the old server is a 400 ("Export is not available"), and Everything still works. Part 4: `cycleStartDay` is a 400 from the old (strict) server, so no false "Saved" (P1-AC27, P4-AC18) |
 | Deploy | Old server running while the migration is applied | The new column has a default and the old server never reads it (see Data) |
+| Deploy | Part 4 reverted after someone set day 20 | See *Rollback* in the Build plan |
 
 ### Out of scope
 
 - "Last working day" paydays, public holidays, per-person cycles (recap).
 - B-033, B-034, B-035, B-036 (recap).
-- `budget_periods` / B-005: not read or written (Q6).
+- `budget_periods` / B-005: not read or written (pending Q6).
 - The heatmap: stays a rolling 371 days (no month concept, `api/index.ts` `HEATMAP_DAYS`).
 - Savings goals' "months left" (F14.4): stays calendar months.
 - Recurring rules (F5): unchanged.
-- Year views (Stats Year, `/recap year`): pending Q4. The plan assumes they stay calendar years.
-- A custom date range in the bot's `/export` usage hint (the shared parser accepts it, but only the Mini App advertises it).
+- Year views (Stats Year, `/recap year`): stay calendar years (Q4 A).
+- An `/export all` alias, and advertising custom date ranges in the bot's usage
+  hint (the shared parser accepts `from..to`, but only the Mini App offers it).
+- A Today-screen line about a partner's change (the message covers it).
+- Fixing the alert-key limitation exactly (a per-cycle alerts table; owner chose Q2 A).
 - `/month` (B-003): built later on top of this.
 - Changing `B-007` digest idempotency.
 
@@ -274,6 +335,9 @@ questions and the challenger's options where they differ.
 
 ## Build plan — *how* (Stage 2)
 
+*Revised 2026-10-31 to the owner's decisions. Read `apps/server/CLAUDE.md`,
+`apps/miniapp/CLAUDE.md` and `packages/core/CLAUDE.md` before each part.*
+
 ### Core design (shared by every part)
 
 **New file `packages/core/src/cycle.ts`** (exported from `packages/core/src/index.ts`):
@@ -291,8 +355,10 @@ export function cycleContaining(date: IsoDate, startDay: number): BudgetCycle;
 export function previousCycle(cycle: BudgetCycle): BudgetCycle;   // cycleContaining(addDays(cycle.start, -1), cycle.startDay)
 export function nextCycle(cycle: BudgetCycle): BudgetCycle;       // cycleContaining(addDays(cycle.end, 1), cycle.startDay)
 export function isLastDayOfCycle(date: IsoDate, startDay: number): boolean;
-export function formatCycleRange(range: DateRange): string;       // "20 Oct – 19 Nov": `${d} ${monthName(m).slice(0,3)}`, joined by " – " (U+2013); also used for custom export ranges
-export function cycleAlertKey(cycle: BudgetCycle): { year: number; month: number }; // Part 2, see Q2
+export function formatCycleRange(range: DateRange): string;       // "20 Oct – 19 Nov": `${d} ${monthName(m).slice(0,3)}`, joined by " – " (U+2013). Never a year (Q5)
+export function formatDateRangeWithYears(range: DateRange): string; // Part 3. As formatCycleRange, but when the two years differ: "20 Dec 2026 – 19 Jan 2027"
+export function cycleAlertKey(cycle: BudgetCycle): { year: number; month: number }; // Part 2: year/month of cycle.end
+export function ordinalDay(day: number): string;                  // Part 4: "1st" "2nd" "3rd" "4th" … "11th" "12th" "13th" … "21st" "22nd" "23rd" … "31st"
 ```
 
 `cycleContaining` algorithm (pure, no `Date.now()`): parse `date`; `s = cycleStartIn(y, m, startDay)`;
@@ -339,20 +405,31 @@ export const cycleSchema = z.object({
   startDay: z.number().int().min(1).max(31),
   start: isoDateSchema, end: isoDateSchema,
   days: z.number().int().positive(),
-  /** "October" when startDay is 1, else "20 Oct – 19 Nov" (recap decision 7). */
+  /** "October" when startDay is 1, else "20 Oct – 19 Nov" (recap decision 7, Q5: no year). */
   label: z.string(),
 });
 export type Cycle = z.infer<typeof cycleSchema>;
 ```
 
-`cycle` is added as `.optional()` on `todayResponseSchema` and `meResponseSchema`,
-with the comment *"optional only so a new Mini App survives the old server during a
-deploy; the server always sends it"*. The Mini App reads it as
-`data.cycle?.startDay ?? 1`.
+`cycle` is added as `.optional()` on `todayResponseSchema` and `meResponseSchema`
+(and `previousCycle` on `meResponseSchema` in Part 3), with the comment
+*"optional only so a new Mini App survives the old server during a deploy; the
+server always sends it"*. The Mini App reads it as `data.cycle?.startDay ?? 1`.
+
+**`updateSettingsSchema` becomes `.strict()` in Part 1** (owner decision F4 + F5).
+Checked against the code: the Mini App only ever sends known keys
+(`App.tsx` sends `monthlyBudgetCents`, `digestEnabled`, `digestHour`,
+`alertsEnabled`; `api.updateSettings` posts the body as given), the bot's
+`parseSettingsCallback` only builds known keys, and every existing PATCH test
+sends `monthlyBudgetCents` only. So no current request breaks. With zod 3,
+`.strict()` still returns a `ZodObject`, so `updateSettingsSchema.shape.*`
+keeps working. Effect: between Part 3 and Part 4 the deployed server answers
+`{"cycleStartDay": …}` with 400 instead of a silent 200.
 
 **Copy rule (every surface):** start day 1 → wording exactly as today. Start day ≠ 1 →
 a heading that says "This month" / a month name shows the range label; prose that
-says "this month" says "this cycle".
+says "this month" says "this cycle". On-screen ranges never carry a year; export
+labels do when the range spans New Year.
 
 ### Files
 
@@ -360,90 +437,112 @@ says "this month" says "this cycle".
 
 | File | Change |
 |---|---|
-| `packages/core/src/cycle.ts` | **New**, as above (except `cycleAlertKey`, which is Part 2) |
+| `packages/core/src/cycle.ts` | **New**, as above, except `formatDateRangeWithYears` (Part 3), `cycleAlertKey` (Part 2) and `ordinalDay` (Part 4) |
 | `packages/core/src/cycle.test.ts` | **New**, tests P1-AC1 to AC10 |
 | `packages/core/src/index.ts` | `export * from './cycle.js';` |
 | `packages/core/src/safe-to-spend.ts` | Optional `cycle` input; out-of-cycle check; update the header comment's formula to "this cycle" |
 | `packages/core/src/safe-to-spend.test.ts` | New `describe('pay cycles (F17)')` with P1-AC11 to AC16. **Existing tests are not edited** |
 | `packages/db/src/schema.ts` | `households.cycleStartDay: smallint('cycle_start_day').notNull().default(1)` + `check('households_cycle_start_day_ck', sql\`${t.cycleStartDay} BETWEEN 1 AND 31\`)`. Doc comment: per space, like the budget (F12.5, F17) |
 | `packages/db/migrations/0005_*.sql` + `meta/` | **Generated** by `pnpm db:generate`. Never hand-written |
-| `packages/db/src/repositories/households.ts` | `updateCycleStartDay(db, householdId, day)`, copy of `updateBudget` (sets `updatedAt`, throws if no row) |
-| `packages/db/src/repositories/households.test.ts` | `describe('cycle start day')`: P1-AC17 |
-| `packages/shared/src/index.ts` | `cycleSchema`, `Cycle`; optional `cycle` on `todayResponseSchema` and `meResponseSchema`; doc comments on `monthIn`/`monthOut`/`dayOfMonth`/`daysInMonth` saying they now mean the cycle |
+| `packages/db/src/repositories/households.ts` | `updateCycleStartDay(db, householdId, day): Promise<boolean>`. `UPDATE households SET cycle_start_day = day, updated_at = now() WHERE id = householdId AND cycle_start_day <> day RETURNING id` (drizzle: `and(eq(households.id, …), ne(households.cycleStartDay, day))`). A row back → `true`. No row → `findById`: null → throw exactly what `updateBudget` throws for a missing row; else `false` (already that day). The conditional write is what makes a redelivered or repeated change detectable without a race (P4-AC11, P4-AC13) |
+| `packages/db/src/repositories/households.test.ts` | `describe('cycle start day')`: P1-AC17, P1-AC28 |
+| `packages/shared/src/index.ts` | `cycleSchema`, `Cycle`; optional `cycle` on `todayResponseSchema` and `meResponseSchema`; doc comments on `monthIn`/`monthOut`/`dayOfMonth`/`daysInMonth` saying they now mean the cycle; **`updateSettingsSchema = z.object({...}).strict()`** with a comment pointing at B-032 F4/F5 |
 | `apps/server/src/api/service.ts` | `activeSpaceSettings`, `currentCycle`, `toApiCycle`, type `SafeToSpendWithCycle`. `computeSafeToSpend`: load settings once (replaces the `effectiveBudgetCents` call), `cycle = cycleContaining(today, cycleStartDay)`, `totalsForPeriod(spaceId, cycle.start, today)`, pass `cycle` to `calculateSafeToSpend`, return `{ ...result, cycle }`. `computePeriodStats` keeps calling `computeSafeToSpend(ctx, user, to)` (it now resolves `to`'s own cycle) |
 | `apps/server/src/api/index.ts` | `GET /today`: drop `monthRange(...)`; await `computeSafeToSpend` first, then use `safeToSpend.cycle` for the totals over `cycle.start..cycle.end`; add `cycle: toApiCycle(safeToSpend.cycle)`. `GET /me`: add `cycle: toApiCycle(await currentCycle(ctx, user))`. Drop now-unused imports |
-| `apps/server/src/api/pay-cycle.test.ts` | **New**, DB-backed (`describeIfDb`, `fixedClock`, `auth()` helper copied from `household.test.ts`): P1-AC18 to AC23 |
+| `apps/server/src/api/pay-cycle.test.ts` | **New**, DB-backed (`describeIfDb`, `fixedClock`, `auth()` and the `createApp(ctx, new Bot(BOT_TOKEN, { botInfo: undefined as never }), …)` setup copied from `household.test.ts`): P1-AC18 to AC23, P1-AC27 |
 | `apps/server/src/bot/commands/money.ts` | Extract the `/today` text into an exported pure `buildTodayText(input)` (user, today, result, streak, cycle). Day ≠ 1: `This month:` → `${formatCycleRange(cycle)}:`, `Spent this month:` → `Spent this cycle:`. `handleBudget` reply: `left this month` → `left this cycle` when day ≠ 1 |
 | `apps/server/src/bot/commands/money.test.ts` | **New**, pure (no DB): P1-AC24 |
 | `apps/server/src/bot/capture.ts` | `buildConfirmation` takes an optional `cycleStartDay?: number` (default 1): `over budget this cycle` when ≠ 1. `capture.ts` and `photo-capture.ts` pass `safeToSpend.cycle.startDay` |
 | `apps/server/src/bot/capture.test.ts` | Add P1-AC25 |
-| `apps/miniapp/src/screens/Today.tsx` | Card heading: `startDay === 1 ? 'This month' : data.cycle.label`; `received this month` / `this cycle`; no-budget card's `this month` likewise. `startDay = data.cycle?.startDay ?? 1` |
+| `apps/miniapp/src/screens/Today.tsx` | Card heading: `startDay === 1 ? 'This month' : data.cycle.label`; `received this month` / `this cycle`; no-budget card's `this month` likewise. `startDay = data.cycle?.startDay ?? 1`. (Existing file in the current layout: a copy-only edit, no new component) |
 | `PRD.md` | Add **F17 — Pay cycle** after F16 (the recap's rules, the clamping rule, per space, default 1). In F6, define `spentMTD`/`daysRemaining` over "the budget cycle (F17), a calendar month by default". §9: add `cycle_start_day` to `households` |
 | `packages/core/CLAUDE.md` | Map row for `cycle.ts` (F17). Tests rule: cycle fixtures (day 1 regression, 29–31 clamping, leap Feb, year end) |
+| `apps/server/CLAUDE.md` | Gotcha row: "`updateSettingsSchema` is `.strict()` on purpose (B-032): a new field must be added to the schema in the same PR as the route that handles it" |
 | `CLAUDE.md` (root) | Repo layout: add `cycle.ts # F17 budget cycle boundaries` |
-| `docs/adr/0007-budget-cycle-per-space.md` | **New** ADR: cycle per space, fixed day clamped, default 1, history re-grouped by the current rule (no stored periods), `budget_periods` left alone |
+| `docs/adr/0007-budget-cycle-per-space.md` | **New** ADR: cycle per space, fixed day clamped, default 1, history re-grouped by the current rule (no stored periods), strict settings schema for deploy safety, `budget_periods` per Q6 |
 | `BACKLOG.md` | B-032 status → `in progress (part 1 of 4)` |
 
 #### Part 2
 
 | File | Change |
 |---|---|
-| `packages/core/src/cycle.ts` | Add `cycleAlertKey(cycle)`: `{ year, month }` of **`cycle.end`** (Q2 option A — see Data). For start day 1 that equals the calendar month, so existing rows still match |
+| `packages/core/src/cycle.ts` | Add `cycleAlertKey(cycle)`: `{ year, month }` of **`cycle.end`** (Q2 A). For start day 1 that equals the calendar month, so existing rows still match |
 | `packages/core/src/cycle.test.ts` | `cycleAlertKey`: day 1 → (2026, 10) for October; day 20 → (2026, 11) for 20 Oct – 19 Nov; (2027, 1) for 20 Dec – 19 Jan; distinct keys for 36 consecutive cycles of every start day |
-| `apps/server/src/api/index.ts` | `buildStats` gets `cycleStartDay` (the route calls `activeSpaceSettings`). `period === 'month'`: `cycle = cycleContaining(anchor, startDay)`, previous = `previousCycle(cycle)`, label = day 1 ? `${monthName(month)} ${year}` : `formatCycleRange(cycle)`. `buildSeries` for month: iterate `cycle.start..cycle.end` with `addDays`, `key` = ISO date, `label` = `String(parseIsoDate(key).day)`. Day and year periods are unchanged |
-| `apps/server/src/api/recap.ts` | `rangeFor(period, anchor, cycleStartDay)`: month → the cycle and `previousCycle`, label as in Stats. `buildRecap` gets the start day from `activeSpaceSettings` |
-| `apps/server/src/tasks/digest.ts` | `isMonthlyDigestDay(today, startDay = DEFAULT_CYCLE_START_DAY)` → `isLastDayOfCycle`. `buildMonthlyDigest`: `cycle = await currentCycle(ctx, user, today)`, `from: cycle.start`, previous = `previousCycle`, heading = day 1 ? `monthName(month)` : `formatCycleRange(cycle)` |
-| `apps/server/src/tasks/send-digests.ts` | Before the monthly gate: `const { cycleStartDay } = await activeSpaceSettings(ctx, user)` inside the per-user try (wrap it in `sendOne`'s error isolation so one user's failure doesn't stop the loop) |
-| `apps/server/src/tasks/alerts.ts` | `checkOne`: `cycle = await currentCycle(ctx, user, today)`; `{ year, month } = cycleAlertKey(cycle)`; pass these to `sentThisMonth`/`recordIfNew`. Reserve-then-send and release are unchanged. 100% text: day 1 → `today.slice(0, 7)` (unchanged); else `formatCycleRange(cycle)`. Update the header comment: "once per cycle" |
+| `apps/server/src/api/index.ts` | `GET /stats`: validate `anchor` with `isoDateSchema.safeParse` **and** `parseIsoDate` (throw `ValidationError` → 400, P2-AC4); the route calls `activeSpaceSettings` and passes `cycleStartDay` to `buildStats`. `period === 'month'`: `cycle = cycleContaining(anchor, startDay)`, previous = `previousCycle(cycle)`, label = day 1 ? `${monthName(month)} ${year}` : `formatCycleRange(cycle)`. `buildSeries` for month: iterate `cycle.start..cycle.end` with `addDays`, `key` = ISO date, `label` = `String(parseIsoDate(key).day)`. Day and **year** periods are unchanged (Q4 A) |
+| `apps/server/src/api/recap.ts` | `rangeFor(period, anchor, cycleStartDay)`: month → the cycle and `previousCycle`, label as in Stats; year unchanged (Q4 A). `buildRecap` gets the start day from `activeSpaceSettings` |
+| `apps/server/src/bot/commands/recap.ts` | Extract the footer (line ~89) into an exported pure `recapFooter(period, cycleStartDay)`: year → `` `/recap` for this cycle instead `` when ≠ 1, else as today; month → unchanged. `handleRecap` gets `cycleStartDay` from `activeSpaceSettings` |
+| `apps/server/src/bot/commands/recap.test.ts` | **New**, pure: P2-AC8 |
+| `apps/server/src/tasks/digest.ts` | `isMonthlyDigestDay(today, startDay = DEFAULT_CYCLE_START_DAY)` → `isLastDayOfCycle`. `buildMonthlyDigest`: `cycle = await currentCycle(ctx, user, today)`, `from: cycle.start`, previous = `previousCycle`, heading = day 1 ? `monthName(month)` : `formatCycleRange(cycle)` (Q7) |
+| `apps/server/src/tasks/send-digests.ts` | Before the monthly gate: `const { cycleStartDay } = await activeSpaceSettings(ctx, user)` inside the per-user try (inside `sendOne`'s error isolation so one user's failure doesn't stop the loop) |
+| `apps/server/src/tasks/alerts.ts` | `checkOne`: use `result.cycle` from `computeSafeToSpend`; `{ year, month } = cycleAlertKey(result.cycle)`; pass these to `sentThisMonth`/`recordIfNew`. Reserve-then-send and release are unchanged. 100% text: day 1 → `today.slice(0, 7)` (unchanged); else `formatCycleRange(cycle)`. Header comment: "once per cycle, keyed by the calendar month the cycle ends in; see the limitation in B-032 / PRD F13" |
 | `packages/db/src/repositories/alerts.ts` | Doc comments only: `year`/`month` are "the calendar month the budget cycle ends in (F17); for a calendar-month cycle, that month". No signature change |
 | `packages/db/src/schema.ts` | Doc comment on `budgetAlerts` only (same wording). **No migration** |
-| `apps/server/src/api/index.ts` *(Q3 = cycle)* | `GET /api/cycle?anchor=YYYY-MM-DD` → `{ cycle: toApiCycle(cycleContaining(anchor, startDay)) }`; anchor validated with `isoDateSchema` (400 on failure); defaults to today |
-| `packages/shared/src/index.ts` *(Q3 = cycle)* | `cycleResponseSchema = z.object({ cycle: cycleSchema })` |
-| `apps/miniapp/src/lib/api.ts` *(Q3 = cycle)* | `cycle: (anchor?: string) => request<CycleResponse>(...)` |
-| `apps/miniapp/src/App.tsx` + `screens/History.tsx` *(Q3 = cycle)* | When `me.cycle.startDay !== 1`: the `month` chip is labelled "Cycle"; state holds an anchor date (empty = today); a `useQuery(['cycle', anchor])` gives `from`/`to`/`label`; arrows set the anchor to `addDays(start, -1)` / `addDays(end, 1)`; next is disabled when `end >= today`; `to` is clamped to today as now. Start day 1 keeps the existing month code path untouched |
+| `apps/miniapp/src/features/history/use-history-cycle.ts` | **New** (target layout). `useHistoryCycle({ enabled, anchor, today })` wraps `useQuery({ queryKey: ['stats', 'month', anchor ?? 'current'], queryFn: () => api.stats('month', anchor), enabled })` and returns `{ label, from, to: min(to, today), canGoNext: to < today, prevAnchor: addDays(from, -1), nextAnchor: addDays(to, 1), isPending, isError }`. The key starts with `'stats'`, so the existing `['stats']` invalidation refreshes it. Comment: *"key moves to lib/query-keys.ts in B-017"* (that file doesn't exist yet and B-017 owns it). Uses `addDays` from `lib/format.ts` |
+| `apps/miniapp/src/features/history/CycleStepper.tsx` + `cycle-stepper.css` | **New**, presentational: `‹ label ›` using the same `date-range` / `date-range__step` markup and class names as History's month picker (so it looks identical); aria-labels "Previous cycle" / "Next cycle"; next disabled when `!canGoNext`; skeleton text while pending. Tokens only, ≤ 250 lines |
+| `apps/miniapp/src/screens/History.tsx` | New props `cycleStartDay: number` and `cycleStepper: JSX.Element \| null`. When `cycleStartDay !== 1`, the `month` chip's label is "Cycle" and `period === 'month'` renders `cycleStepper` instead of the month input. Day 1: the existing code path, untouched |
+| `apps/miniapp/src/App.tsx` | Minimal wiring only (≤ ~15 lines): `historyCycleAnchor` state (`undefined` = current); call `useHistoryCycle({ enabled: tab === 'history' && historyPeriod === 'month' && startDay !== 1, anchor, today: todayIso })`; in `historyRange`'s `'month'` case, when `startDay !== 1` return the hook's `{ from, to }` (or `{}` while pending); pass `cycleStartDay` and the `<CycleStepper>` element to `HistoryScreen`. All logic lives in `features/history/` |
 | `apps/miniapp/src/screens/Stats.tsx` | No logic change (the label comes from the server). `highlightKey` already uses `today` for month |
 | `apps/miniapp/src/components/RecapCard.tsx` | New prop `cycleStartDay`; the first tab reads `This cycle` when ≠ 1 |
-| `apps/server/src/api/pay-cycle.test.ts` | P2-AC1 to AC3 (and AC16 if Q3 = cycle) |
-| `apps/server/src/api/recap.test.ts` | P2-AC4 |
-| `apps/server/src/tasks/digest-periods.test.ts` | P2-AC5 to AC7 (existing tests untouched, they cover AC7's no-argument form) |
-| `apps/server/src/tasks/digest.test.ts` | P2-AC8, P2-AC9 (`sendDueDigests` with a `vi.fn` `sendMessage`, as in `alerts.test.ts`) |
-| `apps/server/src/tasks/alerts.test.ts` | New `describe('pay cycle (F17)')` with its own `ctx`/clock and a distinct `TELEGRAM_ID`: P2-AC10 to AC15 |
-| `PRD.md` | F7 Monthly view, F9.5 ("last day of the budget cycle"), F13.2–F13.3 ("once per cycle", the key), F16.1 |
-| `apps/server/CLAUDE.md` | Gotcha row: "`budget_alerts.year/month` = the month the cycle ends in, not the calendar month of today" |
-| `docs/adr/0007-…` | Add the alert-key section |
+| `apps/server/src/api/pay-cycle.test.ts` | P2-AC1 to AC5 |
+| `apps/server/src/api/recap.test.ts` | P2-AC6, P2-AC7 |
+| `apps/server/src/tasks/digest-periods.test.ts` | P2-AC9 to AC11 (existing tests untouched, they cover AC11's no-argument form) |
+| `apps/server/src/tasks/digest.test.ts` | P2-AC12, P2-AC13 (`sendDueDigests` with a `vi.fn` `sendMessage`, as in `alerts.test.ts`) |
+| `apps/server/src/tasks/alerts.test.ts` | New `describe('pay cycle (F17)')` with its own `ctx`/clock and a distinct `TELEGRAM_ID`: P2-AC14 to AC21. Change the start day with `householdsRepo.updateCycleStartDay` (Part 1) and move the clock by building a new `ctx` with another `fixedClock` |
+| `PRD.md` | F7 Monthly view (cycle; Year stays calendar), F9.5 ("last day of the budget cycle"), F13.2–F13.3 ("once per cycle", the key, **the limitation paragraph from the Requirements**), F16.1 |
+| `apps/server/CLAUDE.md` | Gotcha row: "`budget_alerts.year/month` = the month the cycle ends in, not the calendar month of today. Moving the start day can skip one threshold once; never double-sends" |
+| `docs/adr/0007-…` | Add the alert-key section with the limitation, and why History reuses `/api/stats` |
+
+**Why History reuses `/api/stats` (owner decision Q3).** After this part,
+`GET /api/stats?period=month&anchor=<date>` already returns `from`, `to` and
+`label` for the cycle containing any date, with auth and cross-user tests
+(P2-AC4). The arrows only need "the cycle containing the day before `from`"
+and "the day after `to`" (P2-AC3). So no new endpoint, schema or route test is
+needed. The cost is a heavier response than History needs (category totals and
+series), fetched only when the Cycle chip is used and cached by TanStack Query.
 
 #### Part 3
 
 | File | Change |
 |---|---|
-| `apps/server/src/api/export.ts` | `ExportRange` gets a required `filename`. `parseExportRange(argument, { today, cycleStartDay })`: normalise (`trim`, lower-case, inner whitespace → `-`). `''`/`this-cycle` → current cycle; `last-cycle` → `previousCycle`; `YYYY-MM` → `monthRange` (calendar, always); `YYYY` → `yearRange`; `YYYY-MM-DD` → that day; `YYYY-MM-DD..YYYY-MM-DD` → custom (null when either is invalid or from > to); `all` → all-time *(Q1)*. `label`: the argument as typed for `YYYY`, `YYYY-MM` and `YYYY-MM-DD` (as today); `formatCycleRange(range)` for this/last cycle and custom ranges. `filename` = `spendlygo_${from}_to_${to}.csv` for every bounded range. Delete `exportFilename`; callers use `range.filename` |
-| `apps/server/src/api/export-range.test.ts` | **New**, pure, no DB: P3-AC1 to AC5 and AC7 at the parser level (ranges, labels, file names) |
-| `apps/server/src/api/index.ts` | `GET /export`: `parseExportRange(c.req.query('range') ?? '', { today, cycleStartDay })`; error message lists the accepted forms; `Content-Disposition` uses `range.filename` |
-| `apps/server/src/api/export.test.ts` | Update the two assertions that encode the old behaviour (`spendlygo-all-time.csv` for no range; the month file name) to decision 8, and add P3-AC6, AC7, AC11 cases. This is an owner-decided behaviour change, not a loosened test: note it in the PR body |
-| `apps/server/src/bot/commands/export.ts` | Pass `{ today: todayFor(ctx, user), cycleStartDay }`; new usage text (P3-AC9); empty reply `Nothing logged for ${range.label}.` (P3-AC10); `InputFile(..., range.filename)`; caption `${n} entries · ${range.label}` |
-| `apps/server/src/bot/commands/export.test.ts` | **New**: P3-AC9, P3-AC10 (copy `fakeBotCtx` from `settings.test.ts`) |
-| `apps/server/src/api/index.ts` + `packages/shared/src/index.ts` | `GET /me`: add `previousCycle` (optional in the schema, same reason) — P3-AC12 |
-| `apps/server/src/bot/commands/help.ts` | Export lines: `/export` this cycle, `/export last cycle`, `/export 2026-10` |
-| `apps/miniapp/src/features/settings/ExportSheet.tsx` + `export-sheet.css` | **New** (target layout). Uses `components/Sheet.tsx`; four radio options; month `<input type="month">` (max = today's month); two `<input type="date">` like History's custom range; Download calls `onExport(range)`. Tokens only, ≤ 250 lines |
-| `apps/miniapp/src/screens/Settings.tsx` | "Export CSV" opens the sheet; `onExportCsv(range: string)` |
-| `apps/miniapp/src/App.tsx` | `exportCsv` mutation takes the range string; `api.exportCsv(range)` already accepts it |
-| `PRD.md` | F8.1, F8.4 rewritten to decision 8; §8 `/export [range]` row |
+| `packages/core/src/cycle.ts` + `cycle.test.ts` | Add `formatDateRangeWithYears(range)` and its unit test (same years → as `formatCycleRange`; different years → `"20 Dec 2026 – 19 Jan 2027"`) |
+| `apps/server/src/api/export.ts` | `ExportRange` gets a required `filename`. `parseExportRange(argument, { today, cycleStartDay })`: normalise (`trim`, lower-case, inner whitespace runs → `-`). `''` → everything: `{ label: 'all-time', filename: 'spendlygo-all-time.csv' }` with no `from`/`to` (**unchanged**). `cycle` → `cycleContaining(today, cycleStartDay)`; `last-cycle` → its `previousCycle`; `YYYY-MM` → `monthRange` (calendar, always); `YYYY` → `yearRange`; `YYYY-MM-DD` → that day; `YYYY-MM-DD..YYYY-MM-DD` → custom (null when either date fails `parseIsoDate` or from > to). Labels: `YYYY`, `YYYY-MM`, `YYYY-MM-DD` → the argument as typed (as today). `cycle`/`last-cycle` with start day 1 → `` `${monthName(month)} ${year}` `` of the cycle start; with day ≠ 1, and custom ranges → `formatDateRangeWithYears(range)`. `filename` = `` `spendlygo_${from}_to_${to}.csv` `` for every bounded range. Delete `exportFilename`; callers use `range.filename` |
+| `apps/server/src/api/export-range.test.ts` | **New**, pure, no DB: P3-AC1 to AC8 |
+| `apps/server/src/api/index.ts` | `GET /export`: `parseExportRange(c.req.query('range') ?? '', { today: todayFor(ctx, user), cycleStartDay })` (`cycleStartDay` from `activeSpaceSettings`); the 400 message lists `cycle, last-cycle, YYYY, YYYY-MM, YYYY-MM-DD, YYYY-MM-DD..YYYY-MM-DD, or omitted`; `Content-Disposition` uses `range.filename`. `GET /me`: add `previousCycle: toApiCycle(previousCycle(cycle))` (P3-AC16) |
+| `packages/shared/src/index.ts` | Optional `previousCycle: cycleSchema` on `meResponseSchema` (same deploy comment) |
+| `apps/server/src/api/export.test.ts` | Add P3-AC9 to AC12. **No existing assertion changes**: the no-range test still expects `spendlygo-all-time.csv`, and the month/year tests count rows only |
+| `apps/server/src/bot/commands/export.ts` | Pass `{ today: todayFor(ctx, user), cycleStartDay }`. Extract the usage text into an exported pure `exportUsageText(cycle: BudgetCycle)` (P3-AC13: the two cycle lines name the ranges via `formatCycleRange` when day ≠ 1, else "this month"/"last month"). Empty reply stays `Nothing logged for ${label === 'all-time' ? 'any period yet' : label}.` (P3-AC14). `InputFile(..., range.filename)`; caption `${n} entries · ${range.label}` (unchanged shape). Update the header comment's command list |
+| `apps/server/src/bot/commands/export.test.ts` | **New**: P3-AC13 (pure), P3-AC14 and P3-AC15 (DB block; copy `fakeBotCtx` from `settings.test.ts` and add `replyWithDocument: vi.fn()`) |
+| `apps/server/src/bot/commands/help.ts` | Line 64: `` `/export` for everything, `/export cycle` or `/export last cycle` for a pay cycle, `/export 2026` or `/export 2026-08` for a calendar range. `` |
+| `apps/miniapp/src/features/settings/ExportSheet.tsx` + `export-sheet.css` | **New** (target layout). Uses `components/Sheet.tsx`; five radio options in the order Everything · This cycle · Last cycle · Pick a month · Custom dates (day 1: This month · Last month, captions from `me.cycle.label` / `me.previousCycle.label`, hidden if missing on an old server); Everything is preselected and sends **no** `range` (works on old and new servers); Pick a month: `<input type="month">` (max = today's month) → `range=YYYY-MM`; Custom dates: two `<input type="date">` like History's custom range → `range=from..to`, Download disabled until both set and from ≤ to; This/Last → `range=cycle` / `range=last-cycle`. Download calls `onExport(range?: string)`. Tokens only, ≤ 250 lines |
+| `apps/miniapp/src/screens/Settings.tsx` | "Export CSV" opens the sheet; `onExportCsv(range?: string)`. The footnote "export everything as a CSV, any time" stays as is |
+| `apps/miniapp/src/App.tsx` | `onExportCsv={(range) => exportCsv.mutate(range)}`; `api.exportCsv(range)` already accepts it |
+| `PRD.md` | F8.1, F8.4 rewritten: `/export` = everything; `cycle`, `last cycle`; calendar `YYYY`/`YYYY-MM`/`YYYY-MM-DD`; custom ranges in the Mini App; file-name rule. §8 `/export [range]` row |
 
 #### Part 4
 
+Two commits in this order (see *Rollback*): **commit 1, server** (schema,
+route, bot picker, notification, tests); **commit 2, Mini App** (field, preview,
+wiring).
+
 | File | Change |
 |---|---|
-| `packages/shared/src/index.ts` | `updateSettingsSchema`: `cycleStartDay: z.number().int().min(1).max(31).optional()` |
+| `packages/shared/src/index.ts` | `updateSettingsSchema` (still `.strict()`): `cycleStartDay: z.number().int().min(1).max(31).optional()` |
 | `packages/db/src/repositories/users.ts` | No change. `UpdateSettingsInput` stays user-only; the route destructures `cycleStartDay` out before calling `usersRepo.updateSettings`, exactly as it does `monthlyBudgetCents` |
-| `apps/server/src/api/index.ts` | `PATCH /settings`: destructure `cycleStartDay` beside `monthlyBudgetCents`; if defined → `householdsRepo.updateCycleStartDay(ctx.db, activeHouseholdId(user), cycleStartDay)`. Response adds `cycleStartDay` |
-| `apps/server/src/api/pay-cycle.test.ts` | P4-AC1 to AC5 (AC3 copies the `household.test.ts` "either member can change it" pattern) |
-| `apps/server/src/bot/commands/settings.ts` | `SettingsAction` adds `{ kind: 'cycle'; day: number }` and view `'days'`. `parseSettingsCallback`: `set:cp` → days view; `/^set:c:(\d{1,2})$/` → cycle action, validated with `updateSettingsSchema.shape.cycleStartDay`. `buildSettingsText(user, config, cycle?)`: adds the line from P4-AC6 when `cycle` is given. `settingsKeyboard`: add `Change cycle start day` → `set:cp`. New `cycleDayPickerKeyboard(currentDay)` (copy `hourPickerKeyboard`, 7 per row). `handleSettings` and the callback compute `cycle` via `currentCycle`. The cycle action calls `householdsRepo.updateCycleStartDay(ctx.db, activeHouseholdId(botCtx.appUser), day)`, then edits the message; `answerCallbackQuery` on every path; log `settings.updated` with `fields: 'cycleStartDay'`. Update the header comment's callback list |
-| `apps/server/src/bot/commands/settings.test.ts` | P4-AC6 to AC9 |
+| `packages/core/src/cycle.ts` + `cycle.test.ts` | Add `ordinalDay(day)` and its unit test (1st, 2nd, 3rd, 4th, 11th, 12th, 13th, 21st, 22nd, 23rd, 31st) |
+| `apps/server/src/telegram/send-with-retry.ts` | **New**. `sendMessageWithRetry(api: Api, chatId: string, text: string, sleep: (ms: number) => Promise<void> = defaultSleep)`: `await api.sendMessage(chatId, text)`; on a `GrammyError` with `error_code === 429` and `parameters.retry_after ≤ 3`, `await sleep(retry_after * 1000)` and send once more; any other error (including a second failure or `retry_after > 3`) is rethrown. Plain text, no `parse_mode` |
+| `apps/server/src/telegram/send-with-retry.test.ts` | Unit tests for the helper (429 ≤ 3 retried once; 429 > 3 not retried; 403 not retried) |
+| `apps/server/src/api/cycle-change-notice.ts` | **New**. Pure `buildCycleChangeText(actor: User, cycle: BudgetCycle): string`: name = `actor.firstName ?? 'Someone in your shared space'`; day ≠ 1 → `${name} set this shared space's budget month to start on the ${ordinalDay(day)}. This cycle: ${formatCycleRange(cycle)}.`; day 1 → `${name} set this shared space's budget month back to the calendar month. This month: ${monthName(month)}.` No amounts (GUARDRAILS §6). `notifyCycleChange(ctx, api, actor, householdId, day, sleep?)`: `members = householdsRepo.membersOf(ctx.db, householdId)` minus `actor.id`; for each, **sequentially** (one message per chat, so far under 1 msg/s per chat and 30 msg/s overall, GUARDRAILS §10): `cycle = cycleContaining(todayFor(ctx, member), day)` (the recipient's own timezone), `sendMessageWithRetry(api, member.telegramId.toString(), buildCycleChangeText(actor, cycle), sleep)`; catch per member → `logger.warn('settings.cycle_notify_failed', { userId: member.id, ...describeError(error) })` and continue. Never throws. Returns the number sent |
+| `apps/server/src/api/index.ts` | `PATCH /settings`: destructure `cycleStartDay` beside `monthlyBudgetCents`; if defined → `changed = await householdsRepo.updateCycleStartDay(ctx.db, activeHouseholdId(user), cycleStartDay)`; if `changed`, `await notifyCycleChange(ctx, bot.api, user, activeHouseholdId(user), cycleStartDay)` after the write (never fails the request). Response adds `cycleStartDay` |
+| `apps/server/src/api/pay-cycle.test.ts` | P4-AC1 to AC5, P4-AC11, P4-AC12, P4-AC14, P4-AC15. For the notice tests: `const bot = new Bot(BOT_TOKEN, { botInfo: undefined as never }); bot.api.sendMessage = vi.fn()…` before `createApp(ctx, bot, …)` (as `alerts.test.ts` does). P4-AC14 rejects with `new GrammyError(…, { ok: false, error_code: 403, description: 'Forbidden: bot was blocked by the user' }, …)`; P4-AC15 first rejects with `error_code: 429, parameters: { retry_after: 1 }`. To inject `sleep`, `createApiRouter` reads an optional `sleep` from `CreateAppOptions` (default real timer); tests pass `vi.fn().mockResolvedValue(undefined)` |
+| `apps/server/src/app.ts` | `CreateAppOptions` gets an optional `sleep?: (ms: number) => Promise<void>` passed through to `createApiRouter` (test seam only) |
+| `apps/server/src/bot/commands/settings.ts` | `SettingsAction` adds `{ kind: 'cycle'; day: number; householdId: string }` and view `{ kind: 'view'; view: 'days'; householdId: string }`. `parseSettingsCallback`: `/^set:cp:([0-9a-f-]{36})$/` → days view; `/^set:c:(\d{1,2}):([0-9a-f-]{36})$/` → cycle action, day validated with `updateSettingsSchema.shape.cycleStartDay` and the id with `z.string().uuid()`; anything else (including the bare `set:c:20` and `set:cp`) → null (P4-AC9). `buildSettingsText(user, config, cycle?)`: adds the line from P4-AC6 when `cycle` is given (`ordinalDay`). `settingsKeyboard(user, config)`: add `Change cycle start day` → `` `set:cp:${activeHouseholdId(user)}` ``. New `cycleDayPickerKeyboard(currentDay, householdId)` (copy `hourPickerKeyboard`, 7 per row, `• ` on the current day, `← Back` → `set:back`). In the callback handler, for both the days view and the cycle action: **if `action.householdId !== activeHouseholdId(botCtx.appUser)` → `answerCallbackQuery({ text: STALE_TEXT })` and return, writing nothing** (P4-AC10; the id is only compared, never used to write, GUARDRAILS §4). Cycle action: `changed = await householdsRepo.updateCycleStartDay(ctx.db, activeHouseholdId(botCtx.appUser), day)`; answer `Saved` (on every path, including errors, as the existing code does); edit the message to the main view with the new cycle line; **then**, if `changed`, `await notifyCycleChange(ctx, botCtx.api, botCtx.appUser, householdId, day)` (after answering, so the spinner never waits on it, GUARDRAILS §10). `handleSettings` computes `cycle` via `currentCycle`. Log `settings.updated` with `fields: 'cycleStartDay'`. Update the header comment's callback list |
+| `apps/server/src/bot/commands/settings.test.ts` | P4-AC6, AC7, AC9 (pure); P4-AC8, AC10, AC13 (DB block; `fakeBotCtx` gains `api: { sendMessage: vi.fn() }`). Update the existing `every callback_data is set:-prefixed and within 64 bytes` test only if it enumerates exact data (it must keep passing as is) |
 | `apps/server/src/bot/commands/help.ts` | One line: `/settings` also sets the day your budget month starts |
-| `apps/miniapp/src/features/settings/CycleStartDayField.tsx` + `cycle-start-day.css` | **New**. A `<select>` 1–31 with ordinal labels (`1st (calendar month)`, `2nd`, …), caption `This cycle: {label}` (or `Calendar month` for day 1), hints for 29–31 and for shared spaces (`me.household !== null`). Calls `onChange(day)` with `haptics.select()` |
+| `apps/miniapp/src/features/settings/CycleStartDayField.tsx` + `cycle-start-day.css` | **New** (commit 2). A `<select>` 1–31 with ordinal labels (`1st (calendar month)`, `2nd`, …), caption `This cycle: {label}` (or `Calendar month` for day 1), hints for 29–31 and, when `me.household !== null`, `Changes it for everyone in this space. They'll get a message.` Calls `onChange(day)` with `haptics.select()`. Holds the chosen value locally and resets it to `me.cycle.startDay` when the mutation fails (P4-AC18) |
 | `apps/miniapp/src/screens/Settings.tsx` | Render the field under the budget input. Replace `daysInMonth(today)` with `me.cycle?.days ?? daysInMonth(today)`; copy `days this cycle` when start day ≠ 1 |
-| `apps/miniapp/src/App.tsx` | `onSetCycleStartDay={(day) => settings.mutate({ cycleStartDay: day })}`; `settings.onSuccess` also invalidates `['recap']` (and `['cycle']` if Q3 = cycle) |
-| `PRD.md` | §8 `/settings` row: add the cycle start day |
+| `apps/miniapp/src/App.tsx` | `onSetCycleStartDay={(day) => settings.mutate({ cycleStartDay: day })}`; `settings.onSuccess` also invalidates `['recap']` (History's cycle key already starts with `'stats'`) |
+| `PRD.md` | §8 `/settings` row: add the cycle start day; F17: partner notice |
+| `docs/adr/0007-…` | Add the rollback note below |
 | `BACKLOG.md` | B-032 → Done after release |
 
 ### Data
@@ -456,18 +555,42 @@ says "this month" says "this cycle".
     server selects named columns, so it never sees it. Its inserts (new users'
     personal spaces, `householdsRepo.create`) get the default, 1. The CHECK
     validates existing rows, which are all 1.
-  - **Rollback:** reverting the code leaves a harmless column. No backfill, no
-    bulk update, no drop.
-- **`budget_alerts`: no migration (recommended, Q2 option A).** Key =
+  - **Rollback of Part 1:** reverting the code leaves a harmless column. No
+    backfill, no bulk update, no drop.
+- **`budget_alerts`: no migration (owner decision Q2 A).** Key =
   `(user_id, year, month of the cycle's END date, threshold_pct)`. For a fixed
   start day, every cycle ends in a different calendar month, so the key is unique
   per cycle. For start day 1, the end month *is* the calendar month, so rows
-  written by the old server are read identically (P2-AC14). If the owner picks
-  Q2 option C instead, Part 2 gains an additive migration (a new table), and that
-  needs a fresh Plan approval.
-- **`budget_periods`:** not touched (Q6).
+  written by the old server are read identically (P2-AC18). Limitation and
+  never-double-send: see the Requirements (P2-AC20, P2-AC21).
+- **`budget_periods`:** not touched, pending Q6.
 - Nothing stored changes on a start-day change. History is re-grouped at read
   time (decision 5).
+
+### Rollback (owner decision F4)
+
+- **Parts 1–3** never let anyone set a day other than 1, so reverting any of
+  them is behaviour-neutral (P1-AC1, P1-AC13, P1-AC19, P2-AC2, P2-AC11,
+  P2-AC18 prove day 1 = today). Part 3's only day-1 change is the file name of
+  bounded exports.
+- **Part 4, Mini App problem:** revert **commit 2 only**. The server keeps
+  `PATCH cycleStartDay` and the bot's `/settings` picker, so any space can still
+  be set back to the 1st from chat. Nothing is stranded.
+- **Part 4, server problem:** reverting commit 1 removes every way to change
+  the day, but Parts 1–3 still honour the stored day, so the affected spaces
+  keep working on their chosen cycle; they are not broken, just frozen. Before
+  reverting, run `SELECT id, cycle_start_day FROM households WHERE cycle_start_day <> 1`
+  (read-only) and tell the owner. Putting a space back to 1 without the UI is a
+  one-row `UPDATE households SET cycle_start_day = 1 WHERE id = $1` per space,
+  which **needs the owner's explicit approval** (GUARDRAILS §3, §14). Never a
+  bulk update.
+- **Reverting Part 1 after Part 4** (unlikely): the old code ignores the
+  column, so every space silently goes back to calendar months. Tell the owner
+  first; no data is lost and re-deploying restores the cycles.
+- **Deploy window:** because `updateSettingsSchema` is `.strict()` from Part 1,
+  a new Mini App that reaches a Part 1–3 server gets a 400 for `cycleStartDay`,
+  shows the error haptic, and reverts the select (P1-AC27, P4-AC18). It never
+  shows a false "Saved".
 
 ### Tests
 
@@ -485,7 +608,7 @@ unauthenticated test and a cross-user test.
 | P1-AC6 | `cycle.test.ts` › `a day-20 cycle spans the new year` |
 | P1-AC7 | `cycle.test.ts` › `cycles tile with no gaps or overlaps for every start day 1–31` |
 | P1-AC8 | `cycle.test.ts` › `rejects a start day outside 1–31 or not an integer` |
-| P1-AC9 | `cycle.test.ts` › `formats a cycle as "20 Oct – 19 Nov"` |
+| P1-AC9 | `cycle.test.ts` › `formats a cycle as "20 Oct – 19 Nov", with no year` |
 | P1-AC10 | `cycle.test.ts` › `GUARDRAILS §9: 00:30 on the start day belongs to the new cycle` |
 | P1-AC11 | `packages/core/src/safe-to-spend.test.ts` › `pay cycles (F17) › first day of a cycle splits the budget across the whole cycle` |
 | P1-AC12 | `safe-to-spend.test.ts` › `pay cycles (F17) › last day of a cycle gets the whole remainder` |
@@ -502,50 +625,71 @@ unauthenticated test and a cross-user test.
 | P1-AC23 | `pay-cycle.test.ts` › `GET /api/me › returns the current cycle` |
 | P1-AC24 | `apps/server/src/bot/commands/money.test.ts` › `/today names the cycle range for day 20 and is unchanged for day 1` |
 | P1-AC25 | `apps/server/src/bot/capture.test.ts` › `says "this cycle" when over budget with a non-calendar cycle` |
-| P1-AC26 | Screenshot check (no Mini App test harness until B-016, see Q8): Today, day 20 and day 1, light + dark, 375px |
+| P1-AC26 | Screenshot check (no Mini App test harness until B-016, Q8 A): Today, day 20 and day 1, light + dark, 375px |
+| P1-AC27 | `pay-cycle.test.ts` › `PATCH /api/settings › an unknown key is a 400 and changes nothing (strict schema)` |
+| P1-AC28 | `households.test.ts` › `cycle start day › updateCycleStartDay reports whether it changed anything` |
 | P2-AC1 | `pay-cycle.test.ts` › `GET /api/stats › month view is the day-20 cycle with 31 day buckets` |
 | P2-AC2 | `pay-cycle.test.ts` › `GET /api/stats › day 1 month view is unchanged` |
-| P2-AC3 | `pay-cycle.test.ts` › `GET /api/stats › a past anchor is re-grouped by the current start day` |
-| P2-AC4 | `apps/server/src/api/recap.test.ts` › `buildRecap › a month recap follows the cycle and stops at today` |
-| P2-AC5 | `apps/server/src/tasks/digest-periods.test.ts` › `isMonthlyDigestDay with a cycle › day 20 fires on the 19th, including across the new year` |
-| P2-AC6 | `digest-periods.test.ts` › `isMonthlyDigestDay with a cycle › day 31 fires on 27 Feb (common) and 28 Feb (leap)` |
-| P2-AC7 | `digest-periods.test.ts` › `isMonthlyDigestDay with a cycle › day 1 matches the calendar month end` |
-| P2-AC8 | `apps/server/src/tasks/digest.test.ts` › `buildMonthlyDigest › names the cycle range and totals only the cycle` |
-| P2-AC9 | `digest.test.ts` › `sendDueDigests › sends the monthly digest on the cycle's last day, not the calendar month end` |
-| P2-AC10 | `apps/server/src/tasks/alerts.test.ts` › `pay cycle (F17) › spend before the cycle start does not count` |
-| P2-AC11 | `alerts.test.ts` › `pay cycle (F17) › a double-fired tick sends the 80% alert once per cycle` |
-| P2-AC12 | `alerts.test.ts` › `pay cycle (F17) › thresholds re-arm in the next cycle` |
-| P2-AC13 | `alerts.test.ts` › `pay cycle (F17) › the 100% text names the cycle range` |
-| P2-AC14 | `alerts.test.ts` › `pay cycle (F17) › a day-1 row written before B-032 still suppresses the repeat` |
-| P2-AC15 | `alerts.test.ts` › `pay cycle (F17) › switching 1 → 20 after an October alert still alerts in the new cycle` |
-| P2-AC16 | `pay-cycle.test.ts` › `GET /api/cycle › returns the cycle for an anchor; rejects unauthenticated and a bad anchor` *(Q3)* |
-| P2-AC17 | Screenshot check: History Cycle chip, day 20 and day 1 *(Q3)* |
-| P2-AC18 | Screenshot check: Stats month tab and recap card, day 20 and day 1 |
-| P3-AC1 | `apps/server/src/api/export-range.test.ts` › `no argument is this cycle, named with exact dates` |
-| P3-AC2 | `export-range.test.ts` › `"last cycle" is the previous cycle` |
-| P3-AC3 | `export-range.test.ts` › `YYYY-MM is always the calendar month, whatever the start day` |
-| P3-AC4 | `export-range.test.ts` › `YYYY is the calendar year` |
-| P3-AC5 | `export-range.test.ts` › `day 1: no argument is this calendar month` |
-| P3-AC6 | `apps/server/src/api/export.test.ts` › `this-cycle, last-cycle and no range follow the cycle and name the file by dates` |
-| P3-AC7 | `export.test.ts` › `a custom from..to range is inclusive; reversed or malformed is a 400` |
-| P3-AC8 | `export.test.ts` › `"all" exports everything as spendlygo_all-time.csv` *(Q1)* |
-| P3-AC9 | `apps/server/src/bot/commands/export.test.ts` › `an unknown argument shows the new usage` |
-| P3-AC10 | `export.test.ts` (bot) › `an empty cycle says nothing was logged for its range` |
-| P3-AC11 | `apps/server/src/api/export.test.ts` › existing `rejects an unauthenticated request` and `never includes another user's transactions` (kept, must stay green) |
-| P3-AC12 | `pay-cycle.test.ts` › `GET /api/me › also returns the previous cycle` |
-| P3-AC13 | Screenshot check: the export sheet, day 20 and day 1 |
+| P2-AC3 | `pay-cycle.test.ts` › `GET /api/stats › anchors either side of a cycle step exactly one cycle, re-grouped by the current start day` |
+| P2-AC4 | `pay-cycle.test.ts` › `GET /api/stats › rejects unauthenticated and a bad anchor; a stranger sees only their own month` |
+| P2-AC5 | `pay-cycle.test.ts` › `GET /api/stats › the year view stays the calendar year with a day-20 cycle` |
+| P2-AC6 | `apps/server/src/api/recap.test.ts` › `buildRecap › a month recap follows the cycle and stops at today` |
+| P2-AC7 | `recap.test.ts` › `buildRecap › a year recap stays the calendar year with a day-20 cycle` |
+| P2-AC8 | `apps/server/src/bot/commands/recap.test.ts` › `recapFooter says "this cycle" only when the start day isn't 1` |
+| P2-AC9 | `apps/server/src/tasks/digest-periods.test.ts` › `isMonthlyDigestDay with a cycle › day 20 fires on the 19th, including across the new year` |
+| P2-AC10 | `digest-periods.test.ts` › `isMonthlyDigestDay with a cycle › day 31 fires on 27 Feb (common) and 28 Feb (leap)` |
+| P2-AC11 | `digest-periods.test.ts` › `isMonthlyDigestDay with a cycle › day 1 matches the calendar month end` |
+| P2-AC12 | `apps/server/src/tasks/digest.test.ts` › `buildMonthlyDigest › names the cycle range and totals only the cycle` |
+| P2-AC13 | `digest.test.ts` › `sendDueDigests › sends the monthly digest on the cycle's last day, not the calendar month end` |
+| P2-AC14 | `apps/server/src/tasks/alerts.test.ts` › `pay cycle (F17) › spend before the cycle start does not count` |
+| P2-AC15 | `alerts.test.ts` › `pay cycle (F17) › a double-fired tick sends the 80% alert once per cycle` |
+| P2-AC16 | `alerts.test.ts` › `pay cycle (F17) › thresholds re-arm in the next cycle` |
+| P2-AC17 | `alerts.test.ts` › `pay cycle (F17) › the 100% text names the cycle range` |
+| P2-AC18 | `alerts.test.ts` › `pay cycle (F17) › a day-1 row written before B-032 still suppresses the repeat` |
+| P2-AC19 | `alerts.test.ts` › `pay cycle (F17) › switching 1 → 20 after an October alert still alerts in the new cycle` |
+| P2-AC20 | `alerts.test.ts` › `pay cycle (F17) › documented limitation: switching 20 → 1 on 25 Oct skips October's 80% alert once` |
+| P2-AC21 | `alerts.test.ts` › `pay cycle (F17) › flipping through every start day on one date never sends a threshold twice` |
+| P2-AC22 | Screenshot check: History Cycle chip and arrows, day 20 and day 1 |
+| P2-AC23 | Screenshot check: Stats month tab and recap card, day 20 and day 1 |
+| P3-AC1 | `apps/server/src/api/export-range.test.ts` › `no argument is still everything, named spendlygo-all-time.csv` |
+| P3-AC2 | `export-range.test.ts` › `"cycle" is this cycle, named with exact dates` |
+| P3-AC3 | `export-range.test.ts` › `"last cycle" in any spacing or case is the previous cycle` |
+| P3-AC4 | `export-range.test.ts` › `day 1: this and last cycle are labelled with month names` |
+| P3-AC5 | `export-range.test.ts` › `YYYY-MM is always the calendar month, whatever the start day` |
+| P3-AC6 | `export-range.test.ts` › `YYYY is the calendar year and YYYY-MM-DD a single day, named with exact dates` |
+| P3-AC7 | `export-range.test.ts` › `a custom from..to range is inclusive; reversed or malformed is null` |
+| P3-AC8 | `export-range.test.ts` › `ranges spanning New Year carry both years in the label` |
+| P3-AC9 | `apps/server/src/api/export.test.ts` › `no range still exports everything, whatever the start day` |
+| P3-AC10 | `export.test.ts` › `cycle and last-cycle follow the start day and name the file by dates` |
+| P3-AC11 | `export.test.ts` › `a custom from..to range is inclusive; reversed is a 400` |
+| P3-AC12 | `export.test.ts` › existing `rejects an unauthenticated request` and `never includes another user's transactions` (kept), plus new `range=cycle never includes another user's transactions` |
+| P3-AC13 | `apps/server/src/bot/commands/export.test.ts` › `the usage hint lists everything, cycle, last cycle, year and month` |
+| P3-AC14 | `export.test.ts` (bot) › `an empty last cycle says nothing was logged for its range` |
+| P3-AC15 | `export.test.ts` (bot) › `/export cycle sends one file named by dates with a range caption` |
+| P3-AC16 | `pay-cycle.test.ts` › `GET /api/me › also returns the previous cycle` |
+| P3-AC17 | Screenshot check: the export sheet, day 20 and day 1 |
 | P4-AC1 | `pay-cycle.test.ts` › `PATCH /api/settings › owner's example: setting day 20 on 31 Oct moves Today to 20 Oct – 19 Nov` |
 | P4-AC2 | `pay-cycle.test.ts` › `PATCH /api/settings › rejects 0, 32, 1.5 and "20" without changing anything` |
 | P4-AC3 | `pay-cycle.test.ts` › `PATCH /api/settings › either member of a shared space can change it` |
 | P4-AC4 | `pay-cycle.test.ts` › `PATCH /api/settings › changes only the active space` |
-| P4-AC5 | `pay-cycle.test.ts` › `PATCH /api/settings › ignores a householdId in the body and rejects unauthenticated` |
+| P4-AC5 | `pay-cycle.test.ts` › `PATCH /api/settings › a householdId in the body is a 400; unauthenticated is a 401` |
 | P4-AC6 | `apps/server/src/bot/commands/settings.test.ts` › `shows the cycle start day and range` |
-| P4-AC7 | `settings.test.ts` › `day picker lists 1–31, 7 per row, marks the current day, and has Back` |
+| P4-AC7 | `settings.test.ts` › `day picker lists 1–31, 7 per row, marks the current day, carries the space id, and stays within 64 bytes` |
 | P4-AC8 | `settings.test.ts` › `set:c:20 updates the active space and a replay is a no-op` (DB block) |
-| P4-AC9 | `settings.test.ts` › `parseSettingsCallback rejects malformed cycle days` |
-| P4-AC10 | Screenshot check: Settings budget card, day 20 / day 30 / day 1, personal and shared |
-| P4-AC11 | Screenshot check: daily mode preview, day 20 and day 1 |
-| P4-AC12 | Screenshot + dev-bot check: picking a day refreshes Today/Stats/History |
+| P4-AC9 | `settings.test.ts` › `parseSettingsCallback rejects malformed cycle data, including the old id-less form` |
+| P4-AC10 | `settings.test.ts` › `a picker for another space is answered "out of date" and writes nothing` (DB block) |
+| P4-AC11 | `pay-cycle.test.ts` › `PATCH /api/settings › a partner's change sends one message to each other member, and none when nothing changed` |
+| P4-AC12 | `pay-cycle.test.ts` › `PATCH /api/settings › a personal space change messages nobody` |
+| P4-AC13 | `settings.test.ts` › `a redelivered set:c in a shared space messages the partner once` (DB block) |
+| P4-AC14 | `pay-cycle.test.ts` › `PATCH /api/settings › a blocked partner never fails the change` |
+| P4-AC15 | `pay-cycle.test.ts` › `PATCH /api/settings › a 429 is retried once after retry_after` |
+| P4-AC16 | Screenshot check: Settings budget card, day 20 / day 30 / day 1, personal and shared |
+| P4-AC17 | Screenshot check: daily mode preview, day 20 and day 1 |
+| P4-AC18 | Screenshot + dev-bot check: picking a day refreshes Today/Stats/History; a 400 reverts the select without "Saved" |
+
+Helper unit tests that back the ACs but aren't ACs themselves:
+`cycle.test.ts` (`cycleAlertKey`, `formatDateRangeWithYears`, `ordinalDay`) and
+`apps/server/src/telegram/send-with-retry.test.ts`.
 
 ### Risks & guardrails
 
@@ -553,123 +697,70 @@ unauthenticated test and a cross-user test.
 |---|---|---|
 | §1 Cost | None. No new service, dependency or Render service | — |
 | §2 Money | A cycle-length bug lets allowances exceed the budget | All division stays `divideCentsFloor`; P1-AC14 property over 7 start days × 4 cycle shapes × 5 budgets; P1-AC13 proves the day-1 path is identical |
-| §3 Data | Migration on a live DB | Additive column with a default + CHECK; generated; no backfill, drop or rewrite. `budget_alerts` untouched (Q2 A) |
-| §3 Idempotency | Double-fired tick, redelivered callback | Alerts keep reserve-then-send behind the unique index (P2-AC11); `set:c:<n>` is an absolute value (P4-AC8) |
-| §4 Auth | The start day is written for the wrong space | The space comes only from `activeHouseholdId(user)`, never from the body (P4-AC5); repo function filters by household id; cross-user tests P1-AC22, P4-AC5 |
-| §6 Privacy | Logging | Log only `userId` and `fields: 'cycleStartDay'`. Never amounts |
-| §7 Runtime | More queries per request | `activeSpaceSettings` is one primary-key lookup, replacing the existing `effectiveBudgetCents` lookup in `computeSafeToSpend`. Aggregation stays in SQL |
-| §8 Frontend | Bundle size | Two small components, no dependency; tokens only; transform/opacity only |
-| §9 Time | Boundaries in UTC, or an off-by-one at the cycle edge | All cycle maths on `IsoDate` from `todayFor` (user timezone); P1-AC10, P1-AC20 at 00:30 SGT; first/last-day tests |
-| §11 Scope | Scope creep (heatmap, goals, year views) | Listed as out of scope; year views wait for Q4 |
-| §13 Testing | Mini App has no test harness (B-016) | UI ACs are screenshot checks, and all logic they display is computed and tested server-side (Q8) |
-| Deploy order | The static site deploys before or after the server | `cycle`/`previousCycle` are optional in the schema, and the Mini App falls back to day 1. The server never depends on new Mini App fields |
-| Behaviour change | `/export` with no argument changes for every user in Part 3 | Owner decision 8. Called out in the Part 3 PR body and in the `/help` text |
+| §3 Data | Migration on a live DB | Additive column with a default + CHECK; generated; no backfill, drop or rewrite. `budget_alerts` untouched (Q2 A). Rollback never needs a bulk update; a one-row reset needs the owner's approval |
+| §3 Idempotency | Double-fired tick, redelivered callback, repeated PATCH | Alerts keep reserve-then-send behind the unique index (P2-AC15, P2-AC21); `set:c:<n>:<id>` is an absolute value (P4-AC8); `updateCycleStartDay` writes only on a real change, so notices go out once (P4-AC11, P4-AC13) |
+| §3 Correctness | Alert key collision after a start-day change | Accepted by the owner (Q2 A): at most one skipped threshold, never a duplicate (P2-AC20, P2-AC21); documented in PRD F13 and `apps/server/CLAUDE.md` |
+| §4 Auth | The start day is written for the wrong space | The space comes only from `activeHouseholdId(user)`; the body can't carry one (strict schema, P4-AC5); the callback's space id is compared, never written to (P4-AC10); cross-user tests P1-AC22, P2-AC4, P3-AC12, P4-AC5 |
+| §6 Privacy | Logging; partner notice content | Log only `userId` and `fields: 'cycleStartDay'` / error class. The notice names the actor's first name and the date range, never amounts. Export default still exports everything (§6 "honour export") |
+| §7 Runtime | More queries per request | `activeSpaceSettings` is one primary-key lookup, replacing the existing `effectiveBudgetCents` lookup in `computeSafeToSpend`. Aggregation stays in SQL. History's Cycle chip reuses `/api/stats` (heavier than needed, only when used, cached) |
+| §8 Frontend | Bundle size | Four small components and one hook, no dependency; tokens only; transform/opacity only |
+| §9 Time | Boundaries in UTC, or an off-by-one at the cycle edge | All cycle maths on `IsoDate` from `todayFor` (user timezone); P1-AC10, P1-AC20 at 00:30 SGT; first/last-day tests; the partner notice uses the recipient's timezone |
+| §10 Telegram | Notice fan-out, 429s, slow webhook | One message per other member, sent sequentially to distinct chats; 429 retried once only if `retry_after` ≤ 3 s, else dropped and logged; 403/5xx logged, never fail the change (P4-AC14, P4-AC15); the bot answers the callback before sending; every callback path is answered |
+| §11 Scope | Scope creep (heatmap, goals, year views, `/export all`, Today notice line) | Listed as out of scope |
+| §13 Testing | Mini App has no test harness (B-016) | UI ACs are screenshot checks (Q8 A); every number and every "sent once" behaviour they rely on is tested server-side |
+| Deploy order | The static site deploys before or after the server | `cycle`/`previousCycle` optional in the schema, Mini App falls back to day 1; Everything export sends no `range`; strict settings schema turns a premature `cycleStartDay` into a visible 400. The server never depends on new Mini App fields |
+| Behaviour change | Day-1 users | None, except the file name of bounded exports (`/export 2026-10`, `/export 2026`). Called out in the Part 3 PR body |
 
 ### PR split
 
 Four PRs, all **F17**, in order, each cut from the latest `main` after the
 previous one merges. Until Part 4 ships, no user can change the start day, so
-Parts 1–2 are behaviour-identical for everyone (all spaces are at 1, proved by
-P1-AC1, P1-AC13, P1-AC19, P2-AC2, P2-AC7, P2-AC14). Part 3 deliberately changes
-`/export` for everyone (decision 8).
+Parts 1–3 are behaviour-identical for everyone (all spaces are at 1, proved by
+P1-AC1, P1-AC13, P1-AC19, P2-AC2, P2-AC11, P2-AC18, P3-AC1, P3-AC9), apart
+from bounded-export file names in Part 3 and new `/export cycle` options.
 
 | Part | Branch | Contents | ACs | Migration |
 |---|---|---|---|---|
-| 1 of 4 | `feat/B-032-pay-cycle` | Core `cycle.ts`, safe-to-spend, `households.cycle_start_day`, `/api/today`, `/api/me` cycle, bot `/today`/`/budget`/capture copy, Mini App Today card, PRD F17, ADR 0007 | P1-AC1 to AC26 (26) | **Yes**: one additive column |
-| 2 of 4 | `feat/B-032-pay-cycle-periods` | Stats month view, recap, monthly digest, budget alerts, (History cycle chip + `GET /api/cycle` if Q3 = cycle), recap card tab | P2-AC1 to AC18 (18; 15 if Q3 = calendar) | No (Q2 A) |
-| 3 of 4 | `feat/B-032-pay-cycle-export` | Export parser, file names, bot `/export`, `/api/me` `previousCycle`, Mini App export sheet | P3-AC1 to AC13 (13; 12 if Q1 = no "all") | No |
-| 4 of 4 | `feat/B-032-pay-cycle-settings` | `PATCH /api/settings` `cycleStartDay`, bot `/settings` day picker, Mini App start-day select and daily-mode days | P4-AC1 to AC12 (12) | No |
+| 1 of 4 | `feat/B-032-pay-cycle` | Core `cycle.ts`, safe-to-spend, `households.cycle_start_day` + `updateCycleStartDay`, strict settings schema, `/api/today`, `/api/me` cycle, bot `/today`/`/budget`/capture copy, Mini App Today card, PRD F17, ADR 0007 | P1-AC1 to AC28 (**28**) | **Yes**: one additive column |
+| 2 of 4 | `feat/B-032-pay-cycle-periods` | Stats month view (year stays calendar), recap + `/recap` footer, monthly digest, budget alerts + documented limitation, History Cycle chip via `/api/stats` (`features/history/`), recap card tab | P2-AC1 to AC23 (**23**) | No (Q2 A) |
+| 3 of 4 | `feat/B-032-pay-cycle-export` | Export parser (`cycle`, `last cycle`, custom ranges, dated file names, `/export` = everything unchanged), bot `/export` + help, `/api/me` `previousCycle`, Mini App export sheet | P3-AC1 to AC17 (**17**) | No |
+| 4 of 4 | `feat/B-032-pay-cycle-settings` | Commit 1 (server): `PATCH /api/settings` `cycleStartDay`, bot `/settings` day picker with space id, partner notice + 429 helper. Commit 2 (Mini App): start-day select, daily-mode days | P4-AC1 to AC18 (**18**) | No |
+
+Total: **86** ACs.
 
 ### Open questions for the owner
 
-**Q1 — How do you export *everything* once `/export` means "this cycle"?**
-*Scenario:* today `/export` sends your whole history. After Part 3 it sends only
-20 Oct – 19 Nov. Next year you want everything for your accountant: there's no
-way to ask for it except Custom dates from your first entry.
-*Detail:* GUARDRAILS §6 says to "honour export". The recap's picker has four
-options, none of them "everything".
-- **A. Add `/export all` and a fifth Mini App option, "Everything"** (file
-  `spendlygo_all-time.csv`). *Pro:* full export stays one tap; clear. *Con:* a
-  fifth option in the picker.
-- **B. `/export all` in the bot only; the Mini App keeps exactly four options.**
-  *Pro:* the picker stays as decided. *Con:* the Mini App can't export everything
-  without guessing a start date.
-- **C. No all-time export; Custom dates covers it.** *Pro:* simplest. *Con:*
-  awkward, and arguably weakens §6.
-*Recommendation:* A. Two sub-points to confirm: (i) "Pick a month" in the Mini
-App means the **calendar** month, like `/export 2026-10`; (ii) `/export 2026-10-05`
-(a single day, accepted today) keeps working.
+**Q6 — What happens to the unused `budget_periods` table (B-005)?**
 
-**Q2 — How is "once per cycle" remembered for budget alerts?**
-*Scenario:* on 31 Oct you're at day 1 and already got the 80% warning for
-October. You switch to day 20. Your new cycle (20 Oct – 19 Nov) is at 30%. On
-10 Nov it reaches 80%. Should you get the warning? (We think yes.)
-*Detail:* `budget_alerts` is unique on `(user_id, year, month, threshold_pct)`.
-- **A. Key by the calendar month the cycle *ends* in (no migration).** Day 1 is
-  unchanged (same rows). The scenario above alerts correctly (October vs
-  November keys). *Con:* the rare reverse switch (20 → 1 on 31 Oct) means the
-  1–30 Nov cycle shares November's key with the old 20 Oct – 19 Nov cycle, so a
-  threshold already sent there won't repeat in November.
-- **B. Key by the month the cycle *starts* in (no migration).** *Con:* fails
-  the scenario above: both cycles start in October, so your first real cycle
-  never gets its 80% warning.
-- **C. A new table keyed by `(user_id, cycle_start, threshold_pct)` (additive
-  migration).** Exact in every case. *Con:* on deploy the new table is empty, so
-  everyone already past 80% this month is warned again once, unless we backfill
-  it (a bulk data change: GUARDRAILS §3, needs your approval). The old table is
-  left to drop later (also needs approval).
-*Recommendation:* A.
+*Scenario:* your cycle is 20 Oct – 19 Nov and your budget is S$1,500. On
+5 Nov you raise it to S$2,000. Next month you look back at Stats for
+20 Oct – 19 Nov: the pace and "on track" figures use S$2,000, today's budget,
+not the S$1,500 you actually had for most of that cycle. That's exactly how
+calendar months behave today. The `budget_periods` table was meant to fix
+this by remembering each month's budget, but no code reads or writes it, and
+it's keyed by **user + calendar month**, which doesn't fit budgets that are
+**per space** and months that are now **cycles**.
 
-**Q3 — Does History's "Month" chip become a cycle?**
-*Scenario:* with day 20, you open History › Month and see 1–31 Oct, but Today
-and Stats talk about 20 Oct – 19 Nov.
-*Detail:* decision 5 says History is re-grouped by the current rule, but the
-History month picker is a calendar picker today. The Mini App can't do cycle
-maths itself (it may only import `@spendlygo/shared`), so a cycle chip needs a
-small `GET /api/cycle?anchor=` endpoint.
-- **A. Chip becomes "Cycle" when the start day isn't 1** (arrows step a whole
-  cycle; day 1 unchanged). *Pro:* consistent with Today and Stats, as decided.
-  *Con:* one more endpoint and about 3 more ACs.
-- **B. Keep the calendar month picker** (like `/export 2026-10`). *Pro:* less to
-  build; matches bank statements. *Con:* History disagrees with Stats.
-*Recommendation:* A. The calendar heatmap stays a rolling year either way (it
-has no months).
+- **A. Leave it alone in B-032; add a note to B-005** that any future use must
+  be keyed by space and cycle start date, and must cope with a changed start
+  day. *Pro:* no extra scope, no migration; nothing reads the table, so there's
+  no behaviour risk; B-032 stays four PRs. *Con:* past cycles keep using
+  today's budget (as past months do now) until B-005 is done.
+- **B. Fold B-005 into B-032:** re-key the table to (space, cycle start) and
+  record each cycle's budget. *Pro:* past cycles show the budget you really
+  had. *Con:* a schema change now (dropping or re-keying the old table is a
+  destructive migration that needs separate approval), a fifth PR, and it
+  delays the item you put first. It also clashes with decision 5: when you
+  change the start day, history is re-grouped, so stored per-cycle budgets no
+  longer line up with the new cycles, and we'd need a rule for that too.
+- **C. Drop the table now** (with an approved migration). *Pro:* removes an
+  unused table that invites mistakes. *Con:* destructive, so it needs your
+  explicit approval (GUARDRAILS §3, §14); it's B-005's decision, not this
+  item's; it closes off option B later.
 
-**Q4 — Do year views stay calendar years?**
-*Scenario:* with day 20, Stats › Year shows Jan–Dec bars. Should the "October"
-bar be 20 Oct – 19 Nov instead, and the year 20 Dec – 19 Dec?
-- **A. Year views stay calendar years** (Stats Year, `/recap year`). *Pro:*
-  matches `/export 2026` (decision 8) and tax years; no ambiguity about which
-  months a "cycle year" contains. *Con:* the October bar won't equal the October
-  cycle total.
-- **B. Year = 12 cycles, bars per cycle.** *Pro:* every number matches the
-  cycles. *Con:* odd labels (a "2026" starting on 20 Dec 2025); more to build
-  and test.
-*Recommendation:* A.
-
-**Q5 — Labels and wording.**
-*Scenario:* with day 20 you see `20 Dec – 19 Jan` with no year, and prose like
-"over budget this cycle".
-- (i) **Year in the range?** A: never (your example, "20 Oct – 19 Nov"). B: only
-  when the two dates are in different years. *Recommendation:* A. The Mini App
-  only shows current and adjacent cycles, so the year is obvious.
-- (ii) **Prose:** use the word "cycle" ("this cycle", "Last cycle", "This cycle"
-  tab) when the start day isn't 1, and keep "month" for day 1. *Recommendation:*
-  yes. It matches your export wording.
-
-**Q6 — `budget_periods` (B-005).** It's keyed by user and calendar month, and
-no code uses it. *Recommendation:* leave it alone in B-032, and add a note to
-B-005 that any future use must be keyed by space and cycle. *Alternative:* fold
-B-005's decision into this item (more scope, plus a schema decision now).
-
-**Q7 — Monthly digest on the cycle's last day (confirm).** With day 20 it fires
-on the 19th at your digest hour, headed `20 Oct – 19 Nov`, compared with the
-previous cycle. With day 1 it is unchanged. *Recommendation:* as described.
-
-**Q8 — Mini App ACs proven by screenshots only.** No Mini App test harness
-exists yet (B-016). *Options:* A. Accept screenshot checks for the 6 UI ACs
-(all their numbers are tested server-side). B. Do B-016 first, then write
-component tests. *Recommendation:* A. B-016 would delay the item you put first.
+*Recommendation:* **A.** It keeps B-032 focused, risks nothing, and leaves
+B-005 to decide properly once cycles exist. If you choose B or C, the Build
+plan needs a revision and a fresh approval before Part 1 starts.
 
 ---
 
