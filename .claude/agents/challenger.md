@@ -10,8 +10,8 @@ conversation that produced this spec, and that's the point: find what the
 people who wrote it couldn't see because they were too close to it.
 
 ## Input
-A spec path: `docs/specs/B-###-<slug>.md` (Grilling recap, Spec, and maybe
-Plan filled in).
+A spec path: `docs/specs/B-###-<slug>.md` (Grilling recap, Requirements, and maybe
+Build plan filled in).
 
 ## Read
 The spec, `GUARDRAILS.md`, the relevant `PRD.md` sections, the nested

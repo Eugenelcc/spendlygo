@@ -12,7 +12,7 @@ then edit it in its own `docs/` PR (§12).
 ## 1. The pipeline at a glance
 
 ```
- 0 INTAKE ─▶ 1 SPEC ─▶ 2 PLAN ─▶ 3 TEST ─▶ 4 BUILD ─▶ 5 REVIEW ─▶ 6 RELEASE ─▶ 7 CLOSE
+ 0 INTAKE ─▶ 1 REQS ─▶ 2 PLAN ─▶ 3 TEST ─▶ 4 BUILD ─▶ 5 REVIEW ─▶ 6 RELEASE ─▶ 7 CLOSE
   B-###      grill,    grill,   failing    until     agent, then   deploy +     BACKLOG
              then what then how tests      green     owner        smoke test   → Done
              ✋ owner   ✋ owner  first               merges ✋
@@ -20,6 +20,21 @@ then edit it in its own `docs/` PR (§12).
 ```
 
 ✋ marks a human gate. Claude never passes one alone.
+
+### Names used for each task's documents
+
+Every task has **one file**, `docs/specs/B-###-<slug>.md`, called the task's
+*spec file*. It holds both halves, plus the results:
+
+| Section | Answers | Who it's for | Approved by |
+|---|---|---|---|
+| **Requirements** (*what*) | What must the feature do? How will we know it's right? (acceptance criteria, edge cases, out of scope) | The owner | ✋ Owner: "approved" |
+| **Build plan** (*how*) | Which files change, database changes, which test proves each criterion, risks, PR split | The builder agents | ✋ Owner: "approved" |
+| Test report, Build notes, Review | What was actually built and verified | Everyone | — |
+
+An **ADR** (`docs/adr/`) is different. It records *why* a lasting
+architecture decision was made (e.g. Supabase over Render Postgres). It isn't
+written per task.
 
 ### The golden rule: never assume
 
@@ -42,7 +57,7 @@ to Sonnet.
 | Stage | Agent | Model | Writes |
 |---|---|---|---|
 | 1–2 Grilling | main session | (session model; Opus recommended) | The confirmed Grilling recap in the spec |
-| 1–2 Spec + Plan | `spec-planner` | **Opus** | Spec and Plan sections |
+| 1–2 Requirements + Build plan | `spec-planner` | **Opus** | Requirements and Build plan sections |
 | 1–2 Second opinion (risky items) | `challenger` | **Opus** | Second opinion section |
 | 3 Test | `test-writer` | **Sonnet** | Failing tests + Test report |
 | 4 Build | `builder` | **Sonnet** | Code + Test report results + Build notes |
@@ -136,32 +151,32 @@ before approval. Otherwise it's optional, run when the owner asks.
 | ✅ **Success** | The item exists and the work maps to exactly one feature ID |
 | ❌ **Failure** | It conflicts with `GUARDRAILS.md` or PRD scope (e.g. a deferred feature, a paid service) → **stop and ask** (GUARDRAILS §14). Nothing is built. It spans several features → split into several items |
 
-### Stage 1 — Spec (*what*) ✋
+### Stage 1 — Requirements (*what*) ✋
 
 | | |
 |---|---|
 | **Input** | The backlog item, the relevant PRD sections, and the **confirmed Grilling recap** |
 | **Do** | Grill first (above). Then `spec-planner` writes `docs/specs/B-###-<slug>.md` from [`docs/specs/TEMPLATE.md`](./docs/specs/TEMPLATE.md): problem, user stories, **acceptance criteria as Given / When / Then**, edge cases, out of scope. Risky item → `challenger` second opinion. Post a summary in the session, with any challenger findings shown as options with pros and cons |
 | **Output** | A spec file on the task branch |
-| ✅ **Success** | The owner replies **"approved"** in the session. Claude writes `Spec approved by owner, <date>` at the top of the spec |
+| ✅ **Success** | The owner replies **"approved"** in the session. Claude writes `Requirements approved by owner, <date>` at the top of the spec |
 | ❌ **Failure** | Changes requested → revise and re-post. Unclear → ask, don't guess. The scope grew → split it into new backlog items |
 
-### Stage 2 — Plan (*how*) ✋
+### Stage 2 — Build plan (*how*) ✋
 
 | | |
 |---|---|
 | **Input** | The approved spec |
 | **Do** | Grill on the *how* where it involves a real choice (e.g. a new table vs a column, two UI options). Then fill in the spec's **Plan** section: files touched, data and migration (backward-compatible with the running server?), which test proves each acceptance criterion, risks, PR split. Risky item → `challenger` second opinion. Post it |
-| **Output** | A completed Plan section |
-| ✅ **Success** | The owner replies **"approved"**. Claude writes `Plan approved by owner, <date>` |
+| **Output** | A completed Build plan section |
+| ✅ **Success** | The owner replies **"approved"**. Claude writes `Build plan approved by owner, <date>` |
 | ❌ **Failure** | It needs a new service, a paid tier, a destructive migration, or a bulk data change → GUARDRAILS §14, stop and ask. Rejected → revise |
 
 ### Stage 3 — Test, written first (`test-writer`, Sonnet)
 
 | | |
 |---|---|
-| **Input** | The spec with Spec and Plan approved |
-| **Do** | Write the tests the Plan names, **one per acceptance criterion** plus the edge cases, **before** any feature code. Run `pnpm test`; they should fail |
+| **Input** | The spec with Requirements and Build plan approved |
+| **Do** | Write the tests the Build plan names, **one per acceptance criterion** plus the edge cases, **before** any feature code. Run `pnpm test`; they should fail |
 | **Must include** | Dangerous five touched → their fixture tests (`packages/core/CLAUDE.md`). New or changed API route → a test rejecting unauthenticated and cross-user access. New parser behaviour → a golden fixture |
 | **Output** | Committed failing tests. The spec's Test report lists each AC → test → `❌ failing (expected)` |
 | ✅ **Success** | Every acceptance criterion has a test, and each fails for the right reason (the feature is missing) |
