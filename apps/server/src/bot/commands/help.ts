@@ -36,7 +36,7 @@ If you leave the category out, I'll guess it from what you wrote.
 Every entry gets an *Undo* button for five minutes.`;
 
 const HELP_TAIL = `*Digests* — a daily check-in at your chosen hour, plus a Sunday wrap-up and
-an end-of-month summary. Turn them on or off in Settings.
+an end-of-month summary. Turn them on or off with /settings.
 
 *Recurring* — things that happen on their own
 
@@ -74,6 +74,7 @@ of them, personal budget included.
 /export — download your data as CSV
 /recent — your last 10 entries
 /undo — undo the last entry
+/settings — digest time and notifications
 /app — open the app
 /help — this message`;
 
