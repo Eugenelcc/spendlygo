@@ -932,13 +932,13 @@ the plan should say so.**
 | P1-AC21 | `apps/server/src/api/pay-cycle.test.ts` › `GET /api/today › a shared space's members share its cycle; switching spaces switches cycle` | ❌ failing (expected) | ✅ |
 | P1-AC22 | `apps/server/src/api/pay-cycle.test.ts` › `GET /api/today › rejects unauthenticated, and a stranger never gets another space's cycle` | ❌ failing (expected) | ✅ |
 | P1-AC23 | `apps/server/src/api/pay-cycle.test.ts` › `GET /api/me › returns the current cycle` (plus an unauthenticated 401 case that passes today) | ❌ failing (expected) | ✅ |
-| P1-AC24 | `apps/server/src/bot/commands/money.test.ts` › `/today text › names the cycle range for day 20 and is unchanged for day 1` | ❌ failing (expected) (`buildTodayText` missing) | ❌ fails: test expects `S$50.00` but `en-SG`/SGD formats as `$50.00` on Node 22 ICU |
+| P1-AC24 | `apps/server/src/bot/commands/money.test.ts` › `/today text › names the cycle range for day 20 and is unchanged for day 1` | ❌ failing (expected) (`buildTodayText` missing) | ✅ |
 | P1-AC25 | `apps/server/src/bot/capture.test.ts` › `the confirmation card with a pay cycle (F17) › says "this cycle" when over budget with a non-calendar cycle` | ❌ failing (expected) (its day-1 assertions already hold) | ✅ |
 | P1-AC26 | Screenshot check (Q8 A), no automated test | n/a | ⏭ not screenshotted (see Build notes) |
 | P1-AC27 | `apps/server/src/api/pay-cycle.test.ts` › `PATCH /api/settings › an unknown key is a 400 and changes nothing (strict schema)` | ❌ failing (expected) (returns 200 today) | ✅ |
 
 **Checks (Part 1, before build):** test 472 passed, 15 failed (+ `cycle.test.ts` fails to load: `./cycle.js` missing). All 15 failures and the load failure are new Part 1 tests; every pre-existing test passes.
-**Checks (Part 1, after build):** typecheck ✓ lint ✓ test 496 passed / 1 failed (P1-AC24, test-side currency-symbol assumption) / 0 skipped.
+**Checks (Part 1, after build):** typecheck ✓ lint ✓ test all passing, 0 failed / 0 skipped (`pnpm ci:local` passed; P1-AC24 expectation fixed to the app's `$` format).
 **Screenshots:** not taken (see Build notes).
 
 ---

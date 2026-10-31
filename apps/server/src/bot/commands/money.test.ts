@@ -26,11 +26,11 @@ function textFor(startDay: number): string {
 describe('/today text', () => {
   it('names the cycle range for day 20 and is unchanged for day 1', () => {
     const day20 = textFor(20);
-    expect(day20).toContain('20 Oct – 19 Nov: S$50.00 of S$1,500.00');
+    expect(day20).toContain('20 Oct – 19 Nov: $50.00 of $1,500.00');
     expect(day20).not.toContain('This month');
 
     const day1 = textFor(1);
-    expect(day1).toContain('This month: S$50.00 of S$1,500.00');
+    expect(day1).toContain('This month: $50.00 of $1,500.00');
     expect(day1).not.toContain('20 Oct');
   });
 });
