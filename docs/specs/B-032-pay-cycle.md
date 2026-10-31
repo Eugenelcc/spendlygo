@@ -642,6 +642,8 @@ unauthenticated test and a cross-user test.
 | P1-AC22 | `pay-cycle.test.ts` › `GET /api/today › rejects unauthenticated, and a stranger never gets another space's cycle` |
 | P1-AC23 | `pay-cycle.test.ts` › `GET /api/me › returns the current cycle` |
 | P1-AC24 | `apps/server/src/bot/commands/money.test.ts` › `/today names the cycle range for day 20 and is unchanged for day 1` |
+
+P1-AC24 tightened after review finding 2: `money.test.ts` now asserts exact day-1 strings for `/today` with and without a budget and for `/budget 1500` ("left this month"), taken from `main`; the `as any` cast is gone. All pass (regression guards). Full suite: 35 files, 501 tests passed.
 | P1-AC25 | `apps/server/src/bot/capture.test.ts` › `says "this cycle" when over budget with a non-calendar cycle` |
 | P1-AC26 | Screenshot check (no Mini App test harness until B-016, Q8 A): Today, day 20 and day 1, light + dark, 375px |
 | P1-AC27 | `pay-cycle.test.ts` › `PATCH /api/settings › an unknown key is a 400 and changes nothing (strict schema)` |
