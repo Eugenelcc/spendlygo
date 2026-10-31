@@ -36,7 +36,8 @@ suppress repeats. The cost, accepted by the owner: after the start day moves
 earlier (or later before the new day arrives) the new cycle can share a key
 with the old one, so one threshold may be skipped once. It can never be sent
 twice for the same key. A per-cycle table would fix it exactly but needs a
-migration; revisit if the skip is ever reported.
+migration; revisit if the skip is ever reported. Alerts are keyed by user, not space
+(PRD F13.3).
 
 ## History reuses `/api/stats` (Part 2)
 

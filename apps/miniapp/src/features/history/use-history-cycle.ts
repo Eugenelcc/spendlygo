@@ -14,6 +14,7 @@ export interface HistoryCycle {
   nextAnchor: string | undefined;
   isPending: boolean;
   isError: boolean;
+  retry: () => void;
 }
 
 /**
@@ -47,5 +48,6 @@ export function useHistoryCycle(options: {
     nextAnchor: data ? addDays(data.to, 1) : undefined,
     isPending: query.isPending,
     isError: query.isError,
+    retry: () => void query.refetch(),
   };
 }

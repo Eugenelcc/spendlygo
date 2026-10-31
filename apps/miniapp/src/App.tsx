@@ -131,8 +131,9 @@ function Shell(): JSX.Element {
   const todayIso = today.data?.today;
   const cycleStartDay = today.data?.cycle?.startDay ?? me.data?.cycle?.startDay ?? 1;
   const [historyCycleAnchor, setHistoryCycleAnchor] = useState<string | undefined>(undefined);
+  const isCycleChip = historyPeriod === 'month' && cycleStartDay !== 1;
   const historyCycle = useHistoryCycle({
-    enabled: tab === 'history' && historyPeriod === 'month' && cycleStartDay !== 1,
+    enabled: tab === 'history' && isCycleChip,
     anchor: historyCycleAnchor,
     today: todayIso,
   });
@@ -182,8 +183,11 @@ function Shell(): JSX.Element {
     // narrows it server-side instead of filtering a fixed window client-side.
     queryKey: ['transactions', historyRange.from ?? null, historyRange.to ?? null],
     queryFn: () => api.transactions({ ...historyRange, limit: 200 }),
-    enabled: tab === 'history',
+    // The Cycle chip never lists until its bounds are known (P2-AC22): no range
+    // would mean the cached "All" list.
+    enabled: tab === 'history' && (!isCycleChip || historyRange.from !== undefined),
   });
+  const cycleWaiting = isCycleChip && historyRange.from === undefined;
 
   const [sparklineDay, setSparklineDay] = useState<string | null>(null);
   const dayTransactions = useQuery({
@@ -479,8 +483,10 @@ function Shell(): JSX.Element {
 
         {tab === 'history' && (
           <HistoryScreen
-            transactions={history.data?.transactions ?? []}
-            loading={history.isPending}
+            transactions={cycleWaiting ? [] : (history.data?.transactions ?? [])}
+            loading={cycleWaiting ? !historyCycle.isError : history.isPending}
+            loadError={cycleWaiting && historyCycle.isError}
+            onRetry={historyCycle.retry}
             currency={currency}
             locale={locale}
             today={today.data.today}

@@ -17,6 +17,9 @@ const PERIODS: Array<{ value: HistoryPeriod; label: string }> = [
 export interface HistoryScreenProps {
   transactions: Transaction[];
   loading: boolean;
+  /** The Cycle chip's bounds failed to load: show an error, never the unfiltered list. */
+  loadError?: boolean;
+  onRetry?: () => void;
   currency: string;
   locale: string;
   today: string;
@@ -49,6 +52,8 @@ interface CategoryOption {
 export function HistoryScreen({
   transactions,
   loading,
+  loadError = false,
+  onRetry,
   currency,
   locale,
   today,
@@ -267,6 +272,16 @@ export function HistoryScreen({
           <div className="skeleton" />
           <div className="skeleton" />
           <div className="skeleton skeleton--short" />
+        </div>
+      ) : loadError ? (
+        <div className="empty empty--inline">
+          <div className="empty__emoji">⚠️</div>
+          <p className="empty__body">Couldn't load this cycle.</p>
+          {onRetry && (
+            <button type="button" className="chip" onClick={onRetry}>
+              Try again
+            </button>
+          )}
         </div>
       ) : customIncomplete ? (
         <div className="empty empty--inline">
