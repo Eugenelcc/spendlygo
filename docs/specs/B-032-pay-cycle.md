@@ -686,6 +686,7 @@ unauthenticated test and a cross-user test.
 | P3-AC15 | `export.test.ts` (bot) › `/export cycle sends one file named by dates with a range caption` |
 | P3-AC16 | `pay-cycle.test.ts` › `GET /api/me › also returns the previous cycle` |
 | P3-AC17 | Screenshot check: the export sheet, day 20 and day 1 |
+| P3-AC17a (defect) | `apps/server/src/app.test.ts` › `CORS › exposes Content-Disposition so the Mini App can read the export file name` — ❌ failing (expected) |
 | P4-AC1 | `pay-cycle.test.ts` › `PATCH /api/settings › owner's example: setting day 20 on 31 Oct moves Today to 20 Oct – 19 Nov` |
 | P4-AC2 | `pay-cycle.test.ts` › `PATCH /api/settings › rejects 0, 32, 1.5 and "20" without changing anything` |
 | P4-AC3 | `pay-cycle.test.ts` › `PATCH /api/settings › either member of a shared space can change it` |
