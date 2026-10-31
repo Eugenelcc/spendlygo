@@ -205,8 +205,8 @@ The full process is in [`WORKFLOW.md`](./WORKFLOW.md). In short:
    scenario and options with pros and cons (WORKFLOW §1).
 3. **Every task is a `BACKLOG.md` item.** Unless it's a small fix (WORKFLOW
    §1), grill the owner first, then write a spec, then a plan, in
-   `docs/specs/`. Each needs the owner's "approved" before moving on. After 2 failed attempts at anything, stop and
-   escalate.
+   `docs/specs/`. Each needs the owner's "approved" before moving on.
+   After 2 failed attempts at anything, stop and escalate.
 4. **Cite the backlog and feature IDs** in the branch, commits and PR body.
    One feature ID per PR.
 5. **Test the dangerous five**: money maths, the text parser, safe-to-spend,
