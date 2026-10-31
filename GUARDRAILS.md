@@ -217,9 +217,14 @@ Legend: 🔴 **NEVER** — violating this is a defect, no exceptions.
 ## 11. Scope discipline
 
 - 🔴 **NEVER** implement a feature listed as deferred in [`PRD.md`](./PRD.md)
-  §5.2 (OCR, voice, multi-currency, households, bank import) without an
-  explicit decision to promote it. "While I was in there" is how free projects
-  become paid ones.
+  §5.2 without an explicit decision to promote it. **PRD §5.2 is the single
+  source of truth** for what's deferred. As of 2026-10-31 that's voice
+  capture, multi-currency + FX, bank/card import, and debt & investment
+  tracking. (Receipt OCR and households/shared spaces were promoted by
+  decision: ADR 0005 and ADR 0006.) "While I was in there" is how free
+  projects become paid ones.
+- 🟢 **ALWAYS** park side ideas in [`BACKLOG.md`](./BACKLOG.md) → Later
+  instead of building them in the current task ([`WORKFLOW.md`](./WORKFLOW.md) §2, Stage 3).
 - 🟡 **ASK FIRST** when a request appears to conflict with the PRD, the
   zero-cost rule, or a guardrail. Surface the conflict; don't silently pick.
 - 🟢 **ALWAYS** finish the phase in progress before starting the next
@@ -234,10 +239,14 @@ Legend: 🔴 **NEVER** — violating this is a defect, no exceptions.
   data fixtures.
 - 🔴 **NEVER** force-push a shared branch or rewrite pushed history.
 - 🔴 **NEVER** merge with a failing CI check.
+- 🔴 **NEVER** commit directly to `main`, and never merge a PR as Claude. The
+  owner merges.
 - 🟡 **ASK FIRST** before opening a pull request — PRs are opened on request,
   not automatically.
-- 🟢 **ALWAYS** develop on `claude/telegram-expense-tracker-06gr8u` and push
-  there with `git push -u origin <branch>`.
+- 🟢 **ALWAYS** work on one branch per task, cut from the latest `main` and
+  named `<type>/<backlog-id>-<slug>` (or the branch a cloud session is
+  assigned). Push with `git push -u origin <branch>`. Full process:
+  [`WORKFLOW.md`](./WORKFLOW.md).
 - 🟢 **ALWAYS** write commits that state *why*, referencing the PRD feature ID
   (`feat(parser): F1 amount grammar with k-suffix support`).
 - 🟢 **ALWAYS** keep `main` deployable.

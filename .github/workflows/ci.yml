@@ -12,7 +12,8 @@ concurrency:
 jobs:
   check:
     name: typecheck · lint · test · build
-    runs-on: ubuntu-latest
+    # Pinned: ubuntu-latest moves to Ubuntu 26 from 2026-10-19. Bump deliberately.
+    runs-on: ubuntu-24.04
 
     # The integration tests run against a real Postgres. An in-memory fake
     # would not exercise the constraints that make the schema safe — the
@@ -50,27 +51,8 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      - name: Validate the Render blueprint
-        run: node scripts/check-render-blueprint.mjs
-
-      - name: Typecheck
-        run: pnpm typecheck
-
-      - name: Lint
-        run: pnpm lint
-
-      - name: Apply migrations
-        run: pnpm db:migrate
-
-      - name: Seed default categories
-        run: pnpm db:seed
-
-      - name: Test
-        run: pnpm test
-
-      - name: Build
-        run: pnpm build
-
-      - name: Enforce Mini App bundle budget
-        # GUARDRAILS.md section 8: initial JS must stay under 200 KB gzipped.
-        run: node scripts/check-bundle-size.mjs
+      # The same script developers run before every push (WORKFLOW.md), so
+      # local and CI checks can't drift: blueprint, typecheck, lint, migrate,
+      # seed, test, build, and the GUARDRAILS.md section 8 bundle budget.
+      - name: Run the CI pipeline
+        run: pnpm ci:local
