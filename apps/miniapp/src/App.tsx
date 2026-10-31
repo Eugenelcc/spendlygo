@@ -539,7 +539,7 @@ function Shell(): JSX.Element {
             onContributeGoal={(id, amountCents) => contributeGoal.mutate({ id, amountCents })}
             onArchiveGoal={(id) => archiveGoal.mutate(id)}
             exportBusy={exportCsv.isPending}
-            onExportCsv={() => exportCsv.mutate()}
+            onExportCsv={(range) => exportCsv.mutate(range)}
           />
         )}
       </main>

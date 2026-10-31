@@ -314,11 +314,21 @@ sequence, `Σ safeToSpend` over the month never exceeds `budget`.
 
 ### F8 — CSV export
 
-- **F8.1** `/export` in chat, or a button in Mini App settings.
+- **F8.1** `/export` in chat, or **Export CSV** in Mini App settings, which opens a
+  picker: Everything (default) · This cycle · Last cycle · Pick a month (calendar) ·
+  Custom dates. With start day 1 the cycle options read "This month" / "Last month".
 - **F8.2** Generated in-process and sent as a Telegram document. Never written to
   disk (there is no persistent disk).
 - **F8.3** Columns: `date, direction, amount_sgd, category, note, source, has_photo, created_at`.
-- **F8.4** Optional range argument: `/export 2026` or `/export 2026-08`.
+- **F8.4** Optional range argument. `/export` with nothing typed is **everything**.
+  `/export cycle` and `/export last cycle` (also `last-cycle`, any case) are the
+  current and previous pay cycle (F17). `/export 2026`, `/export 2026-08` and
+  `/export 2026-08-05` are always **calendar** ranges, whatever the start day.
+  `from..to` (`2026-10-05..2026-10-24`) is a custom range, offered by the Mini App
+  only. Every bounded export is named `spendlygo_<from>_to_<to>.csv` (full ISO
+  dates); everything stays `spendlygo-all-time.csv`. Labels carry both years when
+  a range spans New Year (`20 Dec 2026 – 19 Jan 2027`); start day 1 uses month
+  names ("October 2026").
 - **F8.5** Amounts render as decimal SGD in the CSV, even though they're stored
   as cents.
 - **F8.6** A large range must not blow the 512 MB runtime budget. In practice: one
@@ -510,7 +520,7 @@ it, so safe-to-spend resets when the salary lands. B-032; ADR 0007.
 | `/budget [amount]` | Show or set the active space's monthly budget |
 | `/recent` | Last 10 transactions with edit buttons |
 | `/undo` | Undo the most recent transaction |
-| `/export [range]` | CSV export |
+| `/export [cycle \| last cycle \| YYYY \| YYYY-MM \| YYYY-MM-DD]` | CSV export (nothing typed = everything) |
 | `/recurring` | List and manage rules |
 | `/household [invite\|leave]` | Show, share, or stop sharing the active space |
 | `/join CODE` | Join a shared space and switch into it |

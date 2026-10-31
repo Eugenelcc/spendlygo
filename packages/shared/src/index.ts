@@ -151,6 +151,8 @@ export const meResponseSchema = z.object({
    * Mini App survives the old server during a deploy; the server always sends it.
    */
   cycle: cycleSchema.optional(),
+  /** The cycle before `cycle`, for the export picker's captions (same deploy note). */
+  previousCycle: cycleSchema.optional(),
 });
 export type MeResponse = z.infer<typeof meResponseSchema>;
 

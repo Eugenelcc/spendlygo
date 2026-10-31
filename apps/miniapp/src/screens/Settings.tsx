@@ -7,6 +7,7 @@ import type {
   RecurringRule,
   SavingsGoal,
 } from '@spendlygo/shared';
+import { ExportSheet } from '../features/settings/ExportSheet';
 import { GoalsSection } from '../components/GoalsSection';
 import { HouseholdSection } from '../components/HouseholdSection';
 import { RecurringForm } from '../components/RecurringForm';
@@ -49,7 +50,7 @@ export interface SettingsScreenProps {
   onContributeGoal: (id: string, amountCents: number) => void;
   onArchiveGoal: (id: string) => void;
   exportBusy: boolean;
-  onExportCsv: () => void;
+  onExportCsv: (range?: string) => void;
 }
 
 const CADENCE_LABEL: Record<Cadence, string> = {
@@ -93,6 +94,7 @@ export function SettingsScreen({
     user.monthlyBudgetCents === null ? '' : String(user.monthlyBudgetCents / 100),
   );
   const [addingRecurring, setAddingRecurring] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
 
   const daysThisMonth = daysInMonth(today);
   const parsed = Number(draft.replace(/,/g, ''));
@@ -392,11 +394,19 @@ export function SettingsScreen({
           disabled={exportBusy}
           onClick={() => {
             haptics.select();
-            onExportCsv();
+            setExportOpen(true);
           }}
         >
           {exportBusy ? 'Preparing…' : 'Export CSV'}
         </button>
+        <ExportSheet
+          open={exportOpen}
+          onClose={() => setExportOpen(false)}
+          me={me}
+          today={today}
+          busy={exportBusy}
+          onExport={onExportCsv}
+        />
       </section>
 
       <p className="footnote">Your data is yours — export everything as a CSV, any time.</p>

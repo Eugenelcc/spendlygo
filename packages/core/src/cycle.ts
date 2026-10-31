@@ -88,6 +88,17 @@ export function formatCycleRange(range: DateRange): string {
 }
 
 /**
+ * Export label (F8): as `formatCycleRange`, but a range whose two dates fall
+ * in different years carries both: "20 Dec 2026 – 19 Jan 2027".
+ */
+export function formatDateRangeWithYears(range: DateRange): string {
+  const start = parseIsoDate(range.start);
+  const end = parseIsoDate(range.end);
+  if (start.year === end.year) return formatCycleRange(range);
+  return `${shortDate(range.start)} ${start.year} – ${shortDate(range.end)} ${end.year}`;
+}
+
+/**
  * The alert key of a cycle (PRD F13, Q2 A): the calendar year and month the
  * cycle ENDS in. For start day 1 that is the calendar month itself, so rows
  * written before F17 still match. For a fixed start day every cycle ends in a

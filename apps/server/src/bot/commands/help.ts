@@ -61,7 +61,7 @@ of them, personal budget included.
 
 *Export* — your data, as a CSV file
 
-\`/export\` for everything, \`/export 2026\` or \`/export 2026-08\` for a range.
+\`/export\` for everything, \`/export cycle\` or \`/export last cycle\` for a pay cycle, \`/export 2026\` or \`/export 2026-08\` for a calendar range.
 
 *Commands*
 /today — what's safe to spend today

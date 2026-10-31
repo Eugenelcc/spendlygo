@@ -962,28 +962,30 @@ the plan should say so.**
 | P2-AC22 | Screenshot check (Q8 A), no automated test: History Cycle chip and arrows, day 20 and day 1 | n/a | ✅ real-stack screenshots 2026-11-01: day 20 "Cycle" chip, `20 Oct – 19 Nov`, Next disabled on the current cycle, Previous → `20 Sep – 19 Oct` (18 Oct shoes, 7 Oct grab); day 1 "Month" + "November 2026" picker unchanged |
 | P2-AC23 | Screenshot check (Q8 A), no automated test: Stats month tab and recap card, day 20 and day 1 | n/a | ✅ real-stack screenshots 2026-11-01: Stats month heading `20 Oct – 19 Nov`, $138.50 vs $173.00 → "20% less", bars 20…19; recap tab "This cycle" (day 20) / "This month" (day 1) |
 | (helper) | `packages/core/src/cycle.test.ts` › `cycleAlertKey (B-032 Part 2, Q2 A)` (2 tests: month the cycle ends in; 36 distinct keys per start day) | ❌ failing (expected) (`cycleAlertKey` missing) |  ✅ |
-| P3-AC1 | `apps/server/src/api/export-range.test.ts` › `parseExportRange › no argument is still everything, named spendlygo-all-time.csv` | ❌ failing (expected) (no `filename` yet) | |
-| P3-AC2 | `apps/server/src/api/export-range.test.ts` › `"cycle" is this cycle, named with exact dates` | ❌ failing (expected) | |
-| P3-AC3 | `apps/server/src/api/export-range.test.ts` › `"last cycle" in any spacing or case is the previous cycle` | ❌ failing (expected) | |
-| P3-AC4 | `apps/server/src/api/export-range.test.ts` › `day 1: this and last cycle are labelled with month names` | ❌ failing (expected) | |
-| P3-AC5 | `apps/server/src/api/export-range.test.ts` › `YYYY-MM is always the calendar month, whatever the start day` | ❌ failing (expected) (no `filename`) | |
-| P3-AC6 | `apps/server/src/api/export-range.test.ts` › `YYYY is the calendar year and YYYY-MM-DD a single day, named with exact dates` | ❌ failing (expected) | |
-| P3-AC7 | `apps/server/src/api/export-range.test.ts` › `a custom from..to range is inclusive; reversed or malformed is null` | ❌ failing (expected) | |
-| P3-AC8 | `apps/server/src/api/export-range.test.ts` › `ranges spanning New Year carry both years in the label` | ❌ failing (expected) | |
-| P3-AC9 | `apps/server/src/api/export.test.ts` › `GET /api/export with pay cycles (F17) › no range still exports everything, whatever the start day` | ✅ passes before build (regression guard) | |
-| P3-AC10 | `apps/server/src/api/export.test.ts` › `GET /api/export with pay cycles (F17) › cycle and last-cycle follow the start day and name the file by dates` | ❌ failing (expected) (400) | |
-| P3-AC11 | `apps/server/src/api/export.test.ts` › `GET /api/export with pay cycles (F17) › a custom from..to range is inclusive; reversed is a 400` | ❌ failing (expected) (400 on valid range) | |
-| P3-AC12 | existing `rejects an unauthenticated request` and `never includes another user's transactions` (unchanged, pass), plus `apps/server/src/api/export.test.ts` › `GET /api/export with pay cycles (F17) › range=cycle never includes another user's transactions` | ❌ failing (expected) | |
-| P3-AC13 | `apps/server/src/bot/commands/export.test.ts` › `exportUsageText › the usage hint lists everything, cycle, last cycle, year and month` (plus DB: `an unknown argument replies with the usage hint for the space cycle`) | ❌ failing (expected) (`exportUsageText` missing) | |
-| P3-AC14 | `apps/server/src/bot/commands/export.test.ts` › `/export (DB) › an empty last cycle says nothing was logged for its range` | ❌ failing (expected) | |
-| P3-AC15 | `apps/server/src/bot/commands/export.test.ts` › `/export (DB) › /export cycle sends one file named by dates with a range caption` | ❌ failing (expected) | |
-| P3-AC16 | `apps/server/src/api/pay-cycle.test.ts` › `GET /api/me › also returns the previous cycle` | ❌ failing (expected) | |
-| P3-AC17 | Screenshot check (Q8 A), no automated test: the export sheet, day 20 and day 1 | n/a | |
-| (helper) | `packages/core/src/cycle.test.ts` › `formatDateRangeWithYears (B-032 Part 3)` | ❌ failing (expected) (export missing) | |
-| (guard) | `apps/server/src/bot/commands/export.test.ts` › `/export (DB) › /export with no argument still sends everything, as today` | ✅ passes before build (regression guard) | |
-| (guard) | `export-range.test.ts` › `anything else is null` | ✅ passes before build (regression guard) | |
+| P3-AC1 | `apps/server/src/api/export-range.test.ts` › `parseExportRange › no argument is still everything, named spendlygo-all-time.csv` | ❌ failing (expected) (no `filename` yet) |  ✅ |
+| P3-AC2 | `apps/server/src/api/export-range.test.ts` › `"cycle" is this cycle, named with exact dates` | ❌ failing (expected) |  ✅ |
+| P3-AC3 | `apps/server/src/api/export-range.test.ts` › `"last cycle" in any spacing or case is the previous cycle` | ❌ failing (expected) |  ✅ |
+| P3-AC4 | `apps/server/src/api/export-range.test.ts` › `day 1: this and last cycle are labelled with month names` | ❌ failing (expected) |  ✅ |
+| P3-AC5 | `apps/server/src/api/export-range.test.ts` › `YYYY-MM is always the calendar month, whatever the start day` | ❌ failing (expected) (no `filename`) |  ✅ |
+| P3-AC6 | `apps/server/src/api/export-range.test.ts` › `YYYY is the calendar year and YYYY-MM-DD a single day, named with exact dates` | ❌ failing (expected) |  ✅ |
+| P3-AC7 | `apps/server/src/api/export-range.test.ts` › `a custom from..to range is inclusive; reversed or malformed is null` | ❌ failing (expected) |  ✅ |
+| P3-AC8 | `apps/server/src/api/export-range.test.ts` › `ranges spanning New Year carry both years in the label` | ❌ failing (expected) |  ✅ |
+| P3-AC9 | `apps/server/src/api/export.test.ts` › `GET /api/export with pay cycles (F17) › no range still exports everything, whatever the start day` | ✅ passes before build (regression guard) |  ✅ |
+| P3-AC10 | `apps/server/src/api/export.test.ts` › `GET /api/export with pay cycles (F17) › cycle and last-cycle follow the start day and name the file by dates` | ❌ failing (expected) (400) |  ✅ |
+| P3-AC11 | `apps/server/src/api/export.test.ts` › `GET /api/export with pay cycles (F17) › a custom from..to range is inclusive; reversed is a 400` | ❌ failing (expected) (400 on valid range) |  ✅ |
+| P3-AC12 | existing `rejects an unauthenticated request` and `never includes another user's transactions` (unchanged, pass), plus `apps/server/src/api/export.test.ts` › `GET /api/export with pay cycles (F17) › range=cycle never includes another user's transactions` | ❌ failing (expected) |  ✅ |
+| P3-AC13 | `apps/server/src/bot/commands/export.test.ts` › `exportUsageText › the usage hint lists everything, cycle, last cycle, year and month` (plus DB: `an unknown argument replies with the usage hint for the space cycle`) | ❌ failing (expected) (`exportUsageText` missing) |  ✅ |
+| P3-AC14 | `apps/server/src/bot/commands/export.test.ts` › `/export (DB) › an empty last cycle says nothing was logged for its range` | ❌ failing (expected) |  ✅ |
+| P3-AC15 | `apps/server/src/bot/commands/export.test.ts` › `/export (DB) › /export cycle sends one file named by dates with a range caption` | ❌ failing (expected) |  ✅ |
+| P3-AC16 | `apps/server/src/api/pay-cycle.test.ts` › `GET /api/me › also returns the previous cycle` | ❌ failing (expected) |  ✅ |
+| P3-AC17 | Screenshot check (Q8 A), no automated test: the export sheet, day 20 and day 1 | n/a |  ⏳ screenshot pending (main session) |
+| (helper) | `packages/core/src/cycle.test.ts` › `formatDateRangeWithYears (B-032 Part 3)` | ❌ failing (expected) (export missing) |  ✅ |
+| (guard) | `apps/server/src/bot/commands/export.test.ts` › `/export (DB) › /export with no argument still sends everything, as today` | ✅ passes before build (regression guard) |  ✅ |
+| (guard) | `export-range.test.ts` › `anything else is null` | ✅ passes before build (regression guard) |  ✅ |
 
 **Checks (Part 3, before build):** 544 tests: 527 passed, 17 failed (14 `parseExportRange`/bot/API/`/me` plus the core helper; all fail for the missing feature). The 3 passing new tests are the guards marked above. No existing test asserts the old `spendlygo-2026-10.csv` name, so none conflicts with the owner's file-name decision.
+
+**Checks (Part 3, after build):** typecheck ✗ (see Build notes: a type error in the committed `export.test.ts`, not in the build) lint ✓ test 544 passed / 0 failed.
 
 **Checks (Part 2, after build):** typecheck ✓ lint ✓ test 524 passed / 0 failed (`pnpm ci:local` passed, 524 tests).
 
@@ -1011,6 +1013,8 @@ the plan should say so.**
 - **Part 2 parked:** none.
 - **Part 2 re-review fixes (R1, R2):** History's "Try again" now uses `primary primary--inline` (same as `App.tsx`, no `--text-subtle` on `--bg-secondary`); `CycleStepper` ‹ is `disabled={loading || label === undefined}`. No test edits (no Mini App harness until B-016).
 - **Part 2 review fix (finding 1, 3):** History's Cycle chip no longer fetches or lists until the cycle bounds are known (`enabled` gated on `historyRange.from`; `App.tsx` passes `[]` + loading while waiting, so the cached All list never shows); if `/api/stats` fails, `HistoryScreen` shows "Couldn't load this cycle." with a Try again button (new optional `loadError`/`onRetry` props, `retry` from `useHistoryCycle`). Day 1 unchanged. Finding 3: "alerts keyed by user, not space" added to `apps/server/CLAUDE.md` and ADR 0007. Screenshots pending (main session).
+- **Part 3 build:** Deviations: none from the plan. **Blocker, not edited:** `apps/server/src/bot/commands/export.test.ts` line ~109 calls `transactionsRepo.create` without `categoryId` and `note`, which `CreateTransactionInput` requires, so `tsc --noEmit` fails (TS2345) and `pnpm ci:local` stops at typecheck. Vitest passes (544). The fix is type-only: add `categoryId: null, note: null` to the `log()` helper. ADR 0007 had no Part 3 item, so unchanged. Docs: PRD F8.1/F8.4/§8, `/help` line.
+- **Part 3 screenshots to take (P3-AC17), start day 20 and 1, light + dark, 375px:** Settings > Export CSV opens the sheet with Everything preselected; day 20: "This cycle 20 Oct – 19 Nov" and "Last cycle 20 Sep – 19 Oct"; day 1: "This month October" / "Last month September"; Pick a month shows a month input defaulting to this calendar month; Custom dates shows two date inputs and Download is disabled until both are set and from <= to; Download saves a file with the server's name (`spendlygo_2026-10-20_to_2026-11-19.csv`; Everything gives `spendlygo-all-time.csv`); the footnote under the button is unchanged.
 - **Parked ideas:** none
 - **Follow-up (review finding 1, perf):** the active space is loaded once per request and passed through (`computeSafeToSpend` takes optional `settings`); independent queries run in `Promise.all`. Sequential DB stages after auth: `/api/today` 3 to 2 (settings runs alongside list/recent/streak, then all totals in parallel; 1 is impossible while the cycle start depends on the space row), text and photo-OCR captures 2 to 1 (settings runs alongside the category lookup or the insert), `/api/me` reads the space 3 times to 2 (both reads in one parallel stage; `loadHouseholdView` reads it too). Behaviour identical; `ci:local` green, 501 tests. The now-unused `currentCycle` was removed in the re-review tidy-up.
 - **Part 2 review fix (findings 2, 4):** one space read per request/digest; one `cycleLabel` helper in `service.ts` used by `/stats` and the recap (digest heading and `toApiCycle` keep their own month-name-only labels, a different rule). Sequential DB stages, before to after: `/api/stats` month 4 to 3 (space, then totals/categories/previous/series in parallel; was space, 3 parallel, series), day 3 to 1, year 3 to 1 (no space read); `/recap` 3 to 2 (space reads 2 to 1); monthly digest on its day 4 to 2 (space reads 3 to 1). Tests: 524 passed.

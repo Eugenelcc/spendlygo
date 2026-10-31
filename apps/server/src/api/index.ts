@@ -60,7 +60,7 @@ import type { SpendlygoBot } from '../bot/index.js';
 import type { AppContext } from '../context.js';
 import { requireInitData, type ApiEnv } from '../middleware/auth.js';
 import { resolveFileUrl } from '../telegram/photos.js';
-import { buildExportCsv, exportFilename, parseExportRange } from './export.js';
+import { buildExportCsv, parseExportRange } from './export.js';
 import { buildRecap } from './recap.js';
 import {
   activeHouseholdId,
@@ -155,6 +155,7 @@ export function createApiRouter(ctx: AppContext, bot: SpendlygoBot): Hono<ApiEnv
       // device clock — it is resolved here, in the user's timezone.
       today: isoDateOf(ctx.clock.now(), user.timezone),
       cycle: toApiCycle(cycle),
+      previousCycle: toApiCycle(previousCycle(cycle)),
     };
     return c.json(body);
   });
@@ -456,13 +457,21 @@ export function createApiRouter(ctx: AppContext, bot: SpendlygoBot): Hono<ApiEnv
 
   api.get('/export', async (c) => {
     const user = c.get('user');
-    const range = parseExportRange(c.req.query('range') ?? '');
-    if (!range) throw new ValidationError('range must be YYYY, YYYY-MM, YYYY-MM-DD, or omitted');
+    const { cycleStartDay } = await activeSpaceSettings(ctx, user);
+    const range = parseExportRange(c.req.query('range') ?? '', {
+      today: todayFor(ctx, user),
+      cycleStartDay,
+    });
+    if (!range) {
+      throw new ValidationError(
+        'range must be cycle, last-cycle, YYYY, YYYY-MM, YYYY-MM-DD, YYYY-MM-DD..YYYY-MM-DD, or omitted',
+      );
+    }
 
     const csv = await buildExportCsv(ctx, user, range);
     return c.body(csv, 200, {
       'Content-Type': 'text/csv; charset=utf-8',
-      'Content-Disposition': `attachment; filename="${exportFilename(range)}"`,
+      'Content-Disposition': `attachment; filename="${range.filename}"`,
     });
   });
 
