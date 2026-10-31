@@ -126,8 +126,11 @@ any of them: the app works the same at every step.
 **B-026.** In `bot/capture.ts`, `handleUndo` reads the transaction
 (`transactionsRepo.findById`) outside any error handling. If that read throws,
 `answerCallbackQuery` is never called and the Telegram client spins forever.
-Found while planning B-004. *Accept:* every path, including a DB failure,
-answers the callback; there's a test with a throwing DB.
+Found while planning B-004. The same applies to the hour-picker button's
+answer in `bot/commands/settings.ts` (~line 116; found in the B-004
+re-review). It saves nothing, so the risk is low. *Accept:* every path,
+including a DB or Telegram failure, answers the callback; there's a test with a
+throwing DB.
 
 **Ordering note:** these sit in Next, after B-005 to B-012. Reorder if you'd
 rather restructure before building new Mini App features: new UI work goes
