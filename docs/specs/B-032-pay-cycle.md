@@ -1315,3 +1315,51 @@ third copy. `alerts.ts:104` and `money.ts:66` have their own Part 1 formats.
 - [x] `pnpm ci:local` passed
 
 **Owner decision on R1 (2026-11-01):** after the fix (cb993e0), the main session measured "Try again" on the real stack: white on Telegram's button colour = **4.13:1 (light) / 3.72:1 (dark)** with Telegram-default-like theme values, still below DESIGN §10's 4.5:1. Every primary button in the app inherits the same Telegram `button_color`, so this is app-wide, not specific to Part 2. **The owner accepted it for Part 2**, and the app-wide fix is logged under BACKLOG B-010 (polish audit). R2 is verified: ‹ is disabled in the error state. With that waiver, Part 2 is **ready for owner**.
+
+### Review — Part 3 (export)
+
+*Reviewed 2026-10-31 by `reviewer` (Opus) against `git diff 3db44b2..HEAD`
+(2b29616 tests, 774ae5a build, 1c660a4 test type fix, a97faa9 + fa11ffe CORS,
+b52837d Sheet portal, spec commits). `TEST_DATABASE_URL=… pnpm ci:local`:
+**passed** (38 files, 545 tests, build, bundle 87.2 KB gzipped, 44% of budget).*
+
+**Verdict: ready for owner.** No blocking findings. 1 and 2 are small UX gaps
+that could be parked in B-010. 3 is spec tidy-up.
+
+| # | Severity | Where | What / why | Failure scenario |
+|---|---|---|---|---|
+| 1 | Low (UX, partly pre-existing) | `apps/miniapp/src/App.tsx:384-391`, `features/settings/ExportSheet.tsx:140-143` | A failed export only buzzes (`haptics.error()`). There's no toast or message, and the sheet has already closed on Download. The spec's deploy edge case expects the user to see "Export is not available" when an old server returns 400 for `range=cycle`. `ApiRequestError` carries that text, but nothing shows it | During a deploy, or on a cold start that times out, the user taps Download, feels a buzz and gets no file and no explanation. Fix: `onError` → `showToast("Couldn't export. Try again.")` |
+| 2 | Low | `ExportSheet.tsx:101-108` | `<input type="month">` isn't supported in WKWebView (Telegram for macOS) or desktop Firefox, so it falls back to free text and ignores `max`. The client only checks that the value isn't empty | On Telegram for macOS someone types "Oct 2026" → server 400 → silent (see 1). The default value (this month) is valid, so the untouched path works. Optional: check `/^\d{4}-\d{2}$/` before enabling Download |
+| 3 | Nit (docs) | `docs/specs/B-032-pay-cycle.md` Build notes / Tests | (a) The "**Blocker, not edited:** … `tsc --noEmit` fails" bullet is stale. 1c660a4 fixed it (`categoryId: null, note: null` are in the helper) and ci:local is green. (b) The P3-AC17a row in the plan's Tests table still says "❌ failing (expected)", and it has no row in the results table. (c) The "Part 3 fix (sheet overlay)" and "Part 3 real-stack verification" bullets sit after the `---`, outside Build notes. There are also two separate "Part 3 build:" bullets | A later reader thinks CI was red at merge, or misses the two defect fixes |
+| 4 | Info | `apps/server/src/app.ts:52-61`, `app.test.ts` CORS | `exposeHeaders` adds only `Access-Control-Expose-Headers: Content-Disposition`. `origin` is still the single string `config.miniappUrl` (Hono echoes that fixed value, never the request's Origin). Methods, allow-headers and maxAge are unchanged, so nothing is loosened. There's no test that a foreign Origin isn't echoed, but this diff doesn't touch that | — |
+| 5 | Info | `apps/server/src/api/export.ts` custom branch | The bot also accepts `/export 2026-10-05..2026-10-24` (it shares the parser), though PRD F8.4 says custom ranges are "offered by the Mini App only". It isn't in the usage hint. Harmless: validated, bounded, user-scoped | — |
+| 6 | Info | Plan § PR split | The plan named the Part 3 branch `feat/B-032-pay-cycle-export`. The work is on `feat/B-032-pay-cycle`. Owner's call when opening the PR | — |
+
+**Verified, not just trusted**
+- **Everything is unchanged.** `''` → `{ label: 'all-time', filename: 'spendlygo-all-time.csv' }` with no `from`/`to` (P3-AC1, both start days). `buildExportCsv` gets an identical repo call. The API `Content-Disposition` and the bot `InputFile` name/caption (`N entries · all-time`) are byte-identical to main (P3-AC9 + bot guard). The only day-1 change is the dated name for bounded exports, as the owner confirmed.
+- **`parseExportRange`.** Normalising (trim, lower-case, whitespace → `-`) covers `Last  Cycle`. `cycle`/`last-cycle` use `cycleContaining`/`previousCycle` from `todayFor` (user tz, injected Clock). `YYYY-MM`/`YYYY`/`YYYY-MM-DD` are calendar ranges for every start day. Custom ranges are inclusive (`lte`/`gte` in SQL; the test proves both edge days and excludes the 4th and 26th). Reversed, garbage or impossible dates (`02-30`) → null → 400. New Year labels carry years only when they differ (`20 Nov – 19 Dec` stays bare). The filename is built only from regex- and `parseIsoDate`-validated dates, so there's no header injection.
+- **Usage hint.** Day 20 names both ranges, and day 1 says "this month"/"last month" (P3-AC13). The Markdown is safe (no `_*[` in the ranges).
+- **Bounded (§7, F8.6).** `listForExport` is unchanged: SQL `WHERE` on space + `occurred_on` range, `LIMIT EXPORT_ROW_CAP`. The CSV is built in memory and never written to disk. A wide custom range is no worse than Everything.
+- **Auth (§4).** The space comes from `activeHouseholdId(user)` and the start day from that space's row, never from the query. Tested: 401 for no initData, a stranger with no range and with `range=cycle`, and the owner's `range=cycle` excludes the stranger.
+- **Sheet portal.** Checked by reading (no Mini App harness until B-016). Tokens live on `:root`, and `body` sets font/colour, so nothing is lost leaving `.app` (which only sets padding). No CSS selector scopes sheet content under an ancestor. `#root`/`.app` create no stacking context, so the toast (z 60) and photo viewer (z 100) still sit above sheets (z 50). Escape, body scroll lock, initial panel focus, `env(safe-area-inset-bottom)` and the global reduced-motion rule are unchanged, and they now apply to all four sheets plus SpaceSwitcher. Unmount runs the effect cleanup and React removes the portal node. It's a Vite SPA with no SSR, and `document` is touched only during render in the browser. There was never a focus trap (initial focus only), drag-to-dismiss or Telegram BackButton hook. Those are pre-existing gaps, not regressions.
+- **ExportSheet.** It lives in `features/settings/` and imports only `components/Sheet` (legacy shared, per plan), `lib/telegram` and `@spendlygo/shared`. No feature→feature imports. Its CSS uses tokens only. It's 149 lines (≤ 250). For a11y: `fieldset` with `aria-label`, native radios in labels sharing one `name`, and `aria-label` on the month/From/To inputs. Everything sends no `range`, so it works on an old server. Cycle options are hidden when `me.cycle`/`previousCycle` are missing.
+- **Docs.** PRD F8.1/F8.4/§8, `/help` (text as planned), `apps/server/CLAUDE.md` CORS gotcha, and the export.ts header comment are all updated. No ADR was needed.
+- **Real-stack record.** It's consistent. 5 + 2 = 7 rows (cycle + last cycle = all-time), and the custom 5–24 Oct gave 4. The captions match today = 1 Nov (day 20: `20 Oct – 19 Nov` / `20 Sep – 19 Oct`; day 1: November / October). Both defects it found (CORS, clipped sheet) have commits, and CORS has a test.
+
+**Plan fidelity.** Every Part 3 file in the plan was touched as described.
+`exportFilename` is deleted, and the existing export tests are unchanged. Two
+changes go beyond the plan, the CORS `exposeHeaders` and the `Sheet` portal.
+Both were defects found in verification, recorded in Build notes, and are
+minimal. Nothing else was built.
+
+**PR checklist (WORKFLOW §4)**
+- [x] **Cost (§1):** no new dependency, service or Render service. Bundle 87.2 KB gz
+- [x] **Money (§2):** no arithmetic. CSV formatting of cents is unchanged
+- [x] **Data (§3):** read-only. No migration and no write path
+- [x] **Auth (§4):** identity from `requireInitData` / `appUser` only. Space from `activeHouseholdId`. 401 + cross-user tests, including `range=cycle` (P3-AC12)
+- [x] **Privacy (§6):** no new log lines. The export only goes to the requesting user
+- [x] **Runtime (§7):** SQL filter + row cap. No new JS aggregation
+- [x] **Time (§9):** `todayFor(ctx, user)` (user tz, injected Clock). Tests pin `fixedClock` at SGT noon
+- [x] **Telegram (§10):** the same single `replyWithDocument`. No new send paths
+- [x] **Docs:** PRD, `/help`, server CLAUDE.md gotcha
+- [x] `pnpm ci:local` passed (545 tests)
