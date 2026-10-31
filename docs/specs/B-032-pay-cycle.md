@@ -1121,3 +1121,97 @@ gz, 43% of budget).
 
 **Verdict: ready for owner.** Nits A–C are small doc and dead-code cleanups and
 can go in before merge. None of them blocks.
+
+### Review — Part 2
+
+*Part 2 only. Reviewed 2026-10-31 by `reviewer` (Opus) against
+`git diff 7152e33..HEAD` (904853c tests, bb444e2 build, 83444c3 screenshot record).*
+
+**Verdict: back to build** (one small Mini App fix, finding 1). The server
+side (stats, recap, `/recap`, digest, alerts) is correct and is ready for owner.
+
+**`pnpm ci:local` (real run, local Postgres):** passed. Typecheck ✓, lint +
+prettier ✓, blueprint ✓, "Migrations up to date" ✓, seed ✓, **36 test files,
+524 tests passed, 0 failed, 0 skipped** (DB-backed suites ran), build ✓, Mini App
+bundle 86.6 KB gz (43% of budget).
+
+**Independent checks (beyond the suite):**
+- Property run (tsx, scratch only): 31 start days × every date
+  2023-12-01..2029-01-31 (58,559 cases). `isLastDayOfCycle(d, s)` holds exactly
+  when `d + 1` starts a cycle (so the digest fires on clamped days such as 27/28 Feb
+  for day 31, and on 19 Dec / 31 Dec at year end). `cycleAlertKey` differs from the
+  previous and the next cycle's key for every start day. For day 1 the key is the
+  date's calendar month, and the digest day is the calendar month's last day. No defect.
+- Start day 1 = today, surface by surface: the Stats month label is
+  `${monthName} ${year}` of `cycle.start` ("October 2026"), with series keys/labels
+  identical to the old `toIsoDate`/`index + 1`. The recap label and range are identical.
+  The `/recap` footer is unchanged. The digest heading is `monthName(month)` and its
+  previous range is the previous calendar month. The alert key is the calendar month,
+  and the 100% text is `today.slice(0, 7)`. History shows "Month" and the old
+  picker code path. The RecapCard reads "This month".
+- Alerts: reserve-then-send behind the unique index is unchanged. P2-AC15 runs
+  `checkBudgetAlerts` twice. P2-AC21 really flips 20 → 1 → 2…31 → 20 (33 runs)
+  and asserts exactly 2 messages, no 100%. P2-AC18 inserts an old-shape row
+  `(user, 2026, 10, 80)` directly, so it's real backward-compatibility proof.
+  P2-AC20's test name states the limitation.
+- Digest: the monthly gate moved inside `sendOne`, so a failed settings lookup is
+  isolated per user, as before. P2-AC13 asserts 1 message on 31 Oct and 2 on 19 Nov.
+  Re-tick duplicates for digests are pre-existing (B-007, explicitly out of scope);
+  this part neither adds nor removes digest idempotency.
+- `currentCycle` (re-added, `service.ts:97`): exactly one caller
+  (`digest.ts:238`). It's a 3-line wrapper over `activeSpaceSettings` +
+  `cycleContaining`, not a second copy of the cycle maths. Acceptable.
+- Auth: `/api/stats` takes the space only from `activeHouseholdId(user)` and the
+  start day from `activeSpaceSettings(ctx, user)`. P2-AC4 covers 401, the 400 for
+  `2026-02-30`, and a day-1 stranger who gets their own 1–31 Oct with 0 spend.
+  Aggregation stays in SQL (`totalsForPeriod`, `totalsByDay`). No new log lines.
+- Screenshot record (P2-AC22/23) is consistent: $138.50 vs $173.00 → 19.9%,
+  shown as "20% less". The 2026-11-01 SGT date matches a 17:19 UTC run on 31 Oct.
+  The day-1 "November 2026" / $12.50 figures match Part 1's record. The record doesn't
+  explicitly say the current-cycle list showed only 20 Oct – 1 Nov rows (AC22's
+  "lists 20–31 Oct"). It's implied by the Previous-cycle rows quoted.
+
+| # | Severity | file:line | Finding | Failure scenario |
+|---|---|---|---|---|
+| 1 | **Medium (blocking, cheap fix)** | `apps/miniapp/src/App.tsx:147-151`, `:179-185` | While the cycle query is pending, `historyRange` is `{}`. The History list query then uses key `['transactions', null, null]`, the **"All" list**. That key is always cached, because `historyPeriod` defaults to `'all'`. So tapping "Cycle", and every ‹/› press onto an uncached cycle, first shows the **all-time list** under the Cycle chip with a "…" label, then swaps. It also fires an extra 200-row unfiltered request each time. On `isError`, it stays on the all-time list for good, with a blank label and no error | Day-20 user opens History (All) and taps Cycle. For about 1 s on a warm server, or tens of seconds on a free-tier cold start, they see 1–19 Oct and every older row as if they were "this cycle". If `/api/stats` 5xxs, they're stuck looking at all-time rows labelled as a cycle. **Fix (a few lines):** disable the history query (`enabled: tab === 'history' && !(historyPeriod === 'month' && cycleStartDay !== 1 && !historyCycle.from)`), so the screen shows its existing loading skeleton, and render a short error/retry line in `CycleStepper` when `historyCycle.isError`. Re-screenshot the chip tap |
+| 2 | Low (§7 perf) | `apps/server/src/api/index.ts:476` | `/api/stats` now awaits `activeSpaceSettings` **before** `buildStats`. That adds one sequential round trip to every Stats load, including `period=day`/`year`, which don't use it. `handleRecap` also reads the space twice (`buildRecap` + footer, `bot/commands/recap.ts:97`). The digest day reads it twice too (`send-digests.ts` + `currentCycle`) | Tens of ms extra per Stats tab open on the Supabase pooler. Never wrong. Fix later: return `cycleStartDay` from `buildRecap`, and only look the start day up for `period === 'month'` |
+| 3 | Low (doc) | `apps/server/CLAUDE.md` gotcha row, `docs/adr/0007-budget-cycle-per-space.md` "Alert keys" | PRD F13.3 says alerts are keyed by **user, not space** (so day-1 personal and day-20 shared spaces can share keys). The Requirements say this wording "goes into PRD F13 and `apps/server/CLAUDE.md`", but the gotcha row and the ADR omit it | A future reader of the gotcha assumes per-space keys and "fixes" a perceived bug, or is surprised by a skip after `/switch`. Add one clause to both |
+| 4 | Info (dup) | `api/index.ts:770-773`, `api/recap.ts:60-64` | The same `startDay === 1 ? "Month YYYY" : formatCycleRange` label expression appears twice (`toApiCycle` and the digest use the no-year variant) | Copy drift between Stats and recap if one is edited. Could be a `cycleLabelWithYear` helper |
+| 5 | Info (process) | spec PR split | The plan named Part 2's branch `feat/B-032-pay-cycle-periods`. The work is on `feat/B-032-pay-cycle` (per the caller's instructions) | None. Note it in the PR body |
+
+**Acceptance criteria → tests (Part 2)**
+
+| # | Proven by | Real proof? |
+|---|---|---|
+| P2-AC1–AC5 | `apps/server/src/api/pay-cycle.test.ts` › `GET /api/stats` | Yes. Exact from/to/label/out/previous, first and last series keys, re-grouped anchors, 401 + 400 + stranger, calendar year |
+| P2-AC6–AC7 | `apps/server/src/api/recap.test.ts` › `buildRecap with a pay cycle (F17)` | Yes. `to` capped at today, previous cycle 10000 |
+| P2-AC8 | `apps/server/src/bot/commands/recap.test.ts` | Yes. Exact strings, all four combinations |
+| P2-AC9–AC11 | `apps/server/src/tasks/digest-periods.test.ts` | Yes, plus my property run |
+| P2-AC12–AC13 | `apps/server/src/tasks/digest.test.ts` | Yes. Heading, total, "50% less" vs the previous cycle. Real `sendDueDigests` at two instants |
+| P2-AC14–AC21 | `apps/server/src/tasks/alerts.test.ts` › `pay cycle (F17)` | Yes. Real DB, real `checkBudgetAlerts`, double tick, 33-run flip, old-row insert |
+| P2-AC22 | Screenshot (Q8 A) | Done. **Re-take after the finding 1 fix** (chip tap and ‹ press show a skeleton, not the All list) |
+| P2-AC23 | Screenshot (Q8 A) | Done, consistent with the API figures |
+
+**Plan fidelity.** Every Part 2 file in the plan was touched as described. The
+History chip lives in `features/history/` (`CycleStepper.tsx`,
+`cycle-stepper.css`, `use-history-cycle.ts`). It imports only `lib/` and has no
+feature→feature imports. `App.tsx` wiring is about 30 lines (the plan said ~15),
+all glue. `Stats.tsx` is unchanged, as planned. There's no migration, dependency or
+wire-shape change. Docs are updated: PRD F7/F9.5/F13.2–3/F16.1/F17, the
+`apps/server/CLAUDE.md` gotcha (see finding 3), ADR 0007 (alert keys + History
+reuse), and the schema/repo doc comments. Nothing was built outside the plan.
+
+**Guardrail self-check** (WORKFLOW §4)
+- [x] **Cost:** no new service, dependency or Render service (§1)
+- [x] **Money:** integer cents, SQL totals. No new arithmetic beyond existing
+  `computeSafeToSpend`/`computePeriodStats`. Never negative (§2)
+- [x] **Auth:** identity only from `requireInitData` / `appUser`. Space from
+  `activeHouseholdId`, start day from the space row, never the request.
+  Cross-user + 401 test on `/api/stats` (P2-AC4) (§4)
+- [x] **Privacy:** no new log lines. Existing alert/digest logs carry `userId`,
+  event and error class only (§6)
+- [x] **Time:** every cycle comes from `todayFor` / `isoDateOf(clock, tz)`
+  (user timezone, injected `Clock`). Tests pin `fixedClock` at SGT instants (§9)
+- [x] Data/idempotency (§3): the alert reserve-then-send is unchanged. No migration.
+  The documented skip is accepted by the owner (Q2 A)
+- [x] Telegram (§10): no new send paths; digests and alerts reuse existing senders
