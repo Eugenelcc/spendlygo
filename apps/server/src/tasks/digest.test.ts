@@ -1,5 +1,6 @@
 import { eq } from 'drizzle-orm';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { Bot } from 'grammy';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fixedClock, type IsoDate } from '@spendlygo/core';
 import {
   createDatabase,
@@ -10,9 +11,11 @@ import {
   type DatabaseHandle,
   type User,
 } from '@spendlygo/db';
+import type { BotContext } from '../bot/middleware.js';
 import type { AppContext } from '../context.js';
 import { setLogLevel } from '../logger.js';
 import { buildDigest, buildMonthlyDigest, buildWeeklyDigest } from './digest.js';
+import { sendDueDigests } from './send-digests.js';
 
 const TEST_DATABASE_URL = process.env.TEST_DATABASE_URL;
 const describeIfDb = TEST_DATABASE_URL ? describe : describe.skip;
@@ -240,6 +243,64 @@ describeIfDb('the digest family', () => {
       expect(digest.text).toContain('August');
       expect(digest.text).toContain('150.00');
       expect(digest.text).not.toContain('888.88');
+    });
+
+    // F17 (B-032 Part 2, P2-AC12): start day 20, today = the cycle's last day.
+    it('names the cycle range and totals only the cycle', async () => {
+      const spaceId = user.activeHouseholdId as string;
+      await householdsRepo.updateCycleStartDay(handle.db, spaceId, 20);
+      for (const [cents, occurredOn] of [
+        [10_000, '2026-10-05'], // previous cycle: 20 Sep - 19 Oct
+        [5_000, '2026-10-25'], // this cycle: 20 Oct - 19 Nov
+      ] as const) {
+        await transactionsRepo.create(handle.db, {
+          userId: user.id,
+          householdId: spaceId,
+          direction: 'out',
+          amountCents: cents,
+          categoryId: null,
+          note: null,
+          occurredOn,
+          source: 'chat',
+        });
+      }
+
+      const digest = await buildMonthlyDigest(ctx, user, '2026-11-19' as IsoDate);
+      expect(digest.worthSending).toBe(true);
+      expect(digest.text).toContain('*20 Oct – 19 Nov*');
+      expect(digest.text).toContain('$50.00');
+      expect(digest.text).not.toContain('$150.00');
+      expect(digest.text).toContain('50% less'); // compared with 20 Sep - 19 Oct (S$100)
+    });
+  });
+
+  // F17 (B-032 Part 2, P2-AC13)
+  describe('sendDueDigests', () => {
+    async function runAt(instant: string): Promise<string[]> {
+      const sendMessage = vi.fn().mockResolvedValue(undefined);
+      const bot = new Bot<BotContext>('111111:token', { botInfo: undefined as never });
+      bot.api.sendMessage = sendMessage;
+      await sendDueDigests({ ...ctx, clock: fixedClock(instant) }, bot);
+      // Other test files may leave eligible users behind: only count ours.
+      return (sendMessage.mock.calls as Array<[string, string]>)
+        .filter(([chatId]) => chatId === TELEGRAM_ID.toString())
+        .map(([, text]) => text);
+    }
+
+    it("sends the monthly digest on the cycle's last day, not the calendar month end", async () => {
+      const spaceId = user.activeHouseholdId as string;
+      await householdsRepo.updateBudget(handle.db, spaceId, 150_000);
+      await householdsRepo.updateCycleStartDay(handle.db, spaceId, 20);
+
+      // 21:00 in Singapore on 31 Oct: the calendar month ends, the cycle doesn't.
+      const oct31 = await runAt('2026-10-31T13:00:00Z');
+      expect(oct31).toHaveLength(1); // daily only
+      expect(oct31.some((text) => text.includes('*20 Oct – 19 Nov*'))).toBe(false);
+
+      // 21:00 on 19 Nov: the cycle's last day.
+      const nov19 = await runAt('2026-11-19T13:00:00Z');
+      expect(nov19).toHaveLength(2); // daily and monthly
+      expect(nov19.some((text) => text.includes('*20 Oct – 19 Nov*'))).toBe(true);
     });
   });
 });

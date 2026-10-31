@@ -59,3 +59,35 @@ describe('isMonthlyDigestDay', () => {
     expect(isMonthlyDigestDay(iso('2026-05-31'))).toBe(true);
   });
 });
+
+// F17 (B-032 Part 2, P2-AC9 to AC11): the monthly digest fires on the last day
+// of the budget cycle, not the calendar month. The second argument is the
+// space's start day; it does not exist yet, so the day-20 and day-31 cases fail.
+describe('isMonthlyDigestDay with a cycle', () => {
+  const withStartDay = isMonthlyDigestDay as (date: IsoDate, startDay?: number) => boolean;
+
+  it('day 20 fires on the 19th, including across the new year', () => {
+    expect(withStartDay(iso('2026-11-19'), 20)).toBe(true);
+    expect(withStartDay(iso('2027-01-19'), 20)).toBe(true);
+    expect(withStartDay(iso('2026-10-31'), 20)).toBe(false);
+    expect(withStartDay(iso('2026-11-30'), 20)).toBe(false);
+  });
+
+  it('day 31 fires on 27 Feb (common) and 28 Feb (leap)', () => {
+    expect(withStartDay(iso('2026-02-27'), 31)).toBe(true);
+    expect(withStartDay(iso('2028-02-28'), 31)).toBe(true);
+    expect(withStartDay(iso('2026-02-28'), 31)).toBe(false);
+    expect(withStartDay(iso('2028-02-29'), 31)).toBe(false);
+  });
+
+  it('day 1 matches the calendar month end (regression guard)', () => {
+    for (const date of ['2026-08-31', '2026-02-28', '2024-02-29', '2026-04-30']) {
+      expect(withStartDay(iso(date))).toBe(true);
+      expect(withStartDay(iso(date), 1)).toBe(true);
+    }
+    for (const date of ['2026-08-30', '2026-02-27', '2024-02-28', '2026-04-29']) {
+      expect(withStartDay(iso(date))).toBe(false);
+      expect(withStartDay(iso(date), 1)).toBe(false);
+    }
+  });
+});

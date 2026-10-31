@@ -938,6 +938,32 @@ the plan should say so.**
 | P1-AC25 | `apps/server/src/bot/capture.test.ts` › `the confirmation card with a pay cycle (F17) › says "this cycle" when over budget with a non-calendar cycle` | ❌ failing (expected) (its day-1 assertions already hold) | ✅ |
 | P1-AC26 | Screenshot check (Q8 A), no automated test | n/a | ⏭ not screenshotted (see Build notes) |
 | P1-AC27 | `apps/server/src/api/pay-cycle.test.ts` › `PATCH /api/settings › an unknown key is a 400 and changes nothing (strict schema)` | ❌ failing (expected) (returns 200 today) | ✅ |
+| P2-AC1 | `apps/server/src/api/pay-cycle.test.ts` › `GET /api/stats › month view is the day-20 cycle with 31 day buckets` | ❌ failing (expected) (still the calendar month) | |
+| P2-AC2 | `apps/server/src/api/pay-cycle.test.ts` › `GET /api/stats › day 1 month view is unchanged` | ✅ passes before build (regression guard) | |
+| P2-AC3 | `apps/server/src/api/pay-cycle.test.ts` › `GET /api/stats › anchors either side of a cycle step exactly one cycle, re-grouped by the current start day` | ❌ failing (expected) | |
+| P2-AC4 | `apps/server/src/api/pay-cycle.test.ts` › `GET /api/stats › rejects unauthenticated and a bad anchor; a stranger sees only their own month` | ✅ passes before build (regression guard) (401, 400 and isolation already hold) | |
+| P2-AC5 | `apps/server/src/api/pay-cycle.test.ts` › `GET /api/stats › the year view stays the calendar year with a day-20 cycle` | ✅ passes before build (regression guard) | |
+| P2-AC6 | `apps/server/src/api/recap.test.ts` › `buildRecap with a pay cycle (F17) › a month recap follows the cycle and stops at today` | ❌ failing (expected) | |
+| P2-AC7 | `apps/server/src/api/recap.test.ts` › `buildRecap with a pay cycle (F17) › a year recap stays the calendar year with a day-20 cycle` | ✅ passes before build (regression guard) | |
+| P2-AC8 | `apps/server/src/bot/commands/recap.test.ts` › `recapFooter › says "this cycle" only when the start day isn't 1` | ❌ failing (expected) (`recapFooter` missing) | |
+| P2-AC9 | `apps/server/src/tasks/digest-periods.test.ts` › `isMonthlyDigestDay with a cycle › day 20 fires on the 19th, including across the new year` | ❌ failing (expected) | |
+| P2-AC10 | `apps/server/src/tasks/digest-periods.test.ts` › `isMonthlyDigestDay with a cycle › day 31 fires on 27 Feb (common) and 28 Feb (leap)` | ❌ failing (expected) | |
+| P2-AC11 | `apps/server/src/tasks/digest-periods.test.ts` › `isMonthlyDigestDay with a cycle › day 1 matches the calendar month end (the existing no-argument tests are untouched)` | ✅ passes before build (regression guard) | |
+| P2-AC12 | `apps/server/src/tasks/digest.test.ts` › `the digest family › buildMonthlyDigest › names the cycle range and totals only the cycle` | ❌ failing (expected) | |
+| P2-AC13 | `apps/server/src/tasks/digest.test.ts` › `the digest family › sendDueDigests › sends the monthly digest on the cycle's last day, not the calendar month end` | ❌ failing (expected) | |
+| P2-AC14 | `apps/server/src/tasks/alerts.test.ts` › `pay cycle (F17) › spend before the cycle start does not count` | ✅ passes before build (regression guard) (Part 1 already counts only the cycle's spend) | |
+| P2-AC15 | `apps/server/src/tasks/alerts.test.ts` › `pay cycle (F17) › a double-fired tick sends the 80% alert once per cycle` | ✅ passes before build (regression guard) (the alert key is still wrong, but one message is sent) | |
+| P2-AC16 | `apps/server/src/tasks/alerts.test.ts` › `pay cycle (F17) › thresholds re-arm in the next cycle` | ❌ failing (expected) (key is October, not the month the cycle ends in) | |
+| P2-AC17 | `apps/server/src/tasks/alerts.test.ts` › `pay cycle (F17) › the 100% text names the cycle range` | ❌ failing (expected) | |
+| P2-AC18 | `apps/server/src/tasks/alerts.test.ts` › `pay cycle (F17) › a day-1 row written before B-032 still suppresses the repeat` | ✅ passes before build (regression guard) | |
+| P2-AC19 | `apps/server/src/tasks/alerts.test.ts` › `pay cycle (F17) › switching 1 → 20 after an October alert still alerts in the new cycle` | ❌ failing (expected) | |
+| P2-AC20 | `apps/server/src/tasks/alerts.test.ts` › `pay cycle (F17) › documented limitation: switching 20 → 1 on 25 Oct skips October's 80% alert once` | ✅ passes before build (regression guard) (the limitation coincides with today's calendar-month key) | |
+| P2-AC21 | `apps/server/src/tasks/alerts.test.ts` › `pay cycle (F17) › flipping through every start day on one date never sends a threshold twice` | ❌ failing (expected) (1 message today, expected 2) | |
+| P2-AC22 | Screenshot check (Q8 A), no automated test: History Cycle chip and arrows, day 20 and day 1 | n/a | |
+| P2-AC23 | Screenshot check (Q8 A), no automated test: Stats month tab and recap card, day 20 and day 1 | n/a | |
+| (helper) | `packages/core/src/cycle.test.ts` › `cycleAlertKey (B-032 Part 2, Q2 A)` (2 tests: month the cycle ends in; 36 distinct keys per start day) | ❌ failing (expected) (`cycleAlertKey` missing) | |
+
+**Checks (Part 2, before build):** 524 tests: 510 passed, 14 failed. All 14 failures are new Part 2 tests, each failing for the right reason (missing function or behaviour); the 9 other new tests are day-1 or already-true regression guards. All 501 pre-existing tests pass. Amounts asserted in the app's `$` form.
 
 **Checks (Part 1, before build):** test 472 passed, 15 failed (+ `cycle.test.ts` fails to load: `./cycle.js` missing). All 15 failures and the load failure are new Part 1 tests; every pre-existing test passes.
 **Checks (Part 1, after build):** typecheck ✓ lint ✓ test all passing, 0 failed / 0 skipped (`pnpm ci:local` passed; P1-AC24 expectation fixed to the app's `$` format).

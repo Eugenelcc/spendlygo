@@ -9,6 +9,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { fixedClock, type IsoDate } from '@spendlygo/core';
 import {
   createDatabase,
+  householdsRepo,
   schema,
   transactionsRepo,
   usersRepo,
@@ -159,6 +160,52 @@ describeIfDb('computeStreak and buildRecap', () => {
       const monthRecap = await buildRecap(ctx, user, 'month', TODAY, TODAY);
       const yearRecap = await buildRecap(ctx, user, 'year', TODAY, TODAY);
       expect(yearRecap.stats.totals.outCents).toBe(monthRecap.stats.totals.outCents);
+    });
+  });
+
+  // F17 (B-032 Part 2, P2-AC6 and AC7). "Owner's October": budget S$1,500,
+  // start day 20, S$100 on 2026-10-05 and S$50 on 2026-10-25, today 2026-10-31.
+  describe('buildRecap with a pay cycle (F17)', () => {
+    const OCT_31 = '2026-10-31' as IsoDate;
+
+    async function ownersOctoberAtDay20(): Promise<void> {
+      const spaceId = user.activeHouseholdId as string;
+      await householdsRepo.updateBudget(handle.db, spaceId, 150_000);
+      await householdsRepo.updateCycleStartDay(handle.db, spaceId, 20);
+      for (const [cents, occurredOn] of [
+        [10_000, '2026-10-05'],
+        [5_000, '2026-10-25'],
+      ] as const) {
+        await transactionsRepo.create(handle.db, {
+          userId: user.id,
+          householdId: spaceId,
+          direction: 'out',
+          amountCents: cents,
+          categoryId: null,
+          note: null,
+          occurredOn,
+          source: 'chat',
+        });
+      }
+    }
+
+    it('a month recap follows the cycle and stops at today', async () => {
+      await ownersOctoberAtDay20();
+      const recap = await buildRecap(ctx, user, 'month', OCT_31, OCT_31);
+      expect(recap.from).toBe('2026-10-20');
+      expect(recap.to).toBe('2026-10-31'); // never past today
+      expect(recap.label).toBe('20 Oct – 19 Nov');
+      expect(recap.stats.totals.outCents).toBe(5000);
+      expect(recap.stats.previousOutCents).toBe(10_000); // 20 Sep - 19 Oct
+    });
+
+    it('a year recap stays the calendar year with a day-20 cycle', async () => {
+      await ownersOctoberAtDay20();
+      const recap = await buildRecap(ctx, user, 'year', OCT_31, OCT_31);
+      expect(recap.from).toBe('2026-01-01');
+      expect(recap.to).toBe('2026-10-31');
+      expect(recap.label).toBe('2026');
+      expect(recap.stats.totals.outCents).toBe(15_000);
     });
   });
 });
