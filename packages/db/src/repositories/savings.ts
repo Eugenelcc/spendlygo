@@ -11,7 +11,7 @@
  * `packages/core/src/savings.ts#calculateGoalProgress`.
  */
 
-import { and, desc, eq, isNull, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, isNull, sql } from 'drizzle-orm';
 import type { Database } from '../client.js';
 import { savingsGoals, transactions, type SavingsGoal } from '../schema.js';
 
@@ -115,6 +115,30 @@ export async function update(
     .where(and(eq(savingsGoals.userId, userId), eq(savingsGoals.id, id)))
     .returning({ id: savingsGoals.id });
   return rows.length > 0;
+}
+
+export interface GoalProgressPoint {
+  day: string;
+  /** out minus in for that day — a withdrawal shows negative. */
+  netCents: number;
+}
+
+/**
+ * Daily net contribution for the goal's tagged transactions, oldest first —
+ * the caller turns this into a running total for the progress chart, same
+ * split as `transactionsRepo.totalsByDay` / Stats' `series`.
+ */
+export async function progressHistory(db: Database, goalId: string): Promise<GoalProgressPoint[]> {
+  const rows = await db
+    .select({
+      day: transactions.occurredOn,
+      netCents: sql<number>`sum(case when ${transactions.direction} = 'out' then ${transactions.amountCents} else -${transactions.amountCents} end)::int`,
+    })
+    .from(transactions)
+    .where(and(eq(transactions.savingsGoalId, goalId), isNull(transactions.deletedAt)))
+    .groupBy(transactions.occurredOn)
+    .orderBy(asc(transactions.occurredOn));
+  return rows;
 }
 
 /** Archive, never delete — matches categories (PRD F10.3). Author-only. */

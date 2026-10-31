@@ -4,6 +4,7 @@ import type {
   CreateRecurringRuleBody,
   CreateSavingsGoalBody,
   CreateTransactionBody,
+  GoalProgressResponse,
   HeatmapResponse,
   HouseholdInviteResponse,
   HouseholdResponse,
@@ -209,6 +210,8 @@ export const api = {
     }),
 
   savingsGoals: () => request<SavingsGoalsResponse>('/api/goals'),
+
+  goalProgress: (id: string) => request<GoalProgressResponse>(`/api/goals/${id}/progress`),
 
   createSavingsGoal: (body: CreateSavingsGoalBody) =>
     request<SavingsGoalResponse>('/api/goals', { method: 'POST', body: JSON.stringify(body) }),

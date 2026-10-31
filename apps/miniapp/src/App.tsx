@@ -193,6 +193,13 @@ function Shell(): JSX.Element {
     enabled: tab === 'settings',
   });
 
+  const [expandedGoalId, setExpandedGoalId] = useState<string | null>(null);
+  const goalProgress = useQuery({
+    queryKey: ['goalProgress', expandedGoalId],
+    queryFn: () => api.goalProgress(expandedGoalId as string),
+    enabled: expandedGoalId !== null,
+  });
+
   const spaces = useQuery({ queryKey: ['spaces'], queryFn: api.spaces });
 
   /** Everything money-related is invalidated together — the figures interlock. */
@@ -336,6 +343,7 @@ function Shell(): JSX.Element {
     onSuccess: () => {
       haptics.success();
       void queryClient.invalidateQueries({ queryKey: ['goals'] });
+      void queryClient.invalidateQueries({ queryKey: ['goalProgress'] });
       // A contribution is a real transaction, tagged as a transfer — it shows
       // up in History and Stats even though it never moves safe-to-spend.
       refreshAll();
@@ -499,6 +507,12 @@ function Shell(): JSX.Element {
             onAddGoal={(input) => addGoal.mutate(input)}
             onContributeGoal={(id, amountCents) => contributeGoal.mutate({ id, amountCents })}
             onArchiveGoal={(id) => archiveGoal.mutate(id)}
+            expandedGoalId={expandedGoalId}
+            onToggleGoalProgress={(id) =>
+              setExpandedGoalId((current) => (current === id ? null : id))
+            }
+            goalProgressPoints={goalProgress.data?.points}
+            goalProgressLoading={goalProgress.isPending}
             exportBusy={exportCsv.isPending}
             onExportCsv={() => exportCsv.mutate()}
           />

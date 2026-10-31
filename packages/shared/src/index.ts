@@ -465,6 +465,19 @@ export const contributeToGoalSchema = z.object({
 });
 export type ContributeToGoalBody = z.infer<typeof contributeToGoalSchema>;
 
+// --- GET /api/goals/:id/progress ---------------------------------------------
+
+/**
+ * Daily net contribution (out minus in, so a withdrawal shows negative) for
+ * a goal's tagged transactions, oldest first. Mirrors `statsResponseSchema`'s
+ * `series`: the server aggregates in SQL, the client turns deltas into a
+ * running total for the chart (same pattern LineChart already uses).
+ */
+export const goalProgressResponseSchema = z.object({
+  points: z.array(z.object({ day: isoDateSchema, netCents: z.number().int() })),
+});
+export type GoalProgressResponse = z.infer<typeof goalProgressResponseSchema>;
+
 // --- POST /tasks/tick -------------------------------------------------------
 
 export const tickResponseSchema = z.object({

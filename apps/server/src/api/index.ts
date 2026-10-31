@@ -37,6 +37,7 @@ import {
   updateSettingsSchema,
   updateTransactionSchema,
   type CategoriesResponse,
+  type GoalProgressResponse,
   type HeatmapResponse,
   type Household as ApiHousehold,
   type HouseholdInviteResponse,
@@ -656,6 +657,19 @@ export function createApiRouter(ctx: AppContext, bot: SpendlygoBot): Hono<ApiEnv
 
     const body: SavingsGoalResponse = { goal: toApiSavingsGoal(refreshed, today) };
     return c.json(body, 201);
+  });
+
+  // Daily deltas, oldest first — the Mini App's progress chart turns these
+  // into a running total, same split as Stats' `series` (GUARDRAILS.md
+  // section 3: aggregated in SQL, never summed client-side for a total).
+  api.get('/goals/:id/progress', async (c) => {
+    const user = c.get('user');
+    const goal = await savingsRepo.findById(ctx.db, user.id, c.req.param('id'));
+    if (!goal) throw new NotFoundError('No such savings goal');
+
+    const points = await savingsRepo.progressHistory(ctx.db, goal.id);
+    const body: GoalProgressResponse = { points };
+    return c.json(body);
   });
 
   return api;

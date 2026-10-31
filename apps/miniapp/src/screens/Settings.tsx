@@ -8,6 +8,7 @@ import type {
   SavingsGoal,
 } from '@spendlygo/shared';
 import { GoalsSection } from '../components/GoalsSection';
+import type { GoalProgressPoint } from '../components/GoalProgressChart';
 import { HouseholdSection } from '../components/HouseholdSection';
 import { RecurringForm } from '../components/RecurringForm';
 import { daysInMonth, formatHour, formatMoney } from '../lib/format';
@@ -48,6 +49,10 @@ export interface SettingsScreenProps {
   onAddGoal: (input: { name: string; targetCents: number; targetDate: string | null }) => void;
   onContributeGoal: (id: string, amountCents: number) => void;
   onArchiveGoal: (id: string) => void;
+  expandedGoalId: string | null;
+  onToggleGoalProgress: (id: string) => void;
+  goalProgressPoints: GoalProgressPoint[] | undefined;
+  goalProgressLoading: boolean;
   exportBusy: boolean;
   onExportCsv: () => void;
 }
@@ -84,6 +89,10 @@ export function SettingsScreen({
   onAddGoal,
   onContributeGoal,
   onArchiveGoal,
+  expandedGoalId,
+  onToggleGoalProgress,
+  goalProgressPoints,
+  goalProgressLoading,
   exportBusy,
   onExportCsv,
 }: SettingsScreenProps): JSX.Element {
@@ -236,6 +245,10 @@ export function SettingsScreen({
         onAdd={onAddGoal}
         onContribute={onContributeGoal}
         onArchive={onArchiveGoal}
+        expandedGoalId={expandedGoalId}
+        onToggleProgress={onToggleGoalProgress}
+        progressPoints={goalProgressPoints}
+        progressLoading={goalProgressLoading}
       />
 
       <section className="card">

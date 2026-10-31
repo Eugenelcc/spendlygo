@@ -1,5 +1,6 @@
 import { useState, type JSX } from 'react';
 import type { SavingsGoal } from '@spendlygo/shared';
+import { GoalProgressChart, type GoalProgressPoint } from './GoalProgressChart';
 import { currencySymbol, formatMoney, formatShortDate } from '../lib/format';
 import { haptics } from '../lib/telegram';
 
@@ -12,6 +13,10 @@ export interface GoalsSectionProps {
   onAdd: (input: { name: string; targetCents: number; targetDate: string | null }) => void;
   onContribute: (id: string, amountCents: number) => void;
   onArchive: (id: string) => void;
+  expandedGoalId: string | null;
+  onToggleProgress: (id: string) => void;
+  progressPoints: GoalProgressPoint[] | undefined;
+  progressLoading: boolean;
 }
 
 /**
@@ -30,6 +35,10 @@ export function GoalsSection({
   onAdd,
   onContribute,
   onArchive,
+  expandedGoalId,
+  onToggleProgress,
+  progressPoints,
+  progressLoading,
 }: GoalsSectionProps): JSX.Element {
   const [adding, setAdding] = useState(false);
 
@@ -78,6 +87,10 @@ export function GoalsSection({
               busy={busy}
               onContribute={(amountCents) => onContribute(goal.id, amountCents)}
               onArchive={() => onArchive(goal.id)}
+              expanded={expandedGoalId === goal.id}
+              onToggleProgress={() => onToggleProgress(goal.id)}
+              progressPoints={expandedGoalId === goal.id ? progressPoints : undefined}
+              progressLoading={expandedGoalId === goal.id && progressLoading}
             />
           ))}
         </div>
@@ -168,6 +181,10 @@ function GoalRow({
   busy,
   onContribute,
   onArchive,
+  expanded,
+  onToggleProgress,
+  progressPoints,
+  progressLoading,
 }: {
   goal: SavingsGoal;
   currency: string;
@@ -175,6 +192,10 @@ function GoalRow({
   busy: boolean;
   onContribute: (amountCents: number) => void;
   onArchive: () => void;
+  expanded: boolean;
+  onToggleProgress: () => void;
+  progressPoints: GoalProgressPoint[] | undefined;
+  progressLoading: boolean;
 }): JSX.Element {
   const [contributing, setContributing] = useState(false);
   const [amount, setAmount] = useState('');
@@ -227,6 +248,33 @@ function GoalRow({
           to hit it
         </p>
       )}
+
+      <button
+        type="button"
+        className="link goal-row__progress-toggle"
+        onClick={() => {
+          haptics.tap();
+          onToggleProgress();
+        }}
+      >
+        {expanded ? 'Hide progress' : '📈 View progress'}
+      </button>
+
+      {expanded &&
+        (progressLoading ? (
+          <div className="skeleton skeleton--short" />
+        ) : !progressPoints || progressPoints.length < 2 ? (
+          <p className="goal-row__hint">
+            Not enough history yet — add a couple more contributions.
+          </p>
+        ) : (
+          <GoalProgressChart
+            points={progressPoints}
+            targetCents={goal.targetCents}
+            currency={currency}
+            locale={locale}
+          />
+        ))}
 
       {contributing ? (
         <div className="goal-row__contribute">

@@ -13,7 +13,11 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { fixedClock } from '@spendlygo/core';
 import { createDatabase, schema, type DatabaseHandle } from '@spendlygo/db';
-import { savingsGoalResponseSchema, savingsGoalsResponseSchema } from '@spendlygo/shared';
+import {
+  goalProgressResponseSchema,
+  savingsGoalResponseSchema,
+  savingsGoalsResponseSchema,
+} from '@spendlygo/shared';
 import { createApp } from '../app.js';
 import type { Config } from '../config.js';
 import type { AppContext } from '../context.js';
@@ -209,6 +213,80 @@ describeIfDb('savings goals API', () => {
           body: JSON.stringify({ amountCents: 1_000 }),
         },
       );
+      expect(response.status).toBe(404);
+    });
+  });
+
+  describe('GET /api/goals/:id/progress', () => {
+    it('groups same-day contributions and nets out a withdrawal, oldest first', async () => {
+      const created = await json(
+        await app.request('/api/goals', {
+          method: 'POST',
+          headers: auth(OWNER),
+          body: JSON.stringify({ name: 'Vacation', targetCents: 100_000 }),
+        }),
+      );
+      const goalId = created.goal.id;
+
+      // Two contributions the same day should collapse into one point...
+      await app.request(`/api/goals/${goalId}/contribute`, {
+        method: 'POST',
+        headers: auth(OWNER),
+        body: JSON.stringify({ amountCents: 10_000, occurredOn: '2026-08-01' }),
+      });
+      await app.request(`/api/goals/${goalId}/contribute`, {
+        method: 'POST',
+        headers: auth(OWNER),
+        body: JSON.stringify({ amountCents: 5_000, occurredOn: '2026-08-01' }),
+      });
+      // ...a later day's withdrawal should net negative...
+      await app.request(`/api/goals/${goalId}/contribute`, {
+        method: 'POST',
+        headers: auth(OWNER),
+        body: JSON.stringify({ amountCents: 3_000, direction: 'in', occurredOn: '2026-08-10' }),
+      });
+      // ...and a middle day logged last should still sort oldest-first.
+      await app.request(`/api/goals/${goalId}/contribute`, {
+        method: 'POST',
+        headers: auth(OWNER),
+        body: JSON.stringify({ amountCents: 2_000, occurredOn: '2026-08-05' }),
+      });
+
+      const body = goalProgressResponseSchema.parse(
+        await json(await app.request(`/api/goals/${goalId}/progress`, { headers: auth(OWNER) })),
+      );
+      expect(body.points).toEqual([
+        { day: '2026-08-01', netCents: 15_000 },
+        { day: '2026-08-05', netCents: 2_000 },
+        { day: '2026-08-10', netCents: -3_000 },
+      ]);
+    });
+
+    it('404s for a goal that does not exist', async () => {
+      const response = await app.request(
+        '/api/goals/00000000-0000-0000-0000-000000000000/progress',
+        { headers: auth(OWNER) },
+      );
+      expect(response.status).toBe(404);
+    });
+
+    it("never returns another user's goal progress", async () => {
+      const created = await json(
+        await app.request('/api/goals', {
+          method: 'POST',
+          headers: auth(OWNER),
+          body: JSON.stringify({ name: 'Vacation', targetCents: 100_000 }),
+        }),
+      );
+      await app.request(`/api/goals/${created.goal.id}/contribute`, {
+        method: 'POST',
+        headers: auth(OWNER),
+        body: JSON.stringify({ amountCents: 10_000 }),
+      });
+
+      const response = await app.request(`/api/goals/${created.goal.id}/progress`, {
+        headers: auth(STRANGER),
+      });
       expect(response.status).toBe(404);
     });
   });
