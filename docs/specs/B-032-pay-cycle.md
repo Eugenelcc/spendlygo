@@ -985,7 +985,7 @@ the plan should say so.**
 
 **Checks (Part 3, before build):** 544 tests: 527 passed, 17 failed (14 `parseExportRange`/bot/API/`/me` plus the core helper; all fail for the missing feature). The 3 passing new tests are the guards marked above. No existing test asserts the old `spendlygo-2026-10.csv` name, so none conflicts with the owner's file-name decision.
 
-**Checks (Part 3, after build):** typecheck ✗ (see Build notes: a type error in the committed `export.test.ts`, not in the build) lint ✓ test 544 passed / 0 failed.
+**Checks (Part 3, after build):** typecheck ✓ (after the test-helper type fix) lint ✓ test 544 passed / 0 failed; ci:local passed.
 
 **Checks (Part 2, after build):** typecheck ✓ lint ✓ test 524 passed / 0 failed (`pnpm ci:local` passed, 524 tests).
 

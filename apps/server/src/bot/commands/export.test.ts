@@ -111,6 +111,8 @@ describeIfDb('/export (DB)', () => {
       householdId: spaceId,
       direction: 'out',
       amountCents: 5_000,
+      categoryId: null,
+      note: null,
       occurredOn,
       source: 'chat',
     });
