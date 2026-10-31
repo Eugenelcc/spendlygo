@@ -1046,3 +1046,46 @@ planned). BACKLOG already reads "Part 1 in progress".
 - [x] Data (§3): the migration is additive and generated. The conditional
   `UPDATE … WHERE cycle_start_day <> day` makes repeats detectable.
   Telegram (§10): no new sends in Part 1
+
+### Re-review (Part 1 follow-ups)
+
+Scope: `ff941f7..HEAD` (8e466ff, bf61091, fa96631). `pnpm ci:local` with
+local Postgres: **passed** (typecheck, lint, all tests, build, bundle 86.1 KB
+gz, 43% of budget).
+
+- **Finding 1 (perf), resolved.** bf61091 changes no behaviour: `/me`'s
+  `settings.budgetCents` is exactly what `effectiveBudgetCents` returned, and
+  its cycle is the same `cycleContaining(todayFor, startDay)` that
+  `currentCycle` computed. `computeSafeToSpend` with `settings` passed runs the
+  same totals as before. The edge still calls service, and service calls the
+  repository. The stage counts are true: `/api/today` goes from 3 sequential stages to 2,
+  and text and OCR captures from 2 post-insert stages to 1. The capture now reads settings
+  before the insert instead of after it. That only matters if the budget or
+  start day changes within the same millisecond, so it's harmless.
+- **Nit A (not blocking).** The Build notes say "`/api/me` reads the space 2
+  times to 1". That's wrong. It was 3 reads (`effectiveBudgetCents`, `currentCycle`, and
+  `loadHouseholdView`'s `findById`, `index.ts:699`), and now it's 2. All of them
+  run in one parallel stage, so latency is unchanged either way. Fix the wording.
+- **Nit B (not blocking, remove now).** `currentCycle` (`service.ts:97`) has
+  no callers left in `apps/` or `packages/` and no tests. It's a dead export.
+  Lint and typecheck allow it because it's exported. It's 7 lines, so delete
+  it instead of parking it.
+- **Finding 2, resolved.** 8e466ff's expected day-1 strings match
+  `origin/main`'s `handleToday` no-budget reply and `handleBudget`'s set reply
+  ("That is $1,450.00 a day for the 1 day left this month."), line for line.
+  The mocks stub only the DB and `computeSafeToSpend`. `buildTodayText` and the real
+  `handleBudget` wording code still run against real `calculateSafeToSpend`
+  output, so the test isn't trivial. The day-1 with-budget case still uses
+  `toContain` and not an exact match. That's acceptable.
+- **Nit C (doc).** 8e466ff/fa96631 put the "P1-AC24 tightened…" paragraph
+  between the P1-AC24 and P1-AC25 rows of the Test report table (around line
+  645), which breaks the table. Rows AC25–AC27 no longer render. Move the
+  paragraph below the table.
+- **Finding 3, resolved.** The Build notes record real-stack screenshots
+  (signed initData from a throwaway token, local Postgres, `vite preview`),
+  4 scenarios × light/dark at 375px. The figures check out
+  (($350 − $138.50) ÷ 19 = $11.13, rounded down). The review table row for
+  P1-AC26 matches. The PNGs aren't committed, and the record says so.
+
+**Verdict: ready for owner.** Nits A–C are small doc and dead-code cleanups and
+can go in before merge. None of them blocks.
