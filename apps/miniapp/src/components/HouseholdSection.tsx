@@ -1,5 +1,6 @@
 import { useState, type JSX } from 'react';
-import type { Household } from '@spendlygo/shared';
+import type { Household, HouseholdBalancesResponse } from '@spendlygo/shared';
+import { formatMoney } from '../lib/format';
 import { haptics } from '../lib/telegram';
 
 export interface HouseholdSectionProps {
@@ -10,6 +11,10 @@ export interface HouseholdSectionProps {
   leaveBusy: boolean;
   onCreateInvite: () => void;
   onLeave: () => void;
+  /** Who-owes-who (PRD-adjacent) — undefined while loading, empty once square. */
+  balances: HouseholdBalancesResponse | undefined;
+  currency: string;
+  locale: string;
 }
 
 /**
@@ -27,6 +32,9 @@ export function HouseholdSection({
   leaveBusy,
   onCreateInvite,
   onLeave,
+  balances,
+  currency,
+  locale,
 }: HouseholdSectionProps): JSX.Element {
   const [confirmingLeave, setConfirmingLeave] = useState(false);
 
@@ -87,6 +95,39 @@ export function HouseholdSection({
         Everything either of you logs shows up for both of you, and either of you can change the
         budget.
       </p>
+
+      {household.members.length > 1 && (
+        <div className="balances">
+          <div className="balances__label">Who owes who</div>
+          {!balances ? (
+            <div className="skeleton skeleton--short" />
+          ) : balances.settlements.length === 0 ? (
+            <p className="balances__settled">All settled up 🎉</p>
+          ) : (
+            balances.settlements.map((settlement) => {
+              const you = household.members.find((m) => m.isSelf)?.userId;
+              const youOwe = settlement.fromUserId === you;
+              const youAreOwed = settlement.toUserId === you;
+              const otherName = youOwe
+                ? (settlement.toName ?? 'Partner')
+                : (settlement.fromName ?? 'Partner');
+              return (
+                <p
+                  key={`${settlement.fromUserId}-${settlement.toUserId}`}
+                  className="balances__line"
+                >
+                  {youOwe && `You owe ${otherName} `}
+                  {youAreOwed && `${otherName} owes you `}
+                  {!youOwe &&
+                    !youAreOwed &&
+                    `${settlement.fromName ?? 'Someone'} owes ${settlement.toName ?? 'someone'} `}
+                  <strong>{formatMoney(settlement.amountCents, { currency, locale })}</strong>
+                </p>
+              );
+            })
+          )}
+        </div>
+      )}
 
       {household.members.length < 2 &&
         (inviteCode ? (

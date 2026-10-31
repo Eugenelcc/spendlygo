@@ -43,6 +43,13 @@
       "when": 1793442114195,
       "tag": "0005_classy_absorbing_man",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1793442831235,
+      "tag": "0006_unique_dexter_bennett",
+      "breakpoints": true
     }
   ]
 }

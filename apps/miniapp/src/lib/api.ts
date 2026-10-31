@@ -7,6 +7,7 @@ import type {
   FxRateResponse,
   GoalProgressResponse,
   HeatmapResponse,
+  HouseholdBalancesResponse,
   HouseholdInviteResponse,
   HouseholdResponse,
   MeResponse,
@@ -22,6 +23,7 @@ import type {
   TodayResponse,
   Transaction,
   TransactionsResponse,
+  TransactionSplitsResponse,
   UpdateSavingsGoalBody,
   UpdateSettingsBody,
 } from '@spendlygo/shared';
@@ -199,6 +201,11 @@ export const api = {
     request<{ ok: true }>(`/api/recurring/${id}`, { method: 'DELETE' }),
 
   household: () => request<HouseholdResponse>('/api/household'),
+
+  householdBalances: () => request<HouseholdBalancesResponse>('/api/household/balances'),
+
+  transactionSplits: (transactionId: string) =>
+    request<TransactionSplitsResponse>(`/api/transactions/${transactionId}/splits`),
 
   createHouseholdInvite: () =>
     request<HouseholdInviteResponse>('/api/household/invite', { method: 'POST' }),

@@ -188,9 +188,23 @@ function Shell(): JSX.Element {
     enabled: selected !== null && selected.hasPhoto,
   });
 
+  const txnSplits = useQuery({
+    queryKey: ['transactionSplits', selected?.id],
+    queryFn: () => api.transactionSplits(selected?.id as string),
+    enabled: selected !== null && selected.hasSplit,
+  });
+
   const goals = useQuery({
     queryKey: ['goals'],
     queryFn: api.savingsGoals,
+    enabled: tab === 'settings',
+  });
+
+  // Who-owes-who (PRD-adjacent) — cheap to call even for a personal space,
+  // which just returns empty arrays, so no extra condition on shared-ness.
+  const balances = useQuery({
+    queryKey: ['householdBalances'],
+    queryFn: api.householdBalances,
     enabled: tab === 'settings',
   });
 
@@ -218,6 +232,7 @@ function Shell(): JSX.Element {
     void queryClient.invalidateQueries({ queryKey: ['transactions'] });
     void queryClient.invalidateQueries({ queryKey: ['stats'] });
     void queryClient.invalidateQueries({ queryKey: ['me'] });
+    void queryClient.invalidateQueries({ queryKey: ['householdBalances'] });
   };
 
   /**
@@ -512,6 +527,7 @@ function Shell(): JSX.Element {
             householdLeaveBusy={leaveHousehold.isPending}
             onCreateHouseholdInvite={() => createHouseholdInvite.mutate()}
             onLeaveHousehold={() => leaveHousehold.mutate()}
+            balances={balances.data}
             goals={goals.data?.goals ?? []}
             goalsLoading={goals.isPending}
             goalsBusy={addGoal.isPending || contributeGoal.isPending || archiveGoal.isPending}
@@ -587,6 +603,7 @@ function Shell(): JSX.Element {
           onForeignCurrencyChange={setForeignCurrency}
           fxRate={fxPreview.data?.rate}
           fxRateLoading={fxPreview.isPending}
+          householdMembers={me.data?.household?.members ?? []}
           onSubmit={(input) => create.mutate(input)}
         />
       </Sheet>
@@ -614,6 +631,25 @@ function Shell(): JSX.Element {
               </p>
             )}
             {selected.note && <p className="detail__note">{selected.note}</p>}
+            {selected.hasSplit && (
+              <div className="detail__split">
+                <div className="detail__split-label">
+                  Split · paid by {selected.isOwn ? 'you' : selected.authorName}
+                </div>
+                {txnSplits.isPending ? (
+                  <div className="skeleton skeleton--short" />
+                ) : (
+                  txnSplits.data?.splits.map((split) => (
+                    <p className="detail__split-row" key={split.userId}>
+                      <span>
+                        {split.userId === me.data.user.id ? 'You' : (split.firstName ?? 'Partner')}
+                      </span>
+                      <span>{formatMoney(split.shareCents, { currency, locale })}</span>
+                    </p>
+                  ))
+                )}
+              </div>
+            )}
             {selected.hasPhoto && (
               <div className="detail__photos">
                 {photos.data?.photos.map((photo) => (

@@ -3,6 +3,7 @@ import type {
   Cadence,
   Category,
   Direction,
+  HouseholdBalancesResponse,
   MeResponse,
   RecurringRule,
   SavingsGoal,
@@ -43,6 +44,7 @@ export interface SettingsScreenProps {
   householdLeaveBusy: boolean;
   onCreateHouseholdInvite: () => void;
   onLeaveHousehold: () => void;
+  balances: HouseholdBalancesResponse | undefined;
   goals: SavingsGoal[];
   goalsLoading: boolean;
   goalsBusy: boolean;
@@ -83,6 +85,7 @@ export function SettingsScreen({
   householdLeaveBusy,
   onCreateHouseholdInvite,
   onLeaveHousehold,
+  balances,
   goals,
   goalsLoading,
   goalsBusy,
@@ -234,6 +237,9 @@ export function SettingsScreen({
         leaveBusy={householdLeaveBusy}
         onCreateInvite={onCreateHouseholdInvite}
         onLeave={onLeaveHousehold}
+        balances={balances}
+        currency={user.currency}
+        locale={user.locale}
       />
 
       <GoalsSection

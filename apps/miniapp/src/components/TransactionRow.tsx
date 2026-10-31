@@ -40,6 +40,15 @@ export function TransactionRow({
               📷
             </span>
           )}
+          {transaction.hasSplit && (
+            <span
+              className="txn__photo-badge"
+              aria-label="Split with household"
+              title="Split with household"
+            >
+              🤝
+            </span>
+          )}
         </span>
         <span className="txn__meta">
           {transaction.categoryName ?? 'Uncategorised'}

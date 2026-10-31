@@ -3,6 +3,12 @@ import type { Category, Direction } from '@spendlygo/shared';
 import { currencySymbol, formatMoney } from '../lib/format';
 import { haptics } from '../lib/telegram';
 
+export interface CaptureHouseholdMember {
+  userId: string;
+  firstName: string | null;
+  isSelf: boolean;
+}
+
 export interface CaptureProps {
   categories: Category[];
   currency: string;
@@ -16,6 +22,8 @@ export interface CaptureProps {
   /** A live preview of the rate for `foreignCurrency`; the server fetches its own at save time regardless. */
   fxRate: number | undefined;
   fxRateLoading: boolean;
+  /** The active space's members — the split toggle only shows once there's more than one (PRD-adjacent). */
+  householdMembers: CaptureHouseholdMember[];
   onSubmit: (input: {
     direction: Direction;
     amountCents?: number;
@@ -24,6 +32,7 @@ export interface CaptureProps {
     categoryId: string | null;
     note: string | null;
     occurredOn: string;
+    splits?: Array<{ userId: string; shareCents: number }>;
   }) => void;
 }
 
@@ -84,6 +93,27 @@ function previousDay(isoDate: string): string {
   return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}-${String(date.getUTCDate()).padStart(2, '0')}`;
 }
 
+/** The leftover cent from an uneven division goes one at a time to the
+ * first members in list order, so the shares always sum exactly. */
+function equalShares(
+  members: CaptureHouseholdMember[],
+  totalCents: number,
+): Record<string, number> {
+  const n = members.length || 1;
+  const base = Math.floor(totalCents / n);
+  let remainder = totalCents - base * n;
+  const shares: Record<string, number> = {};
+  for (const member of members) {
+    shares[member.userId] = base + (remainder > 0 ? 1 : 0);
+    if (remainder > 0) remainder -= 1;
+  }
+  return shares;
+}
+
+function memberLabel(member: CaptureHouseholdMember): string {
+  return member.isSelf ? 'You' : (member.firstName ?? 'Partner');
+}
+
 export function Capture({
   categories,
   currency,
@@ -95,6 +125,7 @@ export function Capture({
   onForeignCurrencyChange,
   fxRate,
   fxRateLoading,
+  householdMembers,
   onSubmit,
 }: CaptureProps): JSX.Element {
   const [direction, setDirection] = useState<Direction>('out');
@@ -102,9 +133,36 @@ export function Capture({
   const [categoryId, setCategoryId] = useState<string | null>(null);
   const [note, setNote] = useState('');
   const [occurredOn, setOccurredOn] = useState(today);
+  const [splitEnabled, setSplitEnabled] = useState(false);
+  const [splitMode, setSplitMode] = useState<'equal' | 'custom'>('equal');
+  const [customShares, setCustomShares] = useState<Record<string, string>>({});
 
   const cents = toCents(raw);
-  const canSave = cents > 0 && !busy && (!foreignCurrency || (!fxRateLoading && !!fxRate));
+  // The amount a split has to add up to — the converted figure when paid in
+  // a foreign currency, never the typed-but-unconverted one.
+  const finalAmountCents = foreignCurrency && fxRate ? Math.round(cents * fxRate) : cents;
+
+  const canSplit = direction === 'out' && householdMembers.length > 1;
+
+  const shares = useMemo(() => {
+    if (!splitEnabled || !canSplit) return {};
+    if (splitMode === 'equal') return equalShares(householdMembers, finalAmountCents);
+    const parsed: Record<string, number> = {};
+    for (const member of householdMembers) {
+      const value = Number((customShares[member.userId] ?? '').replace(/,/g, ''));
+      parsed[member.userId] = Number.isFinite(value) && value > 0 ? Math.round(value * 100) : 0;
+    }
+    return parsed;
+  }, [splitEnabled, canSplit, splitMode, householdMembers, finalAmountCents, customShares]);
+
+  const splitTotalCents = Object.values(shares).reduce((sum, value) => sum + value, 0);
+  const splitValid = !splitEnabled || !canSplit || splitTotalCents === finalAmountCents;
+
+  const canSave =
+    cents > 0 &&
+    !busy &&
+    (!foreignCurrency || (!fxRateLoading && !!fxRate)) &&
+    (!splitEnabled || splitValid);
 
   const visible = useMemo(
     () => categories.filter((c) => c.kind === (direction === 'in' ? 'income' : 'expense')),
@@ -136,6 +194,7 @@ export function Capture({
               setDirection(value);
               // Categories are per-kind, so a stale selection would be invalid.
               setCategoryId(null);
+              if (value === 'in') setSplitEnabled(false);
             }}
           >
             {value === 'out' ? 'Spent' : 'Received'}
@@ -185,6 +244,80 @@ export function Capture({
               ? `≈ ${formatMoney(Math.round(cents * fxRate), { currency, locale })}`
               : "Couldn't fetch a rate — try again"}
         </p>
+      )}
+
+      {canSplit && (
+        <div className="capture__split">
+          <button
+            type="button"
+            className="link"
+            onClick={() => {
+              haptics.tap();
+              setSplitEnabled((current) => !current);
+            }}
+          >
+            {splitEnabled ? '✕ Don’t split' : '🤝 Split with household'}
+          </button>
+
+          {splitEnabled && (
+            <div className="split-panel">
+              <div className="seg seg--sm" role="tablist" aria-label="Split type">
+                {(['equal', 'custom'] as const).map((mode) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    role="tab"
+                    aria-selected={splitMode === mode}
+                    className={`seg__option ${splitMode === mode ? 'seg__option--on' : ''}`}
+                    onClick={() => {
+                      haptics.select();
+                      setSplitMode(mode);
+                    }}
+                  >
+                    {mode === 'equal' ? 'Equal' : 'Custom'}
+                  </button>
+                ))}
+              </div>
+
+              <div className="split-rows">
+                {householdMembers.map((member) => (
+                  <div className="split-row" key={member.userId}>
+                    <span className="split-row__name">{memberLabel(member)}</span>
+                    {splitMode === 'equal' ? (
+                      <span className="split-row__amount">
+                        {formatMoney(shares[member.userId] ?? 0, { currency, locale })}
+                      </span>
+                    ) : (
+                      <div className="field split-row__field">
+                        <span className="field__prefix">{currencySymbol(currency, locale)}</span>
+                        <input
+                          className="input input--flush"
+                          inputMode="decimal"
+                          value={customShares[member.userId] ?? ''}
+                          placeholder="0.00"
+                          aria-label={`${memberLabel(member)}'s share`}
+                          onChange={(event) =>
+                            setCustomShares((current) => ({
+                              ...current,
+                              [member.userId]: event.target.value,
+                            }))
+                          }
+                        />
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              {splitMode === 'custom' && (
+                <p className={`split-total ${splitValid ? '' : 'split-total--off'}`}>
+                  {formatMoney(splitTotalCents, { currency, locale })} of{' '}
+                  {formatMoney(finalAmountCents, { currency, locale })}
+                </p>
+              )}
+            </div>
+          )}
+        </div>
       )}
 
       <div className="chips" role="group" aria-label="Category">
@@ -267,6 +400,12 @@ export function Capture({
         onClick={() => {
           if (!canSave) return;
           haptics.press();
+          const splits =
+            splitEnabled && canSplit
+              ? Object.entries(shares)
+                  .filter(([, shareCents]) => shareCents > 0)
+                  .map(([userId, shareCents]) => ({ userId, shareCents }))
+              : undefined;
           onSubmit({
             direction,
             ...(foreignCurrency
@@ -275,6 +414,7 @@ export function Capture({
             categoryId,
             note: note.trim() === '' ? null : note.trim(),
             occurredOn,
+            ...(splits && splits.length > 0 ? { splits } : {}),
           });
         }}
       >

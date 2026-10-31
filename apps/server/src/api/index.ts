@@ -7,8 +7,10 @@ import {
   isoDateOf,
   monthName,
   monthRange,
+  netBalances,
   parseIsoDate,
   ServiceUnavailableError,
+  simplifyBalances,
   toIsoDate,
   ValidationError,
   yearRange,
@@ -42,6 +44,7 @@ import {
   type GoalProgressResponse,
   type HeatmapResponse,
   type Household as ApiHousehold,
+  type HouseholdBalancesResponse,
   type HouseholdInviteResponse,
   type HouseholdResponse,
   type MeResponse,
@@ -56,6 +59,7 @@ import {
   type StatsResponse,
   type TodayResponse,
   type TransactionsResponse,
+  type TransactionSplitsResponse,
 } from '@spendlygo/shared';
 import { NotFoundError } from '@spendlygo/core';
 import type { SpendlygoBot } from '../bot/index.js';
@@ -187,6 +191,51 @@ export function createApiRouter(ctx: AppContext, bot: SpendlygoBot): Hono<ApiEnv
   api.get('/household', async (c) => {
     const user = c.get('user');
     const body: HouseholdResponse = { household: await loadHouseholdView(ctx, user) };
+    return c.json(body);
+  });
+
+  // Who-owes-who (PRD-adjacent) — empty arrays for a personal space, never
+  // an error, so the Mini App can call this unconditionally.
+  api.get('/household/balances', async (c) => {
+    const user = c.get('user');
+    const householdId = activeHouseholdId(user);
+    const household = await householdsRepo.findById(ctx.db, householdId);
+
+    if (!household || household.isPersonal) {
+      const body: HouseholdBalancesResponse = { balances: [], settlements: [] };
+      return c.json(body);
+    }
+
+    const [members, raw] = await Promise.all([
+      householdsRepo.membersOf(ctx.db, householdId),
+      transactionsRepo.balancesFor(ctx.db, householdId),
+    ]);
+
+    const rawByUser = new Map(raw.map((row) => [row.userId, row]));
+    const balances = members.map((member) => {
+      const totals = rawByUser.get(member.id) ?? { paidCents: 0, owedCents: 0 };
+      return { userId: member.id, firstName: member.firstName, ...totals };
+    });
+
+    const nets = netBalances(balances);
+    const settlements = simplifyBalances(balances);
+    const nameOf = (id: string) => members.find((m) => m.id === id)?.firstName ?? null;
+
+    const body: HouseholdBalancesResponse = {
+      balances: nets.map((b) => ({
+        userId: b.userId,
+        firstName: nameOf(b.userId),
+        isSelf: b.userId === user.id,
+        netCents: b.netCents,
+      })),
+      settlements: settlements.map((s) => ({
+        fromUserId: s.fromUserId,
+        fromName: nameOf(s.fromUserId),
+        toUserId: s.toUserId,
+        toName: nameOf(s.toUserId),
+        amountCents: s.amountCents,
+      })),
+    };
     return c.json(body);
   });
 
@@ -373,11 +422,17 @@ export function createApiRouter(ctx: AppContext, bot: SpendlygoBot): Hono<ApiEnv
           )
         : null;
 
+    const finalAmountCents = fx ? fx.amountCents : (input.amountCents as number);
+
+    const splits = input.splits
+      ? await validateSplits(ctx, user, input.direction, finalAmountCents, input.splits)
+      : undefined;
+
     const created = await transactionsRepo.create(ctx.db, {
       userId: user.id,
       householdId: activeHouseholdId(user),
       direction: input.direction,
-      amountCents: fx ? fx.amountCents : (input.amountCents as number),
+      amountCents: finalAmountCents,
       categoryId,
       note: input.note ?? null,
       occurredOn: input.occurredOn ?? today,
@@ -385,6 +440,7 @@ export function createApiRouter(ctx: AppContext, bot: SpendlygoBot): Hono<ApiEnv
       originalCurrency: fx ? input.originalCurrency : null,
       originalAmountCents: fx ? input.originalAmountCents : null,
       fxRate: fx ? fx.rate : null,
+      splits,
     });
 
     const [view, safeToSpend] = await Promise.all([
@@ -450,6 +506,27 @@ export function createApiRouter(ctx: AppContext, bot: SpendlygoBot): Hono<ApiEnv
 
     const body: PhotosResponse = {
       photos: rows.map((row) => ({ id: row.id, width: row.width, height: row.height })),
+    };
+    return c.json(body);
+  });
+
+  // Who-owes-who, per transaction (PRD-adjacent) — lazy-loaded like photos,
+  // only called when `transaction.hasSplit` is true. Visible to the whole
+  // space, not just the transaction's author.
+  api.get('/transactions/:id/splits', async (c) => {
+    const user = c.get('user');
+    const rows = await transactionsRepo.splitsFor(
+      ctx.db,
+      activeHouseholdId(user),
+      c.req.param('id'),
+    );
+
+    const body: TransactionSplitsResponse = {
+      splits: rows.map((row) => ({
+        userId: row.userId,
+        firstName: row.firstName,
+        shareCents: row.shareCents,
+      })),
     };
     return c.json(body);
   });
@@ -793,6 +870,47 @@ async function convertForeignAmount(
   }
 
   return { amountCents, rate };
+}
+
+/**
+ * Who-owes-who shares (PRD-adjacent) — only valid for a shared space's own
+ * expenses. Throws rather than silently dropping or auto-correcting a bad
+ * split: a split that doesn't add up exactly is a bug in the client, not
+ * something the server should guess its way around (GUARDRAILS.md section 2).
+ */
+async function validateSplits(
+  ctx: AppContext,
+  user: User,
+  direction: 'in' | 'out',
+  amountCents: number,
+  splits: Array<{ userId: string; shareCents: number }>,
+): Promise<Array<{ userId: string; shareCents: number }>> {
+  if (direction !== 'out') {
+    throw new ValidationError('Only an expense (not income) can be split.');
+  }
+
+  const householdId = activeHouseholdId(user);
+  const household = await householdsRepo.findById(ctx.db, householdId);
+  if (!household || household.isPersonal) {
+    throw new ValidationError('Splitting needs a shared space — invite someone first.');
+  }
+
+  const members = await householdsRepo.membersOf(ctx.db, householdId);
+  const memberIds = new Set(members.map((member) => member.id));
+  for (const split of splits) {
+    if (!memberIds.has(split.userId)) {
+      throw new ValidationError('Every split must be a current member of this space.');
+    }
+  }
+
+  const sum = splits.reduce((total, split) => total + split.shareCents, 0);
+  if (sum !== amountCents) {
+    throw new ValidationError(
+      `The split (${sum} cents) must add up to the full amount (${amountCents} cents).`,
+    );
+  }
+
+  return splits;
 }
 
 async function buildStats(

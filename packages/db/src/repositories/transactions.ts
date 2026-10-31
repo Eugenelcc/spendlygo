@@ -19,7 +19,14 @@
 
 import { and, asc, desc, eq, gte, isNull, lte, sql } from 'drizzle-orm';
 import type { Database } from '../client.js';
-import { attachments, categories, transactions, users, type Transaction } from '../schema.js';
+import {
+  attachments,
+  categories,
+  transactionSplits,
+  transactions,
+  users,
+  type Transaction,
+} from '../schema.js';
 
 export type Direction = 'in' | 'out';
 export type TransactionSource = 'chat' | 'miniapp' | 'recurring';
@@ -40,6 +47,9 @@ export interface CreateTransactionInput {
   originalCurrency?: string | null;
   originalAmountCents?: number | null;
   fxRate?: number | null;
+  /** Who-owes-who shares (PRD-adjacent) — must sum to `amountCents` exactly;
+   * validated by the caller (apps/server/src/api/index.ts), not here. */
+  splits?: Array<{ userId: string; shareCents: number }>;
 }
 
 /** A transaction with its category and author joined — what every screen shows. */
@@ -62,6 +72,9 @@ export interface TransactionView {
   originalCurrency: string | null;
   originalAmountCents: number | null;
   fxRate: number | null;
+  /** Whether this one has who-owes-who shares — the detail view fetches
+   * `splitsFor` only when this is true, same lazy pattern as photos. */
+  hasSplit: boolean;
 }
 
 /** Rows this exact author may edit or delete. Never space-widened. */
@@ -97,6 +110,9 @@ const viewColumns = {
   hasPhoto: sql<boolean>`exists(
     select 1 from ${attachments} where ${attachments.transactionId} = ${transactions.id}
   )`,
+  hasSplit: sql<boolean>`exists(
+    select 1 from ${transactionSplits} where ${transactionSplits.transactionId} = ${transactions.id}
+  )`,
 };
 
 /** Every view query joins the same two tables, in the same order. */
@@ -109,27 +125,120 @@ function baseViewQuery(db: Database) {
 }
 
 export async function create(db: Database, input: CreateTransactionInput): Promise<Transaction> {
-  const rows = await db
-    .insert(transactions)
-    .values({
-      userId: input.userId,
-      householdId: input.householdId,
-      direction: input.direction,
-      amountCents: input.amountCents,
-      categoryId: input.categoryId,
-      note: input.note,
-      occurredOn: input.occurredOn,
-      source: input.source,
-      savingsGoalId: input.savingsGoalId ?? null,
-      originalCurrency: input.originalCurrency ?? null,
-      originalAmountCents: input.originalAmountCents ?? null,
-      fxRate: input.fxRate ?? null,
-    })
-    .returning();
+  return db.transaction(async (tx) => {
+    const rows = await tx
+      .insert(transactions)
+      .values({
+        userId: input.userId,
+        householdId: input.householdId,
+        direction: input.direction,
+        amountCents: input.amountCents,
+        categoryId: input.categoryId,
+        note: input.note,
+        occurredOn: input.occurredOn,
+        source: input.source,
+        savingsGoalId: input.savingsGoalId ?? null,
+        originalCurrency: input.originalCurrency ?? null,
+        originalAmountCents: input.originalAmountCents ?? null,
+        fxRate: input.fxRate ?? null,
+      })
+      .returning();
 
-  const row = rows[0];
-  if (!row) throw new Error('Insert returned no transaction');
-  return row;
+    const row = rows[0];
+    if (!row) throw new Error('Insert returned no transaction');
+
+    if (input.splits && input.splits.length > 0) {
+      await tx.insert(transactionSplits).values(
+        input.splits.map((split) => ({
+          transactionId: row.id,
+          userId: split.userId,
+          shareCents: split.shareCents,
+        })),
+      );
+    }
+
+    return row;
+  });
+}
+
+/**
+ * Who-owes-who shares for one transaction, with each member's name joined in
+ * for display — lazy-loaded like photos, only when `hasSplit` is true.
+ * Scoped by the viewer's active household, same pattern as
+ * `attachmentsRepo.listForTransaction`: visible to the whole space, not just
+ * the transaction's author, since the whole point is every member seeing
+ * their own share.
+ */
+export async function splitsFor(
+  db: Database,
+  viewerHouseholdId: string,
+  transactionId: string,
+): Promise<Array<{ userId: string; firstName: string | null; shareCents: number }>> {
+  return db
+    .select({
+      userId: transactionSplits.userId,
+      firstName: users.firstName,
+      shareCents: transactionSplits.shareCents,
+    })
+    .from(transactionSplits)
+    .innerJoin(transactions, eq(transactions.id, transactionSplits.transactionId))
+    .innerJoin(users, eq(users.id, transactionSplits.userId))
+    .where(
+      and(
+        eq(transactionSplits.transactionId, transactionId),
+        eq(transactions.householdId, viewerHouseholdId),
+        isNull(transactions.deletedAt),
+      ),
+    );
+}
+
+/**
+ * Who paid, and who owed what, per member of a shared space — the raw
+ * figures `packages/core/src/balances.ts#netBalances` turns into a net
+ * position per member. Only `direction: 'out'` transactions are split
+ * (PRD-adjacent: splitting an income entry isn't a debt). A transaction with
+ * no split rows is excluded entirely from `paidCents` — it was never shared,
+ * so it isn't part of anyone else's debt.
+ */
+export async function balancesFor(
+  db: Database,
+  householdId: string,
+): Promise<Array<{ userId: string; paidCents: number; owedCents: number }>> {
+  const hasSplitFilter = sql`exists (
+    select 1 from ${transactionSplits} where ${transactionSplits.transactionId} = ${transactions.id}
+  )`;
+
+  const [paidRows, owedRows] = await Promise.all([
+    db
+      .select({
+        userId: transactions.userId,
+        paidCents: sql<number>`coalesce(sum(${transactions.amountCents}), 0)::int`,
+      })
+      .from(transactions)
+      .where(and(scopedTo(householdId), eq(transactions.direction, 'out'), hasSplitFilter))
+      .groupBy(transactions.userId),
+    db
+      .select({
+        userId: transactionSplits.userId,
+        owedCents: sql<number>`coalesce(sum(${transactionSplits.shareCents}), 0)::int`,
+      })
+      .from(transactionSplits)
+      .innerJoin(transactions, eq(transactions.id, transactionSplits.transactionId))
+      .where(and(scopedTo(householdId), eq(transactions.direction, 'out')))
+      .groupBy(transactionSplits.userId),
+  ]);
+
+  const byUser = new Map<string, { paidCents: number; owedCents: number }>();
+  for (const row of paidRows) {
+    byUser.set(row.userId, { paidCents: row.paidCents, owedCents: 0 });
+  }
+  for (const row of owedRows) {
+    const existing = byUser.get(row.userId) ?? { paidCents: 0, owedCents: 0 };
+    existing.owedCents = row.owedCents;
+    byUser.set(row.userId, existing);
+  }
+
+  return [...byUser.entries()].map(([userId, totals]) => ({ userId, ...totals }));
 }
 
 /** Author-only — see the file header. */

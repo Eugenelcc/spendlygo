@@ -10,3 +10,4 @@ export * from './savings.js';
 export * from './streaks.js';
 export * from './receipt-text.js';
 export * from './csv-export.js';
+export * from './balances.js';

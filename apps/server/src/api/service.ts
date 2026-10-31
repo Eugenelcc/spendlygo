@@ -90,6 +90,7 @@ export function toApiTransaction(
     originalCurrency: row.originalCurrency,
     originalAmountCents: row.originalAmountCents,
     fxRate: row.fxRate,
+    hasSplit: row.hasSplit,
   };
 }
 

@@ -287,6 +287,38 @@ export const transactions = pgTable(
   ],
 );
 
+/**
+ * Who owes what for a shared-space expense (PRD-adjacent) — "who paid" is
+ * already `transactions.userId`; this is "who it was really for". A
+ * transaction with no rows here is wholly the payer's own, exactly like
+ * every transaction before this table existed — splitting is opt-in per
+ * entry, never inferred. When rows exist, their `shareCents` always sum to
+ * the parent transaction's `amountCents` exactly (enforced in
+ * `apps/server/src/api/index.ts`, not expressible as a single-table CHECK).
+ * Balances are never stored — computed fresh in SQL from these rows
+ * (`packages/db/src/repositories/transactions.ts#balancesFor`), the same
+ * "aggregate in SQL, never cache a figure that can drift" rule every other
+ * total in this app already follows.
+ */
+export const transactionSplits = pgTable(
+  'transaction_splits',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    transactionId: uuid('transaction_id')
+      .notNull()
+      .references(() => transactions.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    shareCents: integer('share_cents').notNull(),
+  },
+  (t) => [
+    uniqueIndex('transaction_splits_tx_user_uq').on(t.transactionId, t.userId),
+    index('transaction_splits_user_idx').on(t.userId),
+    check('transaction_splits_share_positive_ck', sql`${t.shareCents} > 0`),
+  ],
+);
+
 // --- attachments ------------------------------------------------------------
 
 export const attachments = pgTable(
@@ -501,3 +533,4 @@ export type HouseholdMember = typeof householdMembers.$inferSelect;
 export type HouseholdInvite = typeof householdInvites.$inferSelect;
 export type SavingsGoal = typeof savingsGoals.$inferSelect;
 export type NewSavingsGoal = typeof savingsGoals.$inferInsert;
+export type TransactionSplit = typeof transactionSplits.$inferSelect;

@@ -88,6 +88,31 @@ export const householdInviteResponseSchema = z.object({
 });
 export type HouseholdInviteResponse = z.infer<typeof householdInviteResponseSchema>;
 
+// --- GET /api/household/balances (who-owes-who, PRD-adjacent) ---------------
+
+export const memberBalanceSchema = z.object({
+  userId: z.string().uuid(),
+  firstName: z.string().nullable(),
+  isSelf: z.boolean(),
+  /** paid minus owed, across every split expense. Positive: the space owes them. */
+  netCents: z.number().int(),
+});
+
+export const settlementSchema = z.object({
+  fromUserId: z.string().uuid(),
+  fromName: z.string().nullable(),
+  toUserId: z.string().uuid(),
+  toName: z.string().nullable(),
+  amountCents: z.number().int().positive(),
+});
+
+export const householdBalancesResponseSchema = z.object({
+  balances: z.array(memberBalanceSchema),
+  /** The fewest transfers that settle everyone up — empty once square. */
+  settlements: z.array(settlementSchema),
+});
+export type HouseholdBalancesResponse = z.infer<typeof householdBalancesResponseSchema>;
+
 // --- spaces (PRD F12): every space a user belongs to, for the switcher -----
 
 export const spaceSchema = z.object({
@@ -201,11 +226,19 @@ export const transactionSchema = z.object({
   originalCurrency: z.string().length(3).nullable(),
   originalAmountCents: z.number().int().positive().nullable(),
   fxRate: z.number().positive().nullable(),
+  /** Whether this has who-owes-who shares (PRD-adjacent) — fetch
+   * `/api/transactions/:id/splits` for the per-member breakdown. */
+  hasSplit: z.boolean(),
 });
 export type Transaction = z.infer<typeof transactionSchema>;
 
 /** ISO 4217, 2-decimal currencies only — see ADR 0007's scope note. */
 const currencyCodeSchema = z.string().regex(/^[A-Z]{3}$/, 'Expected a 3-letter currency code');
+
+const splitInputSchema = z.object({
+  userId: z.string().uuid(),
+  shareCents: amountCentsSchema,
+});
 
 const createTransactionObjectSchema = z.object({
   direction: directionSchema,
@@ -217,6 +250,9 @@ const createTransactionObjectSchema = z.object({
   occurredOn: isoDateSchema.optional(),
   originalCurrency: currencyCodeSchema.optional(),
   originalAmountCents: amountCentsSchema.optional(),
+  /** Who-owes-who shares (PRD-adjacent) — must sum to the final amountCents
+   * exactly; the server validates this, see apps/server/src/api/index.ts. */
+  splits: z.array(splitInputSchema).min(1).optional(),
 });
 
 export const createTransactionSchema = createTransactionObjectSchema.superRefine((value, ctx) => {
@@ -239,7 +275,7 @@ export const createTransactionSchema = createTransactionObjectSchema.superRefine
 export type CreateTransactionBody = z.infer<typeof createTransactionSchema>;
 
 export const updateTransactionSchema = createTransactionObjectSchema
-  .omit({ originalCurrency: true, originalAmountCents: true })
+  .omit({ originalCurrency: true, originalAmountCents: true, splits: true })
   .partial();
 export type UpdateTransactionBody = z.infer<typeof updateTransactionSchema>;
 
@@ -360,6 +396,19 @@ export const photosResponseSchema = z.object({
   ),
 });
 export type PhotosResponse = z.infer<typeof photosResponseSchema>;
+
+// --- GET /api/transactions/:id/splits (who-owes-who, PRD-adjacent) ----------
+
+export const transactionSplitsResponseSchema = z.object({
+  splits: z.array(
+    z.object({
+      userId: z.string().uuid(),
+      firstName: z.string().nullable(),
+      shareCents: z.number().int().positive(),
+    }),
+  ),
+});
+export type TransactionSplitsResponse = z.infer<typeof transactionSplitsResponseSchema>;
 
 // --- GET /api/recap -----------------------------------------------------
 
