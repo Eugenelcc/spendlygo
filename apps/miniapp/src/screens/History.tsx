@@ -278,7 +278,7 @@ export function HistoryScreen({
           <div className="empty__emoji">⚠️</div>
           <p className="empty__body">Couldn't load this cycle.</p>
           {onRetry && (
-            <button type="button" className="chip" onClick={onRetry}>
+            <button type="button" className="primary primary--inline" onClick={onRetry}>
               Try again
             </button>
           )}

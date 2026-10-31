@@ -24,7 +24,7 @@ export function CycleStepper({
         type="button"
         className="date-range__step"
         aria-label="Previous cycle"
-        disabled={loading}
+        disabled={loading || label === undefined}
         onClick={() => {
           haptics.tap();
           onPrevious();
