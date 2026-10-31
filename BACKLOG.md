@@ -18,7 +18,13 @@ before starting any new feature.
 | B-001 | Soft-deleted transactions are purged after 30 days | F11.3 | todo |
 | B-002 | Full account deletion on request | §12, GUARDRAILS §6 | todo |
 | B-003 | `/month` bot command | F7, §8 | todo |
-| B-004 | `/settings` bot command | F9.4, §8 | in progress (built, agent-reviewed; awaiting owner) |
+| B-032 | **Pay cycle:** budget month starts on a chosen day (e.g. the 20th) | F17 (new) | spec |
+
+**B-032 — Pay cycle.** Grilled with the owner 2026-10-31. The confirmed
+recap is in `docs/specs/B-032-pay-cycle.md`. Each space gets a cycle start day
+(1–31, clamped), and everything month-based follows it. **Priority: next,
+ahead of B-001–B-003** (owner decision). B-003 `/month` will be built on top
+of it. Risky (safe-to-spend, date boundaries), so `challenger` runs.
 
 **B-001 — Soft-delete purge.** PRD F11.3 and GUARDRAILS §3 say soft-deleted
 transactions are purged after 30 days. No purge job exists in `tasks/`.
@@ -144,6 +150,10 @@ Parked ideas. Not agreed, not scheduled. Promote one only by agreement.
 |---|---|---|
 | B-013 | Voice-note capture | PRD §5.2, v2. Needs a zero-cost speech-to-text option first (GUARDRAILS §1). |
 | B-014 | Multi-currency + FX | PRD §5.2, v3. |
+| B-033 | Reserve upcoming bills: safe-to-spend sets aside recurring expenses due before the cycle ends | Owner interested (2026-10-31). Changes safe-to-spend maths; grill + challenger |
+| B-034 | Custom alert thresholds (e.g. 50 / 80 / 100%) instead of fixed 80 / 100% | Owner interested. Small, low risk |
+| B-035 | Per-category limits with their own alerts (e.g. Food ≤ $200 per cycle) | Owner interested. New data + screens |
+| B-036 | Weekend vs weekday allowance, same total per cycle | Owner interested. Changes safe-to-spend maths; grill + challenger |
 | B-028 | Change timezone from the bot or Mini App | Needs a validated IANA list and a decision on how already-stored `occurred_on` dates are treated. Parked at B-004 approval; `/settings` shows timezone read-only. |
 
 ## Drift & debt
@@ -162,6 +172,7 @@ Newest first. Earlier work (P0–P6 to date: PRs #4–#12) predates this backlog
 
 | ID | Title | Feature | PR |
 |---|---|---|---|
+| B-004 | `/settings` bot command; owner confirmed it working live on 2026-10-31 | F9 | #14, #15 |
 | B-015 | README figures refreshed: 450 tests, Mini App bundle 86.1 KB gzipped | — | (this branch) |
 | B-030 | GitHub CI unblocked: owner cleared the billing lock; a latent `pnpm/action-setup` version clash fixed; first green CI run | — | #13 |
 | B-031 | Grilling before spec/plan, the never-assume rule, `challenger` second-opinion agent, `pnpm ci:local` as the single CI pipeline, CI pinned to ubuntu-24.04 | — | (this branch) |
