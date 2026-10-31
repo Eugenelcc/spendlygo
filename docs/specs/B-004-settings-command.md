@@ -295,11 +295,29 @@ Single PR, feature ID **F9**: `feat(bot): F9 /settings command with digest, nudg
 
 ## Review (Stage 5)
 
-**Verdict:**
+**Verdict:** `ready for owner` — no blocking findings. Reviewed `6ac997b..HEAD` (0ebbc4b tests, 335e731 build).
 
 | # | Severity | file:line | Finding | Failure scenario |
 |---|---|---|---|---|
-| | | | | |
+| 1 | Low | `apps/server/src/bot/commands/settings.ts:135` (also `:116`) | The success-path `answerCallbackQuery` is awaited without `.catch`. If it rejects, the handler throws after the write: the message is not re-rendered and the `settings.updated` log line is skipped. | A tap answered late (e.g. a slow cold start, "query is too old") saves `digest_enabled=false`, but the message keeps showing "on" and a "Turn digest off" button. No data harm: the write is absolute, `bot.catch` logs it, and pressing again re-renders. Same pattern as `handleUndo`. Optional: `.catch(() => {})` on these two answers. |
+| 2 | Low (test) | `apps/server/src/bot/commands/settings.test.ts:341-354` | AC13 does not assert that `second.editMessageText` was called, so it does not prove the "not modified" rejection was actually reached and swallowed. It does prove the important part: a toggle implementation would flip the digest back on and fail the `false` check. | A future refactor that skips the edit on replay would still pass, which is harmless. A refactor that removes the `.catch` would fail correctly, but only because the edit happens to be called. |
+| 3 | Low (test) | `settings.test.ts:208-212` | AC15 checks that the promise rejects and that the callback was answered exactly once. It does not check the error text, and the failure is a `TypeError` from `{}` as db rather than a connection error. The behaviour under test (answer before rethrow) is still proven. | An answer with no text (spinner stops, user sees nothing) would pass. |
+| 4 | Info | `settings.test.ts:356-360` | AC16 sets `appUser` directly, so it proves that callback data carries no id and that the write is keyed by the sender. Deriving `appUser` from `from` is the existing `withUser` middleware, which this test does not cover. | Acceptable: the spec places identity in `withUser`, which is unchanged. |
+| 5 | Info | `settings.ts:144-147` | Builder deviation: `fields` is a comma-joined string of field names (e.g. `digestEnabled`). It holds no values, so it is privacy-safe (§6). Accepted. | — |
+
+**Other checks, all OK**
+- **Callback routing:** `set:` is registered after `undo:` and before the catch-all `bot.on('callback_query')`. The two prefixes are disjoint, no other handler or button uses `set:`, and the prefix holds no regex metacharacters. Unparseable `set:` data is answered with the stale text (AC14).
+- **Shared path:** the bot validates with the same `updateSettingsSchema` and writes through the same `usersRepo.updateSettings` (filtered by `users.id`) as `PATCH /api/settings`. The API route is untouched.
+- **Answering:** every path answers exactly once: invalid data, view, failed write (answer, then rethrow) and success.
+- **Telegram limit:** callback data is at most 8 bytes (`set:h:23`).
+- **Plan fidelity:** only the planned files changed. `help.ts` and the PRD §8 row are updated, and the B-026/B-027/B-028 and B-007 drift items exist in BACKLOG. Nothing was built outside the plan.
+- **Checks (run by reviewer):** `pnpm typecheck` passed, `pnpm lint` passed, `pnpm test` passed 468/468 with the DB tests running against the local Postgres. All 18 `settings.test.ts` tests pass, none skipped.
+
+**Acceptance criteria → tests:** AC1–AC18 map 1:1 to `apps/server/src/bot/commands/settings.test.ts`, under the names in the Test report table above. Every test exercises its criterion; findings 2 and 3 note where an assertion could be tighter.
 
 **Guardrail self-check** (WORKFLOW §4)
-- [ ] Cost · [ ] Money · [ ] Auth + cross-user test · [ ] Privacy · [ ] Time
+- [x] **Cost:** no new service, dependency or env var (§1)
+- [x] **Money:** n/a, no amounts read or written (§2)
+- [x] **Auth + cross-user test:** identity only from `botCtx.appUser` (`withUser`, after `allowlist`); the repository update is keyed by user id; the AC16 cross-user test is present (§4)
+- [x] **Privacy:** the log holds the user id and field names only (§6)
+- [x] **Time:** no boundary maths. The hour is shown next to the user's timezone and interpreted by the existing `send-digests.ts`; no `new Date()` added in domain logic (§9)
