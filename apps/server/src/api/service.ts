@@ -93,15 +93,6 @@ export async function effectiveBudgetCents(
   return (await activeSpaceSettings(ctx, user)).budgetCents;
 }
 
-/** The budget cycle containing `date` (default today) under the active space's start day. */
-export async function currentCycle(
-  ctx: AppContext,
-  user: User,
-  date: IsoDate = todayFor(ctx, user),
-): Promise<BudgetCycle> {
-  return cycleContaining(date, (await activeSpaceSettings(ctx, user)).cycleStartDay);
-}
-
 /** The wire shape of a cycle. The label is the month name for start day 1, else the range. */
 export function toApiCycle(cycle: BudgetCycle): ApiCycle {
   return {

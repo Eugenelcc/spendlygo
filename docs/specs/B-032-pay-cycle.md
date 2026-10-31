@@ -642,8 +642,6 @@ unauthenticated test and a cross-user test.
 | P1-AC22 | `pay-cycle.test.ts` › `GET /api/today › rejects unauthenticated, and a stranger never gets another space's cycle` |
 | P1-AC23 | `pay-cycle.test.ts` › `GET /api/me › returns the current cycle` |
 | P1-AC24 | `apps/server/src/bot/commands/money.test.ts` › `/today names the cycle range for day 20 and is unchanged for day 1` |
-
-P1-AC24 tightened after review finding 2: `money.test.ts` now asserts exact day-1 strings for `/today` with and without a budget and for `/budget 1500` ("left this month"), taken from `main`; the `as any` cast is gone. All pass (regression guards). Full suite: 35 files, 501 tests passed.
 | P1-AC25 | `apps/server/src/bot/capture.test.ts` › `says "this cycle" when over budget with a non-calendar cycle` |
 | P1-AC26 | Screenshot check (no Mini App test harness until B-016, Q8 A): Today, day 20 and day 1, light + dark, 375px |
 | P1-AC27 | `pay-cycle.test.ts` › `PATCH /api/settings › an unknown key is a 400 and changes nothing (strict schema)` |
@@ -706,6 +704,8 @@ P1-AC24 tightened after review finding 2: `money.test.ts` now asserts exact day-
 | P4-AC16 | Screenshot check: Settings budget card, day 20 / day 30 / day 1, personal and shared |
 | P4-AC17 | Screenshot check: daily mode preview, day 20 and day 1 |
 | P4-AC18 | Screenshot + dev-bot check: picking a day refreshes Today/Stats/History; a 400 reverts the select without "Saved" |
+
+P1-AC24 tightened after review finding 2: `money.test.ts` now asserts exact day-1 strings for `/today` with and without a budget and for `/budget 1500` ("left this month"), taken from `main`; the `as any` cast is gone. All pass (regression guards). Full suite: 35 files, 501 tests passed.
 
 Helper unit tests that back the ACs but aren't ACs themselves:
 `cycle.test.ts` (`cycleAlertKey`, `formatDateRangeWithYears`, `ordinalDay`) and
@@ -955,7 +955,7 @@ the plan should say so.**
   - day 20, no budget: the "No budget yet" card
   API figures were checked by hand (e.g. ($350 − $138.50) ÷ 19 = $11.13; the ring shows what's left today after today's $12.50). The PNGs were shared with the owner in the session; they're not committed to the repo.
 - **Parked ideas:** none
-- **Follow-up (review finding 1, perf):** the active space is loaded once per request and passed through (`computeSafeToSpend` takes optional `settings`); independent queries run in `Promise.all`. Sequential DB stages after auth: `/api/today` 3 to 2 (settings runs alongside list/recent/streak, then all totals in parallel; 1 is impossible while the cycle start depends on the space row), text and photo-OCR captures 2 to 1 (settings runs alongside the category lookup or the insert), `/api/me` reads the space 2 times to 1. Behaviour identical; `ci:local` green, 501 tests. Parked: `currentCycle` in `service.ts` is now unused.
+- **Follow-up (review finding 1, perf):** the active space is loaded once per request and passed through (`computeSafeToSpend` takes optional `settings`); independent queries run in `Promise.all`. Sequential DB stages after auth: `/api/today` 3 to 2 (settings runs alongside list/recent/streak, then all totals in parallel; 1 is impossible while the cycle start depends on the space row), text and photo-OCR captures 2 to 1 (settings runs alongside the category lookup or the insert), `/api/me` reads the space 3 times to 2 (both reads in one parallel stage; `loadHouseholdView` reads it too). Behaviour identical; `ci:local` green, 501 tests. The now-unused `currentCycle` was removed in the re-review tidy-up.
 
 ---
 
