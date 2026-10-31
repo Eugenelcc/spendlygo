@@ -1,8 +1,10 @@
 /**
  * The safe-to-spend engine (PRD F6) — the number the whole app exists to show.
  *
- *   remaining        = budget − spent so far this month
+ *   remaining        = budget − spent so far this cycle
  *   safe to spend    = floor(remaining ÷ days left, today included)
+ *
+ * "This cycle" is the budget cycle (PRD F17): a calendar month by default.
  *
  * Overspending today shrinks tomorrow automatically; underspending grows it.
  * That self-correction is the feature, which is why there is no separate
@@ -20,7 +22,8 @@ import {
   ZERO_CENTS,
   type AmountCents,
 } from './money.js';
-import { daysInMonth, parseIsoDate, type IsoDate } from './time.js';
+import { ValidationError } from './errors.js';
+import { daysBetween, monthRange, parseIsoDate, type DateRange, type IsoDate } from './time.js';
 
 export type Pace = 'ahead' | 'on_track' | 'behind' | 'over_budget';
 
@@ -33,6 +36,8 @@ export interface SafeToSpendInput {
   spentTodayCents: AmountCents;
   /** Today, already resolved in the user's timezone. */
   today: IsoDate;
+  /** The budget cycle `today` falls in (F17). Absent = the calendar month of `today`. */
+  cycle?: DateRange;
 }
 
 export interface SafeToSpendResult {
@@ -50,7 +55,9 @@ export interface SafeToSpendResult {
   overspentCents: AmountCents;
   /** Today counts, so this is 1 on the last day of the month. */
   daysRemaining: number;
+  /** Day of the budget cycle (1 on its first day). Name kept for wire compatibility. */
   dayOfMonth: number;
+  /** Days in the budget cycle. Name kept for wire compatibility. */
   daysInMonth: number;
   /** What a perfectly even month would have spent by now. */
   expectedSpendCents: AmountCents;
@@ -67,8 +74,13 @@ const PACE_TOLERANCE = 0.1;
 export function calculateSafeToSpend(input: SafeToSpendInput): SafeToSpendResult {
   const { budgetCents, spentMonthToDateCents, spentTodayCents, today } = input;
 
-  const { year, month, day } = parseIsoDate(today);
-  const totalDays = daysInMonth(year, month);
+  const { year, month } = parseIsoDate(today);
+  const cycle = input.cycle ?? monthRange(year, month);
+  if (today < cycle.start || today > cycle.end) {
+    throw new ValidationError(`Today ${today} is outside the cycle ${cycle.start}..${cycle.end}`);
+  }
+  const totalDays = daysBetween(cycle.start, cycle.end) + 1;
+  const day = daysBetween(cycle.start, today) + 1;
   const daysRemaining = totalDays - day + 1;
 
   if (budgetCents === null) {

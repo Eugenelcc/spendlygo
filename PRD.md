@@ -257,9 +257,10 @@ The core feature. One number.
 
 ```
 budget          = user's monthly spending budget (SGD cents)
-spentMTD        = Σ expenses this month, in user's timezone,
+spentMTD        = Σ expenses this budget cycle (F17; a calendar month by
+                  default), in user's timezone,
                   excluding categories flagged excludeFromBudget
-daysRemaining   = daysInMonth − dayOfMonth + 1        // today counts
+daysRemaining   = daysInCycle − dayOfCycle + 1        // today counts
 remaining       = budget − spentMTD
 safeToSpendToday = max(0, floor(remaining / daysRemaining))
 ```
@@ -465,6 +466,28 @@ scheduled nudge.
 
 ---
 
+### F17 — Pay cycle
+
+Each space has a **cycle start day** (1–31) and every month-based figure follows
+it, so safe-to-spend resets when the salary lands. B-032; ADR 0007.
+
+- **F17.1** The cycle runs from the start day to the day before it in the next
+  month (start day 20: 20 Oct – 19 Nov). A start day that does not exist in a
+  short month uses that month's last day (31 → 28/29 Feb), the same clamping
+  rule as F5.2. Default 1: exactly the calendar month, so nothing changes for
+  anyone who doesn't set it.
+- **F17.2** Per space, like the budget (F12.5): everyone in the space sees the
+  same cycle. Stored as `households.cycle_start_day`.
+- **F17.3** Takes effect immediately; history is re-grouped by the current rule
+  and nothing stored changes.
+- **F17.4** Labels: a range ("20 Oct – 19 Nov", no year) when the start day is
+  not 1; the plain month name when it is 1.
+- **F17.5** Part 1 delivers the cycle maths, safe-to-spend, `/api/today` and
+  `/api/me`, the bot's `/today` and capture confirmations, and the Today card.
+  Stats, digests, alerts, export and setting the day follow in later parts.
+
+---
+
 ## 8. Bot command surface
 
 | Command | Behaviour |
@@ -503,6 +526,7 @@ users            id, telegram_id (unique), first_name, username, timezone,
                  onboarded_at, created_at, updated_at
 
 households       id, created_by, is_personal, monthly_budget_cents,
+                 cycle_start_day (1–31, default 1; F17),
                  created_at, updated_at
                  (a "space" — F12; the budget lives here, not on users)
 

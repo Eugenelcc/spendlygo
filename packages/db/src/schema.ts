@@ -99,6 +99,8 @@ export const households = pgTable(
       .references(() => users.id, { onDelete: 'restrict' }),
     isPersonal: boolean('is_personal').notNull().default(false),
     monthlyBudgetCents: integer('monthly_budget_cents'),
+    /** Day the budget cycle starts, 1-31, clamped in short months. Per space, like the budget (F12.5, F17). */
+    cycleStartDay: smallint('cycle_start_day').notNull().default(1),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
@@ -107,6 +109,7 @@ export const households = pgTable(
       'households_budget_ck',
       sql`${t.monthlyBudgetCents} IS NULL OR ${t.monthlyBudgetCents} >= 0`,
     ),
+    check('households_cycle_start_day_ck', sql`${t.cycleStartDay} BETWEEN 1 AND 31`),
   ],
 );
 

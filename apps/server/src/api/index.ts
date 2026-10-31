@@ -65,10 +65,12 @@ import {
   activeHouseholdId,
   computeSafeToSpend,
   computeStreak,
+  currentCycle,
   effectiveBudgetCents,
   recentDailySpend,
   toApiSavingsGoal,
   toApiTransaction,
+  toApiCycle,
   todayFor,
 } from './service.js';
 
@@ -123,9 +125,10 @@ export function createApiRouter(ctx: AppContext, bot: SpendlygoBot): Hono<ApiEnv
 
   api.get('/me', async (c) => {
     const user = c.get('user');
-    const [budgetCents, household] = await Promise.all([
+    const [budgetCents, household, cycle] = await Promise.all([
       effectiveBudgetCents(ctx, user),
       loadHouseholdView(ctx, user),
+      currentCycle(ctx, user),
     ]);
 
     const body: MeResponse = {
@@ -148,6 +151,7 @@ export function createApiRouter(ctx: AppContext, bot: SpendlygoBot): Hono<ApiEnv
       // PRD F7.2: the client must never derive a period boundary from the
       // device clock — it is resolved here, in the user's timezone.
       today: isoDateOf(ctx.clock.now(), user.timezone),
+      cycle: toApiCycle(cycle),
     };
     return c.json(body);
   });
@@ -278,12 +282,12 @@ export function createApiRouter(ctx: AppContext, bot: SpendlygoBot): Hono<ApiEnv
   api.get('/today', async (c) => {
     const user = c.get('user');
     const today = todayFor(ctx, user);
-    const month = monthRange(parseIsoDate(today).year, parseIsoDate(today).month);
 
     const spaceId = activeHouseholdId(user);
-    const [safeToSpend, monthTotals, todayTransactions, recentDays, streak] = await Promise.all([
-      computeSafeToSpend(ctx, user, today),
-      transactionsRepo.totalsForPeriod(ctx.db, spaceId, month.start, month.end),
+    const safeToSpend = await computeSafeToSpend(ctx, user, today);
+    const cycle = safeToSpend.cycle;
+    const [monthTotals, todayTransactions, recentDays, streak] = await Promise.all([
+      transactionsRepo.totalsForPeriod(ctx.db, spaceId, cycle.start, cycle.end),
       transactionsRepo.list(ctx.db, spaceId, {
         from: today,
         to: today,
@@ -300,6 +304,7 @@ export function createApiRouter(ctx: AppContext, bot: SpendlygoBot): Hono<ApiEnv
       safeToSpend: serialiseSafeToSpend(safeToSpend),
       monthIn: monthTotals.inCents,
       monthOut: monthTotals.outCents,
+      cycle: toApiCycle(cycle),
       transactions: todayTransactions.map((row) => toApiTransaction(row, user.id)),
       recentDays,
       streak,

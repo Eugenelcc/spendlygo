@@ -149,6 +149,7 @@ async function captureWithOcr(
     leftForTodayCents: safeToSpend.leftForTodayCents,
     hasBudget: safeToSpend.hasBudget,
     overspentCents: safeToSpend.overspentCents,
+    cycleStartDay: safeToSpend.cycle.startDay,
   });
 
   const money = formatCents(guessedCents, { currency: user.currency, locale: user.locale });

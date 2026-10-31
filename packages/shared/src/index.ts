@@ -108,6 +108,18 @@ export const switchSpaceBodySchema = z.object({
 });
 export type SwitchSpaceBody = z.infer<typeof switchSpaceBodySchema>;
 
+// --- budget cycle (F17) -----------------------------------------------------
+
+export const cycleSchema = z.object({
+  startDay: z.number().int().min(1).max(31),
+  start: isoDateSchema,
+  end: isoDateSchema,
+  days: z.number().int().positive(),
+  /** "October" when startDay is 1, else "20 Oct – 19 Nov" (recap decision 7, Q5: no year). */
+  label: z.string(),
+});
+export type Cycle = z.infer<typeof cycleSchema>;
+
 // --- GET /api/me ------------------------------------------------------------
 
 export const meResponseSchema = z.object({
@@ -134,6 +146,11 @@ export const meResponseSchema = z.object({
   household: householdSchema.nullable(),
   /** Today's date in the user's timezone — the client must not compute this. */
   today: isoDateSchema,
+  /**
+   * The current budget cycle of the active space (F17). Optional only so a new
+   * Mini App survives the old server during a deploy; the server always sends it.
+   */
+  cycle: cycleSchema.optional(),
 });
 export type MeResponse = z.infer<typeof meResponseSchema>;
 
@@ -221,7 +238,9 @@ export const safeToSpendSchema = z.object({
   leftForTodayCents: z.number().int().nonnegative(),
   overspentCents: z.number().int().nonnegative(),
   daysRemaining: z.number().int().positive(),
+  /** day of the budget cycle (1 on its first day), F17 */
   dayOfMonth: z.number().int().positive(),
+  /** days in the budget cycle, F17 */
   daysInMonth: z.number().int().positive(),
   expectedSpendCents: z.number().int().nonnegative(),
   projectedSpendCents: z.number().int().nonnegative(),
@@ -247,8 +266,14 @@ export const todayResponseSchema = z.object({
   currency: z.string(),
   locale: z.string(),
   safeToSpend: safeToSpendSchema,
+  /** Money in / out over the whole budget cycle (a calendar month by default, F17). */
   monthIn: z.number().int().nonnegative(),
   monthOut: z.number().int().nonnegative(),
+  /**
+   * The current budget cycle (F17). Optional only so a new Mini App survives
+   * the old server during a deploy; the server always sends it.
+   */
+  cycle: cycleSchema.optional(),
   transactions: z.array(transactionSchema),
   /** Last 7 days including today, oldest first. For the sparkline. */
   recentDays: z.array(z.object({ day: isoDateSchema, outCents: z.number().int().nonnegative() })),
@@ -351,14 +376,18 @@ export type RecapResponse = z.infer<typeof recapResponseSchema>;
 
 // --- PATCH /api/settings ----------------------------------------------------
 
-export const updateSettingsSchema = z.object({
-  monthlyBudgetCents: z.number().int().nonnegative().nullable().optional(),
-  timezone: z.string().min(1).optional(),
-  digestHour: z.number().int().min(0).max(23).optional(),
-  digestEnabled: z.boolean().optional(),
-  nudgeEnabled: z.boolean().optional(),
-  alertsEnabled: z.boolean().optional(),
-});
+// `.strict()` on purpose (B-032 F4/F5): an unknown key is a 400, so an older
+// server can never silently drop a field a newer client sends.
+export const updateSettingsSchema = z
+  .object({
+    monthlyBudgetCents: z.number().int().nonnegative().nullable().optional(),
+    timezone: z.string().min(1).optional(),
+    digestHour: z.number().int().min(0).max(23).optional(),
+    digestEnabled: z.boolean().optional(),
+    nudgeEnabled: z.boolean().optional(),
+    alertsEnabled: z.boolean().optional(),
+  })
+  .strict();
 export type UpdateSettingsBody = z.infer<typeof updateSettingsSchema>;
 
 // --- recurring rules (F5) ----------------------------------------------------

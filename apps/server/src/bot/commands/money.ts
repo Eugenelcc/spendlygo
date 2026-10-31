@@ -5,7 +5,15 @@
  * app can never disagree about a number.
  */
 
-import { formatCents, parseAmountToCents, type AmountCents } from '@spendlygo/core';
+import {
+  formatCents,
+  formatCycleRange,
+  parseAmountToCents,
+  type AmountCents,
+  type BudgetCycle,
+  type IsoDate,
+  type SafeToSpendResult,
+} from '@spendlygo/core';
 import { householdsRepo, transactionsRepo } from '@spendlygo/db';
 import type { AppContext } from '../../context.js';
 import {
@@ -26,41 +34,42 @@ const PACE_LABEL = {
   over_budget: '🔴 Over budget',
 } as const;
 
-export async function handleToday(ctx: AppContext, botCtx: BotContext): Promise<void> {
-  const user = botCtx.appUser;
-  const today = todayFor(ctx, user);
-  const [result, streak] = await Promise.all([
-    computeSafeToSpend(ctx, user, today),
-    computeStreak(ctx, user, today),
-  ]);
+export interface TodayTextInput {
+  user: { currency: string; locale: string };
+  today: IsoDate;
+  result: SafeToSpendResult;
+  streak: { current: number };
+  cycle: BudgetCycle;
+}
+
+/** The `/today` reply. Start day 1 reads "This month"; any other names the cycle (F17). */
+export function buildTodayText(input: TodayTextInput): string {
+  const { user, today, result, streak, cycle } = input;
   const money = (cents: AmountCents) =>
     escape(formatCents(cents, { currency: user.currency, locale: user.locale }));
   // A 1-day "streak" isn't a streak yet — only worth a line once it means something.
   const streakLine = streak.current >= 2 ? `🔥 ${streak.current}-day streak` : null;
 
   if (!result.hasBudget) {
-    await botCtx.reply(
-      [
-        `*Today*  ·  ${escape(today)}`,
-        '',
-        `Spent today: ${money(result.spentTodayCents)}`,
-        `Spent this month: ${money(result.spentMonthToDateCents)}`,
-        ...(streakLine ? ['', streakLine] : []),
-        '',
-        'Set a monthly budget to see what is safe to spend:',
-        '`/budget 1500`',
-      ].join('\n'),
-      { parse_mode: 'Markdown', reply_markup: openAppKeyboard(ctx.config) },
-    );
-    return;
+    return [
+      `*Today*  ·  ${escape(today)}`,
+      '',
+      `Spent today: ${money(result.spentTodayCents)}`,
+      `Spent ${cycle.startDay === 1 ? 'this month' : 'this cycle'}: ${money(result.spentMonthToDateCents)}`,
+      ...(streakLine ? ['', streakLine] : []),
+      '',
+      'Set a monthly budget to see what is safe to spend:',
+      '`/budget 1500`',
+    ].join('\n');
   }
 
+  const heading = cycle.startDay === 1 ? 'This month' : formatCycleRange(cycle);
   const lines = [
     `*${money(result.leftForTodayCents)} left to spend today*`,
     '',
     `${PACE_LABEL[result.pace]}`,
     `Spent today: ${money(result.spentTodayCents)} of ${money(result.safeTodayCents)}`,
-    `This month: ${money(result.spentMonthToDateCents)} of ${money(result.budgetCents ?? (0 as AmountCents))}`,
+    `${heading}: ${money(result.spentMonthToDateCents)} of ${money(result.budgetCents ?? (0 as AmountCents))}`,
     `${result.daysRemaining} ${result.daysRemaining === 1 ? 'day' : 'days'} left`,
   ];
 
@@ -69,8 +78,18 @@ export async function handleToday(ctx: AppContext, botCtx: BotContext): Promise<
   if (result.overspentCents > 0) {
     lines.splice(1, 0, '', `Over budget by ${money(result.overspentCents)}`);
   }
+  return lines.join('\n');
+}
 
-  await botCtx.reply(lines.join('\n'), {
+export async function handleToday(ctx: AppContext, botCtx: BotContext): Promise<void> {
+  const user = botCtx.appUser;
+  const today = todayFor(ctx, user);
+  const [result, streak] = await Promise.all([
+    computeSafeToSpend(ctx, user, today),
+    computeStreak(ctx, user, today),
+  ]);
+
+  await botCtx.reply(buildTodayText({ user, today, result, streak, cycle: result.cycle }), {
     parse_mode: 'Markdown',
     reply_markup: openAppKeyboard(ctx.config),
   });
@@ -116,7 +135,7 @@ export async function handleBudget(ctx: AppContext, botCtx: BotContext): Promise
       '',
       `That is ${money(result.safeTodayCents)} a day for the ${result.daysRemaining} ${
         result.daysRemaining === 1 ? 'day' : 'days'
-      } left this month.`,
+      } left ${result.cycle.startDay === 1 ? 'this month' : 'this cycle'}.`,
     ].join('\n'),
     { parse_mode: 'Markdown', reply_markup: openAppKeyboard(ctx.config) },
   );

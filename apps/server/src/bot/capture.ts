@@ -52,6 +52,8 @@ export function buildConfirmation(options: {
   leftForTodayCents: AmountCents;
   hasBudget: boolean;
   overspentCents: AmountCents;
+  /** The space's cycle start day (F17). Default 1 keeps the month wording. */
+  cycleStartDay?: number;
 }): string {
   const money = (cents: AmountCents) =>
     formatCents(cents, { currency: options.currency, locale: options.locale });
@@ -74,7 +76,10 @@ export function buildConfirmation(options: {
     if (!options.hasBudget) {
       lines.push('', '_Set a monthly budget with /budget to see what is safe to spend._');
     } else if (options.overspentCents > 0) {
-      lines.push('', `⚠️ ${escapeMarkdown(money(options.overspentCents))} over budget this month`);
+      lines.push(
+        '',
+        `⚠️ ${escapeMarkdown(money(options.overspentCents))} over budget ${(options.cycleStartDay ?? 1) === 1 ? 'this month' : 'this cycle'}`,
+      );
     } else {
       lines.push('', `${escapeMarkdown(money(options.leftForTodayCents))} left to spend today`);
     }
@@ -165,6 +170,7 @@ export async function captureFromText(
     leftForTodayCents: safeToSpend.leftForTodayCents,
     hasBudget: safeToSpend.hasBudget,
     overspentCents: safeToSpend.overspentCents,
+    cycleStartDay: safeToSpend.cycle.startDay,
   });
 
   if (unknownTag) {

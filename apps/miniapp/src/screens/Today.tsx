@@ -33,6 +33,9 @@ export function TodayScreen({
   const { safeToSpend: sts, currency, locale } = data;
   const money = (cents: number) => formatMoney(cents, { currency, locale });
   const pace = PACE_COPY[sts.pace] ?? PACE_COPY.on_track;
+  // F17: absent on an old server mid-deploy, which means the calendar month.
+  const startDay = data.cycle?.startDay ?? 1;
+  const cycleWord = startDay === 1 ? 'month' : 'cycle';
 
   const tone = !sts.hasBudget
     ? 'idle'
@@ -91,7 +94,9 @@ export function TodayScreen({
 
           <section className="card">
             <div className="card__head">
-              <span className="card__label">This month</span>
+              <span className="card__label">
+                {startDay === 1 || !data.cycle ? 'This month' : data.cycle.label}
+              </span>
               <span className="card__value">
                 {money(sts.spentMonthToDateCents)}
                 <span className="card__of"> of {money(sts.budgetCents ?? 0)}</span>
@@ -117,7 +122,9 @@ export function TodayScreen({
               // PRD F3.4: income and expense stay as distinct figures, never
               // netted into a single signed total.
               <div className="card__foot card__foot--tight">
-                <span>{money(data.monthIn)} received this month</span>
+                <span>
+                  {money(data.monthIn)} received this {cycleWord}
+                </span>
               </div>
             )}
           </section>
@@ -134,7 +141,9 @@ export function TodayScreen({
           </button>
           <div className="card__foot card__foot--tight">
             <span>{money(sts.spentTodayCents)} spent today</span>
-            <span>{money(sts.spentMonthToDateCents)} this month</span>
+            <span>
+              {money(sts.spentMonthToDateCents)} this {cycleWord}
+            </span>
           </div>
         </section>
       )}

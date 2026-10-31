@@ -12,10 +12,14 @@ import {
   calculateSafeToSpend,
   calculateStreak,
   centsOf,
+  cycleContaining,
+  DEFAULT_CYCLE_START_DAY,
+  formatCycleRange,
   isoDateOf,
-  monthRange,
+  monthName,
   parseIsoDate,
   type AmountCents,
+  type BudgetCycle,
   type IsoDate,
   type SafeToSpendResult,
   type StreakResult,
@@ -29,6 +33,7 @@ import {
 import type {
   SavingsGoal as ApiSavingsGoal,
   Transaction as ApiTransaction,
+  Cycle as ApiCycle,
 } from '@spendlygo/shared';
 import type { AppContext } from '../context.js';
 
@@ -48,21 +53,65 @@ export function activeHouseholdId(user: User): string {
   return user.activeHouseholdId;
 }
 
+/** What the active space decides for a user: its budget and its cycle start day (F17). */
+export interface ActiveSpaceSettings {
+  budgetCents: AmountCents | null;
+  cycleStartDay: number;
+}
+
+/**
+ * The active space's settings. Every user always has an active space
+ * (packages/db/src/schema.ts); personal and shared spaces work identically.
+ * Switching spaces changes which settings these are; leaving a shared space
+ * falls back to the personal one, unedited.
+ */
+export async function activeSpaceSettings(
+  ctx: AppContext,
+  user: User,
+): Promise<ActiveSpaceSettings> {
+  if (user.activeHouseholdId === null) {
+    return { budgetCents: null, cycleStartDay: DEFAULT_CYCLE_START_DAY }; // Never happens — see schema.ts.
+  }
+  const household = await householdsRepo.findById(ctx.db, user.activeHouseholdId);
+  return {
+    budgetCents:
+      household === null || household.monthlyBudgetCents === null
+        ? null
+        : centsOf(household.monthlyBudgetCents),
+    cycleStartDay: household?.cycleStartDay ?? DEFAULT_CYCLE_START_DAY,
+  };
+}
+
 /**
  * The budget a user actually sees: their active space's figure, whether
- * that's their own personal space or one shared with others — the two work
- * identically (packages/db/src/schema.ts). Switching spaces changes which
- * figure this is; leaving a shared space falls back to the personal one,
- * unedited.
+ * that's their own personal space or one shared with others.
  */
 export async function effectiveBudgetCents(
   ctx: AppContext,
   user: User,
 ): Promise<AmountCents | null> {
-  if (user.activeHouseholdId === null) return null; // Should never happen — see schema.ts.
-  const household = await householdsRepo.findById(ctx.db, user.activeHouseholdId);
-  if (household === null || household.monthlyBudgetCents === null) return null;
-  return centsOf(household.monthlyBudgetCents);
+  return (await activeSpaceSettings(ctx, user)).budgetCents;
+}
+
+/** The budget cycle containing `date` (default today) under the active space's start day. */
+export async function currentCycle(
+  ctx: AppContext,
+  user: User,
+  date: IsoDate = todayFor(ctx, user),
+): Promise<BudgetCycle> {
+  return cycleContaining(date, (await activeSpaceSettings(ctx, user)).cycleStartDay);
+}
+
+/** The wire shape of a cycle. The label is the month name for start day 1, else the range. */
+export function toApiCycle(cycle: BudgetCycle): ApiCycle {
+  return {
+    startDay: cycle.startDay,
+    start: cycle.start,
+    end: cycle.end,
+    days: cycle.days,
+    label:
+      cycle.startDay === 1 ? monthName(parseIsoDate(cycle.start).month) : formatCycleRange(cycle),
+  };
 }
 
 /** Serialise a repository row into the shape the Mini App compiles against. */
@@ -100,29 +149,32 @@ export function toApiTransaction(
  * are scoped strictly to the household rather than including either
  * partner's pre-sharing history.
  */
+export type SafeToSpendWithCycle = SafeToSpendResult & { cycle: BudgetCycle };
+
 export async function computeSafeToSpend(
   ctx: AppContext,
   user: User,
   today: IsoDate = todayFor(ctx, user),
-): Promise<SafeToSpendResult> {
-  const { year, month } = parseIsoDate(today);
-  const period = monthRange(year, month);
+): Promise<SafeToSpendWithCycle> {
+  const { budgetCents, cycleStartDay } = await activeSpaceSettings(ctx, user);
+  const cycle = cycleContaining(today, cycleStartDay);
 
   const spaceId = activeHouseholdId(user);
-  const [budgetCents, monthTotals, todayTotals] = await Promise.all([
-    effectiveBudgetCents(ctx, user),
-    // Month-to-date, not the whole month: spending dated in the future must not
+  const [cycleTotals, todayTotals] = await Promise.all([
+    // Cycle-to-date, not the whole cycle: spending dated in the future must not
     // count against what is safe to spend today.
-    transactionsRepo.totalsForPeriod(ctx.db, spaceId, period.start, today),
+    transactionsRepo.totalsForPeriod(ctx.db, spaceId, cycle.start, today),
     transactionsRepo.totalsForPeriod(ctx.db, spaceId, today, today),
   ]);
 
-  return calculateSafeToSpend({
+  const result = calculateSafeToSpend({
     budgetCents,
-    spentMonthToDateCents: centsOf(monthTotals.budgetedOutCents),
+    spentMonthToDateCents: centsOf(cycleTotals.budgetedOutCents),
     spentTodayCents: centsOf(todayTotals.budgetedOutCents),
     today,
+    cycle,
   });
+  return { ...result, cycle };
 }
 
 /** Serialise a goal row plus its net contribution into the progress the client renders. */
