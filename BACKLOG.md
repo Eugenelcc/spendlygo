@@ -4,7 +4,7 @@ The single plan. How it's used: [`WORKFLOW.md`](./WORKFLOW.md) §2 and §7.
 Each item past intake has a spec in [`docs/specs/`](./docs/specs).
 Feature IDs refer to [`PRD.md`](./PRD.md) §7.
 
-**Status key:** `todo` · `spec` (spec written/approved) · `planned` (plan approved) · `in progress` · `in review` (PR open) · `done`
+**Status key:** `todo` · `spec` (spec written/approved) · `planned` (plan approved) · `tests` (failing tests committed) · `in progress` · `in review` (PR open) · `done`
 
 **Current focus (agreed 2026-10-31):** close the drift and the P6 gaps below
 before starting any new feature.
@@ -151,5 +151,6 @@ Newest first. Earlier work (P0–P6 to date: PRs #4–#12) predates this backlog
 | ID | Title | Feature | PR |
 |---|---|---|---|
 | B-015 | README figures refreshed: 450 tests, Mini App bundle 86.1 KB gzipped | — | (this branch) |
+| B-025 | Model routing (Opus plan/review, Sonnet test/build) via `.claude/agents/`; spec file as the agent handoff; root CLAUDE.md slimmed 18.7 → 12.6 KB | — | (this branch) |
 | B-024 | Workflow v2: spec stage, success/failure per stage, review checklist, spec template, Mini App target architecture | — | (this branch) |
 | B-000 | Docs foundation: WORKFLOW.md, BACKLOG.md, nested CLAUDE.md files, F13–F16 in the PRD, drift fixes | — | (this branch) |

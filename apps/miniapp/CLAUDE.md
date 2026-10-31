@@ -112,3 +112,11 @@ Once it is:
 
 Until then, UI changes are verified by light and dark screenshots at 375px
 (headless Chromium) and the owner's dev-bot check (WORKFLOW Stage 4–5).
+
+## Gotchas
+
+| Gotcha | Handling |
+|---|---|
+| Telegram theme vars differ across clients | Always supply a CSS fallback: `var(--tg-theme-bg-color, #fff)` |
+| Haptics throw on unsupported clients | Feature-check before every call |
+| React 19 removed the global `JSX` namespace | `import type { JSX } from 'react'` |

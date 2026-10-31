@@ -34,7 +34,7 @@ without blowing the month.
 | [PRD.md](./PRD.md) | Product requirements, features, data model, roadmap |
 | [GUARDRAILS.md](./GUARDRAILS.md) | Hard rules: cost, money maths, auth, privacy, scope |
 | [DESIGN.md](./DESIGN.md) | Design system, motion, haptics, screens |
-| [CLAUDE.md](./CLAUDE.md) | Stack, repo layout, commands, conventions, gotchas |
+| [CLAUDE.md](./CLAUDE.md) | Stack, repo layout, commands, conventions (area detail and gotchas live in nested CLAUDE.md files) |
 | [WORKFLOW.md](./WORKFLOW.md) | How work flows: backlog → plan → branch → verify → PR → done |
 | [BACKLOG.md](./BACKLOG.md) | The plan: what's next, what's parked, known drift |
 
@@ -71,7 +71,7 @@ pnpm db:migrate && pnpm db:seed
 pnpm dev
 ```
 
-Deployment is described in [CLAUDE.md](./CLAUDE.md#deployment); the Render
+Deployment is described in [apps/server/CLAUDE.md](./apps/server/CLAUDE.md#deployment); the Render
 blueprint is [render.yaml](./render.yaml).
 
 ## Architecture decisions

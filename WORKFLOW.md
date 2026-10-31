@@ -12,13 +12,41 @@ then edit it in its own `docs/` PR (§12).
 ## 1. The pipeline at a glance
 
 ```
- 0 INTAKE ─▶ 1 SPEC ─▶ 2 PLAN ─▶ 3 BUILD ─▶ 4 TEST ─▶ 5 REVIEW ─▶ 6 RELEASE ─▶ 7 CLOSE
-  B-###      what      how       code       prove      owner        deploy +      BACKLOG
-             ✋ owner   ✋ owner                          merges ✋    smoke test    → Done
-             approves  approves
+ 0 INTAKE ─▶ 1 SPEC ─▶ 2 PLAN ─▶ 3 TEST ─▶ 4 BUILD ─▶ 5 REVIEW ─▶ 6 RELEASE ─▶ 7 CLOSE
+  B-###      what      how      failing    until     agent, then   deploy +     BACKLOG
+             ✋ owner   ✋ owner  tests      green     owner        smoke test   → Done
+             approves  approves  first               merges ✋
 ```
 
 ✋ marks a human gate. Claude never passes one alone.
+
+### Who does each stage: models and handoff
+
+Each stage runs as a **project subagent** in `.claude/agents/`, with its own
+model. Expensive judgement goes to Opus. Execution against a fixed plan goes
+to Sonnet.
+
+| Stage | Agent | Model | Writes |
+|---|---|---|---|
+| 1–2 Spec + Plan | `spec-planner` | **Opus** | Spec and Plan sections |
+| 3 Test | `test-writer` | **Sonnet** | Failing tests + Test report |
+| 4 Build | `builder` | **Sonnet** | Code + Test report results + Build notes |
+| 5 Review | `reviewer` | **Opus** | Review section (read-only on code) |
+
+**The spec file is the handoff.** Every agent gets only the path
+`docs/specs/B-###-<slug>.md`, never the chat history. It then reads that file,
+`GUARDRAILS.md`, and the nested `CLAUDE.md` of the areas it touches. Each
+agent writes its result back into its section of the spec. Nothing important
+lives only in a conversation, so context survives across agents and sessions.
+
+**The main session orchestrates.** It talks to the owner, relays the spec
+and plan for approval, records `approved by owner, <date>`, then launches the
+next agent. Subagents never ask the owner directly.
+
+**Escalation between models.** When `builder` or `test-writer` hits the
+2-attempt limit, or finds that the plan doesn't match the code, it hands back
+to `spec-planner` (Opus) to re-plan. A plan change needs the owner's approval
+again.
 
 **Small-fix lane:** a change may skip stages 1 and 2 (but nothing else) if it
 is **all** of:
@@ -71,36 +99,36 @@ happens on failure.
 | ✅ **Success** | The owner replies **"approved"**. Claude writes `Plan approved by owner, <date>` |
 | ❌ **Failure** | It needs a new service, a paid tier, a destructive migration, or a bulk data change → GUARDRAILS §14, stop and ask. Rejected → revise |
 
-### Stage 3 — Build
+### Stage 3 — Test, written first (`test-writer`, Sonnet)
 
 | | |
 |---|---|
-| **Input** | The approved plan |
-| **Do** | Code on the task branch (§3). Follow the root and nested `CLAUDE.md`. Conventional Commits citing the feature ID. One feature ID per PR. Update the docs the change affects, in the same branch |
-| **Output** | Commits |
-| ✅ **Success** | The code does what the plan says, nothing more |
-| ❌ **Failure** | Reality differs from the plan (a file, an approach, a schema need) → **pause and re-plan** with the owner; don't improvise. A side idea comes up → park it in BACKLOG → Later; don't build it |
-
-### Stage 4 — Test
-
-| | |
-|---|---|
-| **Input** | The build |
-| **Do** | Write tests that map **one-to-one to the acceptance criteria**. Run `pnpm typecheck && pnpm lint && pnpm test`. Take light and dark screenshots at 375px for UI changes (pre-installed headless Chromium) |
+| **Input** | The spec with Spec and Plan approved |
+| **Do** | Write the tests the Plan names, **one per acceptance criterion** plus the edge cases, **before** any feature code. Run `pnpm test`; they should fail |
 | **Must include** | Dangerous five touched → their fixture tests (`packages/core/CLAUDE.md`). New or changed API route → a test rejecting unauthenticated and cross-user access. New parser behaviour → a golden fixture |
-| **Output** | Green checks, an acceptance-criterion → test table, screenshots |
-| ✅ **Success** | All checks pass, and every acceptance criterion has a passing test |
-| ❌ **Failure** | Red → fix and rerun, and report the real output. **Never** skip, disable or loosen a test to get green. After 2 failed attempts → escalate (§1) |
+| **Output** | Committed failing tests. The spec's Test report lists each AC → test → `❌ failing (expected)` |
+| ✅ **Success** | Every acceptance criterion has a test, and each fails for the right reason (the feature is missing) |
+| ❌ **Failure** | A test passes before the build → it proves nothing; rewrite it or flag it. A criterion can't be tested as written → back to Stage 1 |
 
-### Stage 5 — Review ✋
+### Stage 4 — Build (`builder`, Sonnet)
 
 | | |
 |---|---|
-| **Input** | Green branch. The owner asks for a PR |
-| **Do** | Claude opens the PR. Body: backlog ID, feature ID, link to the spec, summary, **the review checklist (§4)**, screenshots for UI, migration notes. Then the owner tests on the **dev bot** + dev Supabase |
-| **Output** | An open PR |
-| ✅ **Success** | CI is green, the checklist holds, the owner merges. **Claude never merges** |
-| ❌ **Failure** | CI red → back to Stage 4. Changes requested → back to Stage 3. A design flaw → back to Stage 2 |
+| **Input** | The approved plan + the failing tests |
+| **Do** | Code on the task branch (§3) until the tests pass. Follow the nested `CLAUDE.md`. Conventional Commits citing the feature ID. Update the docs the plan names, in the same branch. Run `pnpm typecheck && pnpm lint && pnpm test`. UI change → light and dark screenshots at 375px (pre-installed headless Chromium) |
+| **Output** | Commits. The spec's Test report shows ✅ per AC with a one-line check summary. Build notes list deviations and parked ideas |
+| ✅ **Success** | All checks green, every AC test passes, nothing built beyond the plan |
+| ❌ **Failure** | The plan doesn't match the code → hand back to `spec-planner` to re-plan (owner re-approves). Red after **2 honest attempts** → escalate (§1). **Never** skip, disable or loosen a test to get green. Side idea → park it in BACKLOG → Later |
+
+### Stage 5 — Review (`reviewer`, Opus, then the owner ✋)
+
+| | |
+|---|---|
+| **Input** | The green task branch |
+| **Do** | **5a, agent review:** `reviewer` checks the diff against the spec and GUARDRAILS, reruns the checks, and writes the Review section with a verdict. **5b, owner review:** when the owner asks, Claude opens the PR. Body: backlog ID, feature ID, spec link, summary, **the review checklist (§4)**, screenshots for UI, migration notes. The owner tests on the **dev bot** + dev Supabase |
+| **Output** | Review verdict in the spec, then an open PR |
+| ✅ **Success** | Reviewer verdict `ready for owner`, CI green, checklist holds, the owner merges. **Claude never merges** |
+| ❌ **Failure** | Verdict `back to build` → Stage 4 with the listed findings. `back to plan` → Stage 2. CI red or owner changes → Stage 4. A design flaw → Stage 2 |
 
 ### Stage 6 — Release
 
@@ -177,7 +205,8 @@ push → report to the owner:
 2. Confirm `/healthz` and a real capture work.
 3. Fix on a `fix/B-###-<slug>` branch through the pipeline, with a test that
    would have caught the bug.
-4. Add the lesson to `CLAUDE.md` → Gotchas.
+4. Add the lesson to the Gotchas table of the nested `CLAUDE.md` for that
+   area (`apps/server`, `apps/miniapp` or `packages/core`).
 
 If **real financial data** looks wrong, **stop and ask** before touching any
 data (GUARDRAILS §3, §14.6). Never run a repair script unasked.
@@ -188,7 +217,7 @@ data (GUARDRAILS §3, §14.6). Never run a repair script unasked.
 (agreed, ordered) · **Later** (parked, not agreed) · **Drift & debt** (code
 and docs disagree, or a guardrail is unmet) · **Done** (newest first, with the
 PR). Each item has an ID (`B-###`, never reused), a feature ID, acceptance
-notes, and a status: `todo` → `spec` → `planned` → `in progress` → `in review`
+notes, and a status: `todo` → `spec` → `planned` → `tests` → `in progress` → `in review`
 → `done`.
 
 ## 8. Where things live
@@ -197,7 +226,8 @@ notes, and a status: `todo` → `spec` → `planned` → `in progress` → `in r
 |---|---|
 | What the product does | `PRD.md` (F1–F16) |
 | What's next | `BACKLOG.md` |
-| What one task will do, and how | `docs/specs/B-###-<slug>.md` |
+| What one task will do, how, its test results and review | `docs/specs/B-###-<slug>.md`: one file per task, the handoff between agents |
+| Agent roles and models per stage | `.claude/agents/*.md` |
 | Why a non-obvious decision was made | `docs/adr/NNNN-*.md` |
 | How code is organised | root `CLAUDE.md` + `apps/server/CLAUDE.md`, `apps/miniapp/CLAUDE.md`, `packages/core/CLAUDE.md` |
 

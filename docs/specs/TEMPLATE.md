@@ -5,8 +5,18 @@
      Spec approved by owner, YYYY-MM-DD
      Plan approved by owner, YYYY-MM-DD -->
 
-Process: [`WORKFLOW.md`](../../WORKFLOW.md) stages 1 (Spec) and 2 (Plan).
-Copy this file to `docs/specs/B-###-<slug>.md`.
+Process: [`WORKFLOW.md`](../../WORKFLOW.md). Copy this file to
+`docs/specs/B-###-<slug>.md`. **This one file is the handoff between agents:**
+each writes only its own section.
+
+| Section | Written by | Stage |
+|---|---|---|
+| Spec, Plan | `spec-planner` (Opus) | 1–2 |
+| Test report | `test-writer` (Sonnet) creates it; `builder` (Sonnet) fills in the results | 3–4 |
+| Build notes | `builder` (Sonnet) | 4 |
+| Review | `reviewer` (Opus) | 5 |
+
+Keep it lean: summaries and tables, never raw logs.
 
 ---
 
@@ -58,3 +68,34 @@ Copy this file to `docs/specs/B-###-<slug>.md`.
 
 ### PR split
 <!-- One feature ID per PR. "Single PR", or "part 1 of N: …". -->
+
+---
+
+## Test report (Stages 3–4)
+
+| AC | Test file › test name | Before build | After build |
+|---|---|---|---|
+| AC1 | | ❌ failing (expected) | |
+
+**Checks:** <!-- one line, e.g. typecheck ✓ · lint ✓ · test 312 passed / 154 skipped -->
+**Screenshots:** <!-- UI changes: light + dark at 375px, attached to the PR — or "n/a" -->
+
+---
+
+## Build notes (Stage 4)
+
+- **Deviations from plan:** <!-- "none", or what and why (a plan change needs owner re-approval) -->
+- **Parked ideas:** <!-- added to BACKLOG → Later, or "none" -->
+
+---
+
+## Review (Stage 5)
+
+**Verdict:** <!-- ready for owner · back to build · back to plan -->
+
+| # | Severity | file:line | Finding | Failure scenario |
+|---|---|---|---|---|
+| | | | | |
+
+**Guardrail self-check** (WORKFLOW §4)
+- [ ] Cost · [ ] Money · [ ] Auth + cross-user test · [ ] Privacy · [ ] Time

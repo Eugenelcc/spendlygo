@@ -52,3 +52,10 @@ to this folder.
 - **Parser:** new behaviour adds a golden fixture.
 - **Time:** cover late-night entries (a 00:30 spend belongs to that calendar
   day in the user's timezone).
+
+## Gotchas
+
+| Gotcha | Handling |
+|---|---|
+| Month-end recurrence (29–31) | Clamp to the last day of shorter months; explicitly tested |
+| Float money errors | Integer cents everywhere; `AmountCents` branded type prevents mix-ups |
