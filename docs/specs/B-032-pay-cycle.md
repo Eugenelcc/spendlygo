@@ -1218,3 +1218,67 @@ reuse), and the schema/repo doc comments. Nothing was built outside the plan.
 - [x] Data/idempotency (§3): the alert reserve-then-send is unchanged. No migration.
   The documented skip is accepted by the owner (Q2 A)
 - [x] Telegram (§10): no new send paths; digests and alerts reuse existing senders
+
+### Re-review (Part 2 follow-ups)
+
+*Reviewed 2026-10-31 by `reviewer` (Opus) against `git diff 1aaf505..HEAD`
+(9eb83f7 finding 1 + 3, 6d18dd3 findings 2 + 4, dddf2cb real-stack record).
+`pnpm ci:local` with local Postgres: **passed** (36 files, 524 tests, build,
+bundle 86.7 KB gzipped).*
+
+**Verdict: back to build.** One one-line CSS fix (R1). Findings 1–4 are fixed;
+everything else is ready for owner.
+
+| # | Severity | Where | What / why | Failure scenario |
+|---|---|---|---|---|
+| R1 | Medium (DESIGN §10) | `apps/miniapp/src/screens/History.tsx:281`, `styles.css:1063` (`.chip`), `:1763` (`.empty`) | The "Try again" chip sets no `color`; `button { color: inherit }` gives it `.empty`'s `--text-subtle` on the chip's `--bg-secondary`. With the repo's own fallbacks that is `#6b7280` on `#f1f2f5` = **4.32:1**, below the 4.5:1 floor for 14px text. In Telegram both colours come from the theme (`subtitle_text` on `secondary_bg`), so dark-mode contrast isn't guaranteed (e.g. ~3.7:1 for a desktop-style dark palette). Every other chip inherits `--text` | A user on a low-contrast dark theme can't read the only recovery control. Fix: reuse the app error's existing `primary primary--inline` button (`App.tsx:418`), or give this chip `color: var(--text)` |
+| R2 | Low (UX, non-blocking) | `features/history/CycleStepper.tsx:27` | In the error state `loading` is false, so ‹ stays enabled with a blank label. Pressing it calls `setHistoryCycleAnchor(prevAnchor)` with `prevAnchor === undefined`, which resets to the **current** cycle. Not a leak, because the list stays gated | A user steps back to Sep, it fails, and pressing ‹ jumps to the current cycle instead of August. Optional fix in the same pass: `disabled={loading \|\| label === undefined}` on both arrows |
+| R3 | Info | `apps/server/src/bot/commands/recap.ts:97` | Finding 2 also named the `/recap` **bot** footer's second space read. It's still there (now 3 sequential stages, was 4). `/api/recap` is 3→2 as claimed | Tens of ms per `/recap`. Never wrong. Fine to leave, or return `cycleStartDay` from `buildRecap` |
+
+**Finding 1 (History leak): fixed.** The `history` query is disabled while
+`isCycleChip && historyRange.from === undefined`, and `HistoryScreen` gets
+`transactions={[]}` in that state regardless of cache. Pending → skeleton,
+error → "Couldn't load this cycle." + retry. Anchor change creates a new
+`['stats','month',anchor]` key with no data, so `from` is undefined and the
+list is gated again (no global `placeholderData`/`keepPreviousData`). A
+background refetch error keeps the old data and bounds, so it lists the right
+cycle. I found no path where the Cycle chip renders the unfiltered list.
+**Day-1 Month picker unchanged:** `isCycleChip` is false, so `enabled` and the props
+reduce to the old values. **Placement:** the gating sits beside the `history`
+query in `App.tsx`. That's correct for the pre-migration layout
+(`apps/miniapp/CLAUDE.md` "Current layout", History not yet migrated, B-016…).
+`retry` stays inside the feature hook. There's no automated test (P2-AC22 is
+screenshot-only by Q8 A). The main session's real-stack record (dddf2cb:
+stalled / 500 / normal / ‹-onto-stalled) covers it.
+
+**Finding 2 (speed): true, with one caveat on counting.** Sequential DB stages,
+excluding the auth user lookup: `/api/stats` month 3→2 (settings → one
+`Promise.all` incl. `buildSeries`). That is "4→3" only if you count auth, so the claim is right
+on that basis. Day/year 3→1 (no settings read; `buildStats` uses
+`cycleStartDay` only in the month branch). `/api/recap` 3→2 (settings passed
+into `computeSafeToSpend`). Monthly digest 4→2 (one settings read in
+`send-digests`, passed through). Behaviour is identical: `buildSeries` is pure
+in its arguments, and the settings object is the same row read once. Tests are green.
+
+**Finding 3 (docs): present.** The `apps/server/CLAUDE.md` gotcha row and ADR 0007
+"Alert keys" both now say alerts are keyed by user, not space (PRD F13.3).
+
+**Finding 4 (dup): fixed.** `cycleLabel` (`service.ts:106`) is the only
+"Month YYYY | range" rule, used by `buildStats` and `recap.ts` `rangeFor`.
+`cycle.startDay` equals the passed start day, so the condition is the same. The
+digest heading (month name, **no year**, `'This month'` fallback) and
+`toApiCycle.label` (month name, no year) produce different strings. They are not a
+third copy. `alerts.ts:104` and `money.ts:66` have their own Part 1 formats.
+
+**PR checklist (WORKFLOW §4), follow-ups only**
+- [x] Cost (§1): no dependency or service. Fewer DB round trips
+- [x] Money (§2): no arithmetic touched
+- [x] Data (§3): reads only. No migration or write path changed
+- [x] Auth (§4): space still from `activeHouseholdId(user)`. Settings are read once
+  per request for the same user, never from the request body
+- [x] Privacy (§6): no new log lines
+- [x] Runtime (§7): SQL aggregation unchanged. Stages reduced
+- [x] Time (§9): no new date sources
+- [ ] Design (DESIGN §10): R1 contrast on "Try again"
+- [x] Docs: finding 3 wording in `apps/server/CLAUDE.md` and ADR 0007
+- [x] `pnpm ci:local` passed
