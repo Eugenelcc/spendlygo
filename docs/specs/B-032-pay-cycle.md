@@ -979,7 +979,7 @@ the plan should say so.**
 | P3-AC14 | `apps/server/src/bot/commands/export.test.ts` › `/export (DB) › an empty last cycle says nothing was logged for its range` | ❌ failing (expected) |  ✅ |
 | P3-AC15 | `apps/server/src/bot/commands/export.test.ts` › `/export (DB) › /export cycle sends one file named by dates with a range caption` | ❌ failing (expected) |  ✅ |
 | P3-AC16 | `apps/server/src/api/pay-cycle.test.ts` › `GET /api/me › also returns the previous cycle` | ❌ failing (expected) |  ✅ |
-| P3-AC17 | Screenshot check (Q8 A), no automated test: the export sheet, day 20 and day 1 | n/a |  ⏳ screenshot pending (main session) |
+| P3-AC17 | Screenshot check (Q8 A), no automated test: the export sheet, day 20 and day 1 | n/a | ✅ real-stack check 2026-11-01: 5 options in order, Everything preselected, captions `20 Oct – 19 Nov` / `20 Sep – 19 Oct` (day 1: "This month · November", "Last month · October"), custom Download disabled until from ≤ to, real downloads named `spendlygo_2026-10-20_to_2026-11-19.csv` (5 rows), `spendlygo_2026-09-20_to_2026-10-19.csv` (2), `spendlygo-all-time.csv` (7), `spendlygo_2026-10-05_to_2026-10-24.csv` (4); light and dark, 375px |
 | (helper) | `packages/core/src/cycle.test.ts` › `formatDateRangeWithYears (B-032 Part 3)` | ❌ failing (expected) (export missing) |  ✅ |
 | (guard) | `apps/server/src/bot/commands/export.test.ts` › `/export (DB) › /export with no argument still sends everything, as today` | ✅ passes before build (regression guard) |  ✅ |
 | (guard) | `export-range.test.ts` › `anything else is null` | ✅ passes before build (regression guard) |  ✅ |
@@ -1023,6 +1023,7 @@ the plan should say so.**
 
 ---
 - **Part 3 fix (P3-AC17, sheet overlay):** the Export sheet inside Settings rendered clipped under the tab bar because an ancestor trapped `position: fixed`. The shared `components/Sheet.tsx` now renders via `createPortal(…, document.body)`; props, focus, scrim and CSS unchanged. Re-screenshot needed: Export sheet and one existing sheet (Recap or Capture).
+- **Part 3 real-stack verification (main session, 2026-11-01).** It found two defects before review, both fixed test-first: (1) the Mini App couldn't read `Content-Disposition` cross-origin, so every Mini App download was named `spendlygo-export.csv` (pre-existing on main); fixed with CORS `exposeHeaders` (a97faa9 test, fa11ffe fix). (2) The export sheet rendered inside Settings, clipped under the tab bar and FAB, with Download unreachable; fixed by portalling the shared `Sheet` to `document.body` (b52837d). Re-verified: the sheet overlays the viewport with a scrim, Download is topmost at 375×812, and the Recap and Capture sheets are unchanged.
 
 ## Review (Stage 5)
 
