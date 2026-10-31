@@ -10,18 +10,26 @@
 
 import {
   addDays,
-  addMonths,
-  daysInMonth,
+  cycleContaining,
+  DEFAULT_CYCLE_START_DAY,
   formatCents,
+  formatCycleRange,
+  isLastDayOfCycle,
   isoWeekday,
   monthName,
-  monthRange,
   parseIsoDate,
+  previousCycle,
   type AmountCents,
   type IsoDate,
 } from '@spendlygo/core';
 import { recurringRepo, type User } from '@spendlygo/db';
-import { computePeriodStats, computeSafeToSpend, computeStreak } from '../api/service.js';
+import {
+  activeSpaceSettings,
+  computePeriodStats,
+  computeSafeToSpend,
+  computeStreak,
+  type ActiveSpaceSettings,
+} from '../api/service.js';
 import { escapeMarkdown } from '../bot/markdown.js';
 import type { AppContext } from '../context.js';
 
@@ -120,13 +128,14 @@ async function buildPeriodSummary(
   ctx: AppContext,
   user: User,
   options: PeriodSummaryOptions,
+  settings?: ActiveSpaceSettings,
 ): Promise<DigestContent> {
   const money = (cents: number) =>
     escapeMarkdown(
       formatCents(cents as AmountCents, { currency: user.currency, locale: user.locale }),
     );
 
-  const stats = await computePeriodStats(ctx, user, options);
+  const stats = await computePeriodStats(ctx, user, options, settings);
 
   if (stats.totals.count === 0 && !stats.safeToSpend.hasBudget) {
     return { text: '', worthSending: false };
@@ -216,29 +225,40 @@ export async function buildWeeklyDigest(
 
 // --- monthly -------------------------------------------------------------
 
-export function isMonthlyDigestDay(today: IsoDate): boolean {
-  const { year, month, day } = parseIsoDate(today);
-  return day === daysInMonth(year, month);
+/** The last day of the space's budget cycle (F17); start day 1 is the calendar month's last day. */
+export function isMonthlyDigestDay(
+  today: IsoDate,
+  startDay: number = DEFAULT_CYCLE_START_DAY,
+): boolean {
+  return isLastDayOfCycle(today, startDay);
 }
 
 export async function buildMonthlyDigest(
   ctx: AppContext,
   user: User,
   today: IsoDate,
+  // Pass settings already loaded by the caller to skip the extra round trips.
+  settings?: ActiveSpaceSettings,
 ): Promise<DigestContent> {
-  const { year, month } = parseIsoDate(today);
-  const range = monthRange(year, month);
-  const previousAnchor = addMonths(range.start, -1);
-  const previousParts = parseIsoDate(previousAnchor);
-  const previousRange = monthRange(previousParts.year, previousParts.month);
+  const loaded = settings ?? (await activeSpaceSettings(ctx, user));
+  const cycle = cycleContaining(today, loaded.cycleStartDay);
+  const previous = previousCycle(cycle);
 
-  return buildPeriodSummary(ctx, user, {
-    heading: monthName(month) || 'This month',
-    from: range.start,
-    to: today,
-    previousFrom: previousRange.start,
-    previousTo: previousRange.end,
-  });
+  return buildPeriodSummary(
+    ctx,
+    user,
+    {
+      heading:
+        cycle.startDay === 1
+          ? monthName(parseIsoDate(cycle.start).month) || 'This month'
+          : formatCycleRange(cycle),
+      from: cycle.start,
+      to: today,
+      previousFrom: previous.start,
+      previousTo: previous.end,
+    },
+    loaded,
+  );
 }
 
 // send-digests.ts and the existing test suite import buildDigest for the

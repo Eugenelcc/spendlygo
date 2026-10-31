@@ -5,6 +5,8 @@
  * threshold_pct) is what lets the hourly tick re-check every user's spend
  * ratio every single run without re-announcing a threshold it already sent —
  * the second attempt at the same threshold just conflicts and does nothing.
+ * `year`/`month` are the calendar month the budget cycle ends in (F17); for a
+ * calendar-month cycle, that month.
  */
 
 import { and, eq } from 'drizzle-orm';

@@ -17,6 +17,9 @@ const PERIODS: Array<{ value: HistoryPeriod; label: string }> = [
 export interface HistoryScreenProps {
   transactions: Transaction[];
   loading: boolean;
+  /** The Cycle chip's bounds failed to load: show an error, never the unfiltered list. */
+  loadError?: boolean;
+  onRetry?: () => void;
   currency: string;
   locale: string;
   today: string;
@@ -30,6 +33,10 @@ export interface HistoryScreenProps {
   customTo: string;
   onCustomFromChange: (value: string) => void;
   onCustomToChange: (value: string) => void;
+  /** The space's cycle start day (F17); 1 keeps the calendar month picker. */
+  cycleStartDay: number;
+  /** The cycle stepper shown instead of the month picker when the start day isn't 1. */
+  cycleStepper: JSX.Element | null;
 }
 
 interface CategoryOption {
@@ -45,6 +52,8 @@ interface CategoryOption {
 export function HistoryScreen({
   transactions,
   loading,
+  loadError = false,
+  onRetry,
   currency,
   locale,
   today,
@@ -57,6 +66,8 @@ export function HistoryScreen({
   customTo,
   onCustomFromChange,
   onCustomToChange,
+  cycleStartDay,
+  cycleStepper,
 }: HistoryScreenProps): JSX.Element {
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
@@ -147,7 +158,10 @@ export function HistoryScreen({
       </div>
 
       <div className="chip-row" role="group" aria-label="Filter by date">
-        {PERIODS.map((option) => (
+        {PERIODS.map((option) => ({
+          ...option,
+          label: option.value === 'month' && cycleStartDay !== 1 ? 'Cycle' : option.label,
+        })).map((option) => (
           <button
             type="button"
             key={option.value}
@@ -162,7 +176,9 @@ export function HistoryScreen({
         ))}
       </div>
 
-      {period === 'month' && (
+      {period === 'month' && cycleStartDay !== 1 && cycleStepper}
+
+      {period === 'month' && cycleStartDay === 1 && (
         <div className="date-range">
           <button
             type="button"
@@ -256,6 +272,16 @@ export function HistoryScreen({
           <div className="skeleton" />
           <div className="skeleton" />
           <div className="skeleton skeleton--short" />
+        </div>
+      ) : loadError ? (
+        <div className="empty empty--inline">
+          <div className="empty__emoji">⚠️</div>
+          <p className="empty__body">Couldn't load this cycle.</p>
+          {onRetry && (
+            <button type="button" className="primary primary--inline" onClick={onRetry}>
+              Try again
+            </button>
+          )}
         </div>
       ) : customIncomplete ? (
         <div className="empty empty--inline">

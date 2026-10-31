@@ -3,7 +3,7 @@
  *
  * The daily digest fires when the user's LOCAL hour matches their configured
  * digestHour. The weekly and monthly digests fire at that same hour, gated on
- * the day: Sunday for weekly, the last day of the month for monthly. Per the
+ * the day: Sunday for weekly, the last day of the budget cycle (F17) for monthly. Per the
  * user's own choice, they are separate messages — a last-day-of-month Sunday
  * can produce three, which is a rare enough overlap to accept rather than
  * special-case.
@@ -12,6 +12,7 @@
 import { hourOf, isoDateOf } from '@spendlygo/core';
 import { usersRepo, type User } from '@spendlygo/db';
 import type { Bot } from 'grammy';
+import { activeSpaceSettings } from '../api/service.js';
 import type { BotContext } from '../bot/middleware.js';
 import {
   buildDailyDigest,
@@ -42,11 +43,13 @@ export async function sendDueDigests(ctx: AppContext, bot: Bot<BotContext>): Pro
       );
     }
 
-    if (isMonthlyDigestDay(today)) {
-      sent += await sendOne(bot, user, 'tick.monthly_digest_failed', () =>
-        buildMonthlyDigest(ctx, user, today),
-      );
-    }
+    // Inside sendOne's error isolation: one user's failed lookup must not stop the loop.
+    sent += await sendOne(bot, user, 'tick.monthly_digest_failed', async () => {
+      const settings = await activeSpaceSettings(ctx, user);
+      return isMonthlyDigestDay(today, settings.cycleStartDay)
+        ? buildMonthlyDigest(ctx, user, today, settings)
+        : { text: '', worthSending: false };
+    });
   }
 
   return sent;

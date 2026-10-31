@@ -277,4 +277,80 @@ describeIfDb('pay cycle API (F17)', () => {
       expect(me.user.monthlyBudgetCents).toBe(150_000);
     });
   });
+  // --- Part 2 (B-032, P2-AC1 to AC5): the Stats month view -------------------
+
+  describe('GET /api/stats', () => {
+    const stats = (query: string, telegramId: bigint = OWNER) =>
+      app.request(`/api/stats?${query}`, { headers: auth(telegramId) });
+
+    it('month view is the day-20 cycle with 31 day buckets', async () => {
+      await ownersOctober(20);
+      const response = await stats('period=month');
+      expect(response.status).toBe(200);
+      const body = await json(response);
+      expect(body.from).toBe('2026-10-20');
+      expect(body.to).toBe('2026-11-19');
+      expect(body.label).toBe('20 Oct – 19 Nov');
+      expect(body.outCents).toBe(5000);
+      expect(body.previousOutCents).toBe(10_000); // 20 Sep - 19 Oct
+      expect(body.series).toHaveLength(31);
+      expect(body.series[0]).toMatchObject({ key: '2026-10-20', label: '20' });
+      expect(body.series[30]).toMatchObject({ key: '2026-11-19', label: '19' });
+    });
+
+    it('day 1 month view is unchanged', async () => {
+      await ownersOctober(1);
+      const body = await json(await stats('period=month'));
+      expect(body.from).toBe('2026-10-01');
+      expect(body.to).toBe('2026-10-31');
+      expect(body.label).toBe('October 2026');
+      expect(body.outCents).toBe(15_000);
+      expect(body.series).toHaveLength(31);
+      expect(body.series.map((point: { label: string }) => point.label)).toEqual(
+        Array.from({ length: 31 }, (_, index) => String(index + 1)),
+      );
+    });
+
+    it('anchors either side of a cycle step exactly one cycle, re-grouped by the current start day', async () => {
+      await ownersOctober(20);
+
+      // The day before `from` of the current cycle: the previous cycle, which
+      // now holds the S$100 spent on 5 Oct (decision 5, history is re-grouped).
+      const before = await json(await stats('period=month&anchor=2026-10-05'));
+      expect(before.from).toBe('2026-09-20');
+      expect(before.to).toBe('2026-10-19');
+      expect(before.outCents).toBe(10_000);
+
+      // The day after `to`: the next cycle.
+      const after = await json(await stats('period=month&anchor=2026-11-20'));
+      expect(after.from).toBe('2026-11-20');
+      expect(after.to).toBe('2026-12-19');
+      expect(after.outCents).toBe(0);
+    });
+
+    it('rejects unauthenticated and a bad anchor; a stranger sees only their own month', async () => {
+      await ownersOctober(20);
+
+      expect((await app.request('/api/stats?period=month')).status).toBe(401);
+      expect((await stats('period=month&anchor=2026-02-30')).status).toBe(400);
+
+      const stranger = await stats('period=month', STRANGER);
+      expect(stranger.status).toBe(200);
+      const body = await json(stranger);
+      expect(body.from).toBe('2026-10-01');
+      expect(body.to).toBe('2026-10-31');
+      expect(body.outCents).toBe(0);
+      expect(body.count).toBe(0);
+    });
+
+    it('the year view stays the calendar year with a day-20 cycle', async () => {
+      await ownersOctober(20);
+      const body = await json(await stats('period=year'));
+      expect(body.from).toBe('2026-01-01');
+      expect(body.to).toBe('2026-12-31');
+      expect(body.label).toBe('2026');
+      expect(body.series).toHaveLength(12);
+      expect(body.outCents).toBe(15_000);
+    });
+  });
 });

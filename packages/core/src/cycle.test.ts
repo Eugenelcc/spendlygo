@@ -5,6 +5,7 @@
 
 import { describe, expect, it } from 'vitest';
 import {
+  cycleAlertKey,
   cycleContaining,
   formatCycleRange,
   nextCycle,
@@ -122,5 +123,29 @@ describe('formatCycleRange', () => {
   it('formats a cycle as "20 Oct – 19 Nov", with no year', () => {
     expect(formatCycleRange(cycleContaining(d('2026-10-31'), 20))).toBe('20 Oct – 19 Nov');
     expect(formatCycleRange(cycleContaining(d('2027-01-05'), 20))).toBe('20 Dec – 19 Jan');
+  });
+});
+
+describe('cycleAlertKey (B-032 Part 2, Q2 A)', () => {
+  it('is the calendar month the cycle ends in', () => {
+    // Day 1: equals the calendar month, so rows written before B-032 still match.
+    expect(cycleAlertKey(cycleContaining(d('2026-10-15'), 1))).toEqual({ year: 2026, month: 10 });
+    // Day 20: 20 Oct - 19 Nov ends in November.
+    expect(cycleAlertKey(cycleContaining(d('2026-10-31'), 20))).toEqual({ year: 2026, month: 11 });
+    // Across the new year: 20 Dec - 19 Jan ends in January of the next year.
+    expect(cycleAlertKey(cycleContaining(d('2026-12-25'), 20))).toEqual({ year: 2027, month: 1 });
+  });
+
+  it('gives distinct keys to 36 consecutive cycles, for every start day', () => {
+    for (let startDay = 1; startDay <= 31; startDay += 1) {
+      let cycle = cycleContaining(d('2026-01-15'), startDay);
+      const seen = new Set<string>();
+      for (let index = 0; index < 36; index += 1) {
+        const { year, month } = cycleAlertKey(cycle);
+        seen.add(`${year}-${month}`);
+        cycle = nextCycle(cycle);
+      }
+      expect(seen.size).toBe(36);
+    }
   });
 });
