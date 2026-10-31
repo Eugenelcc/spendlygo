@@ -483,7 +483,7 @@ scheduled nudge.
 | `/switch [n]` | List your spaces, or switch to space `n` |
 | `/goals [add\|put …]` | List, create, or fund savings goals (F14) |
 | `/recap [year]` | Month or year recap (F16) |
-| `/settings` | Timezone, digest time, notification toggles — *not built yet (BACKLOG B-004); the Mini App's Settings screen covers these today* |
+| `/settings` | Digest time, digest/nudge/alert toggles; timezone shown read-only (changing it: see BACKLOG) |
 | `/help` | Grammar cheat-sheet with examples |
 
 Plain text with a leading amount is a capture. Anything else gets a gentle
