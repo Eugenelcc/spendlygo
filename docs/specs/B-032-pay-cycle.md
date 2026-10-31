@@ -953,11 +953,88 @@ the plan should say so.**
 
 ## Review (Stage 5)
 
-**Verdict:** <!-- ready for owner · back to build · back to plan -->
+*Part 1 only. Reviewed 2026-10-31 by `reviewer` (Opus) against
+`git diff 2582885..HEAD` (6bb8b53 tests, 080c074 build, af4fa5c test fix).*
+
+**Verdict:** ready for owner (Part 1). No blocking findings.
+
+**`pnpm ci:local` (real run, local Postgres):** passed. Typecheck ✓, lint +
+prettier ✓, Render blueprint ✓, migrations applied ✓ ("Migrations up to date"),
+seed ✓, **35 test files, 497 tests passed, 0 failed, 0 skipped** (DB-backed
+suites ran), build ✓, Mini App bundle 86.1 KB gz (43% of budget).
+
+**Independent checks (beyond the suite):**
+- Cycle maths property run (tsx, scratch only): 31 start days × every date
+  2023-12-01..2029-01-31 (58,559 cases). Every cycle contains its date and
+  starts on the clamped start day, with 28 to 31 days. Σ `safeTodayCents` ≤
+  budget for budgets {1, 7, 99, 3,001, 150,000, 1,234,567, 99,999,999} cents ×
+  31 start days × every cycle in 2026–2028, and the allowance is never
+  negative. No defect found.
+- Start day 1 = today, surface by surface. `cycleContaining(d, 1)` equals
+  `monthRange` (P1-AC1). `calculateSafeToSpend` is field-identical (P1-AC13).
+  `/api/today` totals use `cycle.start..cycle.end` = `month.start..month.end`.
+  `/api/today` and `/api/me` gain only an additive `cycle` field, and
+  `serialiseSafeToSpend` copies named fields, so `cycle` doesn't leak into
+  `safeToSpend`. The bot `/today`, `/budget` and capture/photo confirmations
+  keep the exact old strings behind `startDay === 1`. The Today card renders
+  the same text for day 1 or a missing `cycle`.
+- Migration `0005_luxuriant_killraven.sql` is generated (drizzle name, CI
+  "up to date"). It's additive: `ADD COLUMN cycle_start_day smallint DEFAULT 1
+  NOT NULL` + `CHECK (BETWEEN 1 AND 31)`. The snapshot `prevId` = the 0004
+  snapshot id, only `public.households` differs, and the journal `when`
+  (2026-10-31) is later than 0004. Migrations run in the Render build before
+  the new code serves (render.yaml). The old server selects named columns, and
+  its inserts get the default. Safe while the old server is running.
+- Strict `updateSettingsSchema`: every Mini App build in git history sends
+  only `monthlyBudgetCents`, `digestEnabled`, `digestHour` or `alertsEnabled`.
+  The bot's `parseSettingsCallback` builds known keys only, and there's no
+  other caller. No existing client gets a new 400.
+- P1-AC24 correction (`S$50.00` → `$50.00`) **is legitimate**: `formatCents`
+  is unchanged and `Intl.NumberFormat('en-SG', {currency:'SGD'})` renders
+  `$50.00` on Node 22. `core/money.test.ts:100` asserts `$1,234.56`. The
+  `S$` in DESIGN.md §3 is a pre-existing doc/code mismatch for the owner to
+  decide, outside B-032.
 
 | # | Severity | file:line | Finding | Failure scenario |
 |---|---|---|---|---|
-| | | | | |
+| 1 | Low (non-blocking, §7) | `apps/server/src/api/index.ts:287`, `apps/server/src/api/service.ts:159` | `computeSafeToSpend` now reads the household first, then runs the totals (it needs the cycle), and `/api/today` awaits it before starting its other 4 queries. `/api/today` goes from about 1 to 3 sequential DB round trips, and every capture/confirmation from 1 to 2. `/api/me` also reads the same household twice (`effectiveBudgetCents` + `currentCycle`) | On the Supabase pooler, each round trip adds tens of ms to opening the Mini App and to every bot capture reply. It's slower, never wrong. Possible fix (later, or in Part 2): start today's transactions, recentDays and streak in parallel with `computeSafeToSpend`, and have `/me` call `activeSpaceSettings` once |
+| 2 | Low (test strength) | `apps/server/src/bot/commands/money.test.ts:22-33` | P1-AC24 says the day-1 reply is "unchanged, byte for byte", but the test only `toContain`s one line. It doesn't cover the no-budget branch (`Spent this cycle`) or `/budget`'s `left this cycle`, and it hides type drift behind an unneeded `as any` | A later edit to another `/today` line, or to the no-budget copy, for day-1 users would pass the suite. I diffed the code by hand: the day-1 output is identical today |
+| 3 | Low (unverified UI) | `apps/miniapp/src/screens/Today.tsx:97-99` | P1-AC26 has no screenshots. The change is copy only, and the day-1 path renders the same text. With day ≠ 1, the 11px uppercase label `20 OCT – 19 NOV` sits in a `flex; space-between` head next to the amount, with no `white-space: nowrap` | At 375px with a large budget (`$12,345.67 of $12,345.67`), the label can wrap onto two lines ("20 OCT –" / "19 NOV"). It's cosmetic and unreachable until Part 4 lets anyone set day ≠ 1. **Verification I'd want:** run `pnpm dev` against the dev DB, set a dev space to 20 with a one-row update in the dev DB only, and screenshot Today at 375px in light and dark, both with a small and a 5-digit budget, plus the no-budget card. Diff the day-1 screenshots against `main`. Can be done before Part 4 ships, not necessarily before this merge |
+| 4 | Info (process) | `docs/adr/0007-budget-cycle-per-space.md`, `packages/db/migrations/0005_*` | **Numbering clash.** Unmerged `origin/claude/telegram-expense-tracker-06gr8u` has `docs/adr/0007-multi-currency-via-frankfurter.md` **and** its own `0005_classy_absorbing_man` + `0006_*` migrations on the 0004 snapshot chain. B-011 also plans an "ADR 0007" (BACKLOG.md:105) | If any of that branch is ever adopted, its ADR must be renumbered and its migrations regenerated on top of `0005_luxuriant_killraven`. Two 0005 entries in the journal would break `db:migrate`. B-029 already tracks the branch, so add these two points there. B-011 should take the next free ADR number |
+| 5 | Info | `apps/server/src/tasks/alerts.ts:43`, `apps/server/src/tasks/digest.ts:54-55` | They now receive cycle-based `computeSafeToSpend` results, but the alert key/text and the monthly digest stay calendar-month until Part 2 | Unreachable in Part 1, because no path can set day ≠ 1. It matters only if Part 2 were reverted while a space is on day ≠ 1: alerts would then measure the cycle but key by calendar month. Covered by the plan's order (Part 2 before Part 4) |
+
+**Acceptance criteria → tests (Part 1)**
+
+| # | Proven by | Real proof? |
+|---|---|---|
+| P1-AC1–AC10 | `packages/core/src/cycle.test.ts` (10 tests) | Yes. Exhaustive day-1 sweep, exact clamping fixtures, tiling for 1–31, 00:30 SGT. AC7 doesn't check containment, but my property run covers it |
+| P1-AC11–AC16 | `packages/core/src/safe-to-spend.test.ts` › `pay cycles (F17)` | Yes. AC13 compares the full result object for 4 months, every day. AC14 matches the spec. Existing tests unedited |
+| P1-AC17, AC28 | `packages/db/src/repositories/households.test.ts` › `cycle start day` | Yes. Raw UPDATE hits the named CHECK. `updated_at` unchanged on the repeat. Unknown id throws |
+| P1-AC18–AC23 | `apps/server/src/api/pay-cycle.test.ts` | Yes. Exact numbers from the spec, 00:30 SGT via a real POST without a date, shared space + switch, 401 + a stranger who would see 20 if leaked |
+| P1-AC24 | `apps/server/src/bot/commands/money.test.ts` | Partly (finding 2) |
+| P1-AC25 | `apps/server/src/bot/capture.test.ts` › `the confirmation card with a pay cycle (F17)` | Yes |
+| P1-AC26 | Screenshot check | **Not done** (finding 3) |
+| P1-AC27 | `pay-cycle.test.ts` › `PATCH /api/settings › an unknown key is a 400…` | Yes. The budget is re-read and unchanged |
+
+**Plan fidelity.** Every Part 1 file in the plan was touched as described,
+and nothing outside the plan was built. The docs the plan named are updated:
+PRD F6, F17 and §9; root `CLAUDE.md` layout; `packages/core/CLAUDE.md` map
+and tests rule; the `apps/server/CLAUDE.md` gotcha; ADR 0007 (cycle per
+space, clamped fixed day, default 1, re-grouped history, strict schema,
+additive migration; alerts and `budget_periods` deferred to later parts, as
+planned). BACKLOG already reads "Part 1 in progress".
 
 **Guardrail self-check** (WORKFLOW §4)
-- [ ] Cost · [ ] Money · [ ] Auth + cross-user test · [ ] Privacy · [ ] Time
+- [x] **Cost:** no new service, dependency or Render service (§1)
+- [x] **Money:** integer cents throughout, existing `divideCentsFloor`
+  rounding, never negative. Σ ≤ budget proven by test and by property run (§2)
+- [x] **Auth + cross-user test:** identity only from `requireInitData`. The
+  cycle comes from `activeHouseholdId(user)`, never from the request. 401 and
+  stranger tests on `/today` and `/me` (§4)
+- [x] **Privacy:** no new logging (§6)
+- [x] **Time:** every cycle is computed from `todayFor(ctx, user)` (user
+  timezone, injected `Clock`). Core has no `Date.now()`. 00:30 tested at the
+  core and API levels (§9)
+- [x] Data (§3): the migration is additive and generated. The conditional
+  `UPDATE … WHERE cycle_start_day <> day` makes repeats detectable.
+  Telegram (§10): no new sends in Part 1
