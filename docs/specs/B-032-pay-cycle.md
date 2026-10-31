@@ -250,6 +250,28 @@ that space: S$100 on 2026-10-05 and S$50 on 2026-10-25.
 
 ---
 
+## Owner decisions on open questions and second opinion (2026-10-31)
+
+Answers from the owner, in the session. These supersede the planner's open
+questions and the challenger's options where they differ.
+
+| # | Decision |
+|---|---|
+| Q1 + F1 (export) | **`/export` with nothing typed keeps exporting EVERYTHING, as today.** This overrides recap decision 8's "`/export` = this cycle", which was made without knowing the current behaviour. Add `/export cycle` (this cycle) and `/export last cycle`. `/export 2026-10` = calendar month and `/export 2026` = calendar year, unchanged; `/export 2026-10-05` keeps working. Mini App picker: **Everything · This cycle · Last cycle · Pick a month (calendar) · Custom dates**. File names always state the exact range. The Settings footnote "export everything" stays true |
+| Q2 + F2 (alerts) | **Option A**, keyed by the calendar month the cycle ends in, with no migration. Document the limitation honestly: after moving the start day *earlier* (or later, before the new day arrives), one threshold in that cycle may be skipped once. It never double-sends. Add an AC proving that |
+| Q3 (History) | **Option A:** the chip becomes "Cycle" when the start day isn't 1. Per F5, reuse `/api/stats` rather than adding a new endpoint, if that works cleanly |
+| Q4 (year views) | **Option A:** Stats Year and `/recap year` stay calendar years |
+| Q5 (wording) | No year in on-screen ranges. Use "cycle" wording only when the start day isn't 1; day 1 keeps month wording. Export file names always include full dates |
+| Q7 (digest) | The monthly digest fires on the cycle's last day, at the digest hour, titled with the range and compared with the previous cycle. Day 1 is unchanged |
+| Q8 (UI tests) | **Option A:** screenshots for the Mini App ACs until B-016. A "sent once" behaviour must be proven by a server test, not a screenshot (F5) |
+| F3 | Settings day-picker callbacks carry the space id. An old message can't change a different space's cycle |
+| F4 + F5 (release) | Rollback note in the Build plan, so a reverted release can't strand a space on a non-1 day. During the Part 4 deploy the old server must not silently accept and drop `cycleStartDay` (make the settings schema `.strict()` in an earlier part, or an equivalent) |
+| F5 (partner) | When a member changes a shared space's start day, the other members get one short message |
+| F5 (tidy-ups) | Include the year in export ranges that span New Year; add the `/recap` footer (`commands/recap.ts:89`) to the Part 2 files; place the History chip per the target Mini App layout (`apps/miniapp/CLAUDE.md`), not in `App.tsx`; fix the day-1 "last cycle" caption against the copy rule |
+| Q6 (`budget_periods`) | **Still open:** to be asked at final approval |
+
+---
+
 ## Build plan — *how* (Stage 2)
 
 ### Core design (shared by every part)
