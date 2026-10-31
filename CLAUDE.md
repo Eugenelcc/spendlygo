@@ -21,7 +21,11 @@ nearly every technical decision here.
 | [`PRD.md`](./PRD.md) | You need to know *what* to build, feature IDs (F1–F11), the data model, or the phase order |
 | [`GUARDRAILS.md`](./GUARDRAILS.md) | **Before every change.** Hard rules on cost, money maths, auth, secrets, privacy, and scope |
 | [`DESIGN.md`](./DESIGN.md) | You are touching anything the user sees — colour, type, motion, haptics, components |
+| [`WORKFLOW.md`](./WORKFLOW.md) | **Start and end of every session.** How work flows: intake, plan, branch, verify, PR, done, hotfix |
+| [`BACKLOG.md`](./BACKLOG.md) | Choosing what to work on. Every task is a `B-###` item here |
 | `CLAUDE.md` (this file) | Repo layout, commands, conventions, deployment, gotchas |
+| `apps/server/CLAUDE.md`, `apps/miniapp/CLAUDE.md`, `packages/core/CLAUDE.md` | Local rules for that workspace. Loaded automatically when you work there |
+| [`docs/adr/`](./docs/adr) | Why a non-obvious decision was made (0001–0006) |
 
 If a request conflicts with `GUARDRAILS.md`, **stop and ask.** Do not silently
 resolve the conflict.
@@ -41,11 +45,16 @@ resolve the conflict.
 | ORM | **Drizzle** + `postgres.js` | SQL-first, typed, generated migrations, tiny runtime |
 | Validation | **Zod** | One schema shared by API boundaries and the parser |
 | Mini App | **React 19 + Vite** | Fast builds, small output |
-| Styling | **Tailwind v4** over CSS custom properties | Telegram theme vars flow through tokens |
-| Animation | **motion** | Spring physics + shared layout transitions |
+| Styling | **Plain CSS over custom properties** (`apps/miniapp/src/styles.css`) | Telegram theme vars flow through tokens; zero runtime cost |
+| Animation | **CSS transitions / hand-written** — no animation library installed | Bundle budget; see BACKLOG B-011 for whether to adopt `motion` |
 | Data fetching | **TanStack Query** | Cache, optimistic updates, retries |
-| Telegram SDK | `@telegram-apps/sdk-react` | Typed access to theme, haptics, MainButton |
+| Telegram bridge | **Hand-rolled** `apps/miniapp/src/lib/telegram.ts` — no SDK installed | Reads launch params from the URL fragment; no third-party script |
 | Charts | **hand-written SVG** | No chart library — full animation control, no bundle cost |
+
+> The stack originally planned Tailwind v4, `motion` and
+> `@telegram-apps/sdk-react`. None of them were adopted, and the table above
+> shows what is actually installed. Whether to keep it that way is
+> BACKLOG B-011.
 | Tests | **Vitest** | Fast; same config across packages |
 
 **Rejected on purpose:** Nest (memory), Prisma (bundle + engine size), Recharts
@@ -61,31 +70,44 @@ spendlygo/
 ├── apps/
 │   ├── server/              # THE deployed Render web service (bot + API, one process)
 │   │   └── src/
-│   │       ├── index.ts         # Hono app, route mounting, boot
-│   │       ├── bot/             # grammY: commands, capture handler, callbacks, keyboards
-│   │       ├── api/             # /api routes consumed by the Mini App
-│   │       ├── tasks/           # /tasks/tick — recurring materialisation + digests
-│   │       ├── middleware/      # initData auth, webhook secret, rate limit, error handler
-│   │       └── telegram/        # Bot API helpers, file proxy + URL cache
+│   │   ├── CLAUDE.md            # local rules for the server (and packages/db)
+│   │   └── src/
+│   │       ├── index.ts         # boot: HTTP first, then bot init (ADR 0004)
+│   │       ├── app.ts           # Hono app: /healthz, webhook + secret check, route mounting
+│   │       ├── config.ts        # the only reader of env (Zod, fail fast)
+│   │       ├── bot/             # grammY: commands/, capture, photo-capture, keyboards
+│   │       ├── api/             # /api routes (index.ts) + shared computations (service.ts)
+│   │       ├── tasks/           # /tasks/tick — recurring, budget alerts, digests
+│   │       ├── middleware/      # initData auth, error handler
+│   │       └── telegram/        # initData HMAC, photo proxy + URL cache, OCR, error classes
 │   └── miniapp/             # Render Static Site (React + Vite)
+│       ├── CLAUDE.md            # local rules for the Mini App
 │       └── src/
-│           ├── screens/         # today, capture, stats, history, settings
-│           ├── components/      # Ring, Odometer, Money, charts, sheets
-│           ├── theme/           # Telegram theme vars → design tokens
-│           └── lib/             # api client, haptics, formatters
+│           ├── App.tsx          # tab shell + space switcher
+│           ├── screens/         # Today, Stats, History, Settings
+│           ├── components/      # Capture sheet, Ring, Money, Sheet, SVG charts, photo viewer…
+│           ├── lib/             # api client, Telegram bridge + haptics, formatters
+│           └── styles.css       # design tokens (Telegram theme vars → DESIGN.md §2–5)
 ├── packages/
 │   ├── core/                # PURE domain logic — no I/O, no Date.now(), fully unit-tested
+│   │   ├── CLAUDE.md            # local rules for the dangerous five
 │   │   └── src/
 │   │       ├── money.ts         # AmountCents branded type, arithmetic, formatting
 │   │       ├── parser.ts        # F1 quick-text grammar
 │   │       ├── safe-to-spend.ts # F6 goals engine
 │   │       ├── recurrence.ts    # F5 occurrence dates, month-end clamping
 │   │       ├── categories.ts    # F10 keyword inference
-│   │       └── time.ts          # user-timezone period boundaries
+│   │       ├── time.ts          # user-timezone period boundaries
+│   │       ├── clock.ts         # injected Clock
+│   │       ├── savings.ts       # F14 savings goal progress
+│   │       ├── streaks.ts       # F15 logging streaks
+│   │       ├── receipt-text.ts  # F4.6 total guessing from OCR text
+│   │       └── csv-export.ts    # F8 CSV rows
 │   ├── db/                  # Drizzle schema, migrations, repositories
 │   └── shared/              # Zod schemas + types shared by server and miniapp
+├── scripts/                 # CI checks: Render blueprint, Mini App bundle size
 ├── docs/adr/                # Architecture decision records
-├── PRD.md  GUARDRAILS.md  DESIGN.md  CLAUDE.md
+├── PRD.md  GUARDRAILS.md  DESIGN.md  CLAUDE.md  WORKFLOW.md  BACKLOG.md
 └── render.yaml              # Infrastructure as code for both Render services
 ```
 
@@ -233,26 +255,36 @@ the old version keeps serving until the new one passes its health check.
 
 ## Working agreement
 
+The full process is in [`WORKFLOW.md`](./WORKFLOW.md). In short:
+
 1. **Read `GUARDRAILS.md` before changing anything.** It is short, and it is
    binding.
-2. **Work the phases in order** (`PRD.md` §13). Finish P1 before starting P2.
-   A half-built parser plus a half-built stats screen is worth less than either
-   one finished.
-3. **Cite the feature ID** you're implementing in the commit and the PR body.
-4. **Test the dangerous five** — money maths, the text parser, safe-to-spend,
-   recurrence dates, timezone boundaries. Those are where silent, expensive bugs
+2. **Every task is a `BACKLOG.md` item.** For anything bigger than a small
+   fix, post a plan and wait for the owner's OK (WORKFLOW §4).
+3. **Cite the backlog and feature IDs** in the branch, commits and PR body.
+   One feature ID per PR.
+4. **Test the dangerous five**: money maths, the text parser, safe-to-spend,
+   recurrence dates, timezone boundaries. That's where silent, expensive bugs
    live. No change to them ships without tests.
 5. **Run `pnpm typecheck && pnpm lint && pnpm test`** before every commit.
-6. **Ask when uncertain**, especially about cost, data loss, or scope
+6. **Update docs in the same PR** whenever behaviour, layout or a lesson
+   changes, so the docs never drift from the code.
+7. **Park side ideas** in `BACKLOG.md` → Later. Never build them in the
+   current task.
+8. **Ask when uncertain**, especially about cost, data loss or scope
    (`GUARDRAILS.md` §14). Guessing is the expensive option here.
-7. **Record non-obvious decisions** as a short ADR in `docs/adr/`.
+9. **Record non-obvious decisions** as a short ADR in `docs/adr/`.
 
 ### Git
 
-- Develop and push on **`claude/telegram-expense-tracker-06gr8u`**.
-- `git push -u origin claude/telegram-expense-tracker-06gr8u`.
-- **Do not open a pull request unless explicitly asked.**
+- **One branch per task**, cut from the latest `main`, named
+  `<type>/<backlog-id>-<slug>` (e.g. `feat/B-003-month-command`). A cloud
+  session that is assigned a branch name uses that name.
+- `git push -u origin <branch>`. Never commit directly to `main`.
+- **Open a pull request only when the owner asks. Never merge.** The owner
+  merges after review and green CI.
 - Never force-push a shared branch. Keep `main` deployable.
+- Production broken? Revert first, fix second (WORKFLOW §10).
 
 ---
 

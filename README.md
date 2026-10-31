@@ -35,6 +35,8 @@ without blowing the month.
 | [GUARDRAILS.md](./GUARDRAILS.md) | Hard rules: cost, money maths, auth, privacy, scope |
 | [DESIGN.md](./DESIGN.md) | Design system, motion, haptics, screens |
 | [CLAUDE.md](./CLAUDE.md) | Stack, repo layout, commands, conventions, gotchas |
+| [WORKFLOW.md](./WORKFLOW.md) | How work flows: backlog → plan → branch → verify → PR → done |
+| [BACKLOG.md](./BACKLOG.md) | The plan: what's next, what's parked, known drift |
 
 ## Stack
 
@@ -53,10 +55,12 @@ P2 mini app   ██████████ done
 P3 goals      ██████████ done
 P4 stats      ██████████ done
 P5 automation ██████████ done
-P6 polish     █████████░  photos + OCR + CSV export done
+P6 polish     █████████░  photos + OCR + CSV export done; purge, account deletion, polish audit open
 ```
 
-442 tests, initial Mini App bundle 85 KB gzipped.
+What's left is tracked in [BACKLOG.md](./BACKLOG.md).
+
+450 tests (DB-backed ones run in CI against Postgres), initial Mini App bundle 86 KB gzipped (43% of the 200 KB budget).
 
 ## Running it locally
 
@@ -72,10 +76,14 @@ blueprint is [render.yaml](./render.yaml).
 
 ## Architecture decisions
 
-Short records of the non-obvious calls live in [docs/adr](./docs/adr) — why one
-web service and a static site, why Supabase rather than Render's Postgres, why
-receipt photos never leave Telegram, and why the HTTP server starts before the
-bot.
+Short records of the non-obvious calls live in [docs/adr](./docs/adr):
+
+1. One web service plus a static site
+2. Supabase instead of Render's Postgres
+3. Receipt photos stay in Telegram
+4. The HTTP server starts before the bot
+5. Receipt OCR via OCR.space, as a pre-fill suggestion only
+6. Households become many-to-many "spaces"
 
 ## License
 
