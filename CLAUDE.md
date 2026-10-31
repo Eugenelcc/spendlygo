@@ -18,10 +18,10 @@ nearly every technical decision here.
 
 | Doc | Read it when |
 |---|---|
-| [`PRD.md`](./PRD.md) | You need to know *what* to build, feature IDs (F1–F11), the data model, or the phase order |
+| [`PRD.md`](./PRD.md) | You need to know *what* to build, feature IDs (F1–F16), the data model, or the phase order |
 | [`GUARDRAILS.md`](./GUARDRAILS.md) | **Before every change.** Hard rules on cost, money maths, auth, secrets, privacy, and scope |
 | [`DESIGN.md`](./DESIGN.md) | You are touching anything the user sees — colour, type, motion, haptics, components |
-| [`WORKFLOW.md`](./WORKFLOW.md) | **Start and end of every session.** The pipeline: intake → spec → plan → build → test → review → release → close, with success/failure for each stage |
+| [`WORKFLOW.md`](./WORKFLOW.md) | **Start and end of every session.** The pipeline: intake → spec → plan → test (written first) → build → review → release → close, with the model for each stage, with success/failure for each stage |
 | [`docs/specs/`](./docs/specs) | A task is past intake. Each item's spec and plan live here (`TEMPLATE.md`) |
 | [`BACKLOG.md`](./BACKLOG.md) | Choosing what to work on. Every task is a `B-###` item here |
 | `CLAUDE.md` (this file) | Repo layout, commands, conventions, deployment, gotchas |
@@ -51,12 +51,12 @@ resolve the conflict.
 | Data fetching | **TanStack Query** | Cache, optimistic updates, retries |
 | Telegram bridge | **Hand-rolled** `apps/miniapp/src/lib/telegram.ts` — no SDK installed | Reads launch params from the URL fragment; no third-party script |
 | Charts | **hand-written SVG** | No chart library — full animation control, no bundle cost |
+| Tests | **Vitest** | Fast; same config across packages |
 
 > The stack originally planned Tailwind v4, `motion` and
 > `@telegram-apps/sdk-react`. None of them were adopted, and the table above
 > shows what is actually installed. Whether to keep it that way is
 > BACKLOG B-011.
-| Tests | **Vitest** | Fast; same config across packages |
 
 **Rejected on purpose:** Nest (memory), Prisma (bundle + engine size), Recharts
 and friends (bundle), any component kit (fights Telegram's theme), any paid or
@@ -70,7 +70,6 @@ credit-card-required service (see `GUARDRAILS.md` §1).
 spendlygo/
 ├── apps/
 │   ├── server/              # THE deployed Render web service (bot + API, one process)
-│   │   └── src/
 │   │   ├── CLAUDE.md            # local rules for the server (and packages/db)
 │   │   └── src/
 │   │       ├── index.ts         # boot: HTTP first, then bot init (ADR 0004)
