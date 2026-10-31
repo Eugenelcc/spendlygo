@@ -13,12 +13,25 @@ then edit it in its own `docs/` PR (§12).
 
 ```
  0 INTAKE ─▶ 1 SPEC ─▶ 2 PLAN ─▶ 3 TEST ─▶ 4 BUILD ─▶ 5 REVIEW ─▶ 6 RELEASE ─▶ 7 CLOSE
-  B-###      what      how      failing    until     agent, then   deploy +     BACKLOG
-             ✋ owner   ✋ owner  tests      green     owner        smoke test   → Done
-             approves  approves  first               merges ✋
+  B-###      grill,    grill,   failing    until     agent, then   deploy +     BACKLOG
+             then what then how tests      green     owner        smoke test   → Done
+             ✋ owner   ✋ owner  first               merges ✋
+             approves  approves
 ```
 
 ✋ marks a human gate. Claude never passes one alone.
+
+### The golden rule: never assume
+
+If Claude is unsure about anything (a requirement, a behaviour, a trade-off,
+whether something was approved), it **asks the owner**. It doesn't guess,
+fill the gap with a "sensible default", or jump to a conclusion. A
+recommendation is welcome, but it's presented as a question, not acted on.
+This applies at every stage, not only planning.
+
+When a question is technical, Claude gives **both**: a plain-language
+scenario first ("you tap *Digest off* at 00:30, then…"), then the technical
+detail underneath. Neither replaces the other.
 
 ### Who does each stage: models and handoff
 
@@ -28,7 +41,9 @@ to Sonnet.
 
 | Stage | Agent | Model | Writes |
 |---|---|---|---|
+| 1–2 Grilling | main session | (session model; Opus recommended) | The confirmed Grilling recap in the spec |
 | 1–2 Spec + Plan | `spec-planner` | **Opus** | Spec and Plan sections |
+| 1–2 Second opinion (risky items) | `challenger` | **Opus** | Second opinion section |
 | 3 Test | `test-writer` | **Sonnet** | Failing tests + Test report |
 | 4 Build | `builder` | **Sonnet** | Code + Test report results + Build notes |
 | 5 Review | `reviewer` | **Opus** | Review section (read-only on code) |
@@ -69,6 +84,48 @@ failure.
 Each stage lists its input, its output, what success looks like, and what
 happens on failure.
 
+### Grilling: required before Stages 1 and 2
+
+Planning is deliberately slow. Before `spec-planner` writes a word, the main
+session grills the owner, in as many back-and-forth rounds as it takes, until
+the feature, fix or test approach is solid. Subagents can't talk to the
+owner, so grilling always happens in the main session.
+
+**How a round works**
+
+1. **Research first.** Read the code, PRD, and GUARDRAILS for the item, so
+   questions are about real behaviour, not guesses. Never ask the owner
+   something the code can answer.
+2. **Ask in small batches** (up to 4 questions a round), each one standing on
+   its own:
+   - a **plain-language scenario** first, then the technical detail
+   - **every option has its pros and cons**, and Claude marks its
+     recommendation
+3. **Offer improvements.** Ideas Claude has that the owner didn't ask for
+   (a better approach, a risk worth fixing, a simplification) are raised as
+   options with pros and cons. They're never built silently, and never left
+   unsaid.
+4. **Repeat** until nothing material is unclear: behaviour, edge cases, what's
+   out of scope, how success is tested.
+
+**Recap before writing.** Claude plays back a short *"here's what I
+understood"* summary: the decisions made, what's out of scope, and the open
+risks. The owner confirms it, or corrects it and grilling continues. The
+confirmed recap goes at the top of the spec (Grilling recap section) and is
+`spec-planner`'s main input.
+
+**Second opinion, for risky items only.** If the item touches a schema or
+migration, money maths, auth or identity, deletion of data, or a new external
+service, the `challenger` agent reviews the drafted spec and plan **without
+seeing the conversation** and looks for wrong assumptions, missing edge cases
+and simpler alternatives. Its findings go to the owner with pros and cons
+before approval. Otherwise it's optional, run when the owner asks.
+
+| | |
+|---|---|
+| ✅ **Success** | The owner confirms the recap. Every open question is answered or explicitly parked |
+| ❌ **Failure** | The owner is unsure → more rounds, or park the item. It's tempting to fill a gap with an assumption → that's the signal to ask instead |
+
 ### Stage 0 — Intake
 
 | | |
@@ -83,8 +140,8 @@ happens on failure.
 
 | | |
 |---|---|
-| **Input** | The backlog item, the relevant PRD sections |
-| **Do** | Write `docs/specs/B-###-<slug>.md` from [`docs/specs/TEMPLATE.md`](./docs/specs/TEMPLATE.md): problem, user stories, **acceptance criteria as Given / When / Then**, edge cases, out of scope. Post a summary in the session |
+| **Input** | The backlog item, the relevant PRD sections, and the **confirmed Grilling recap** |
+| **Do** | Grill first (above). Then `spec-planner` writes `docs/specs/B-###-<slug>.md` from [`docs/specs/TEMPLATE.md`](./docs/specs/TEMPLATE.md): problem, user stories, **acceptance criteria as Given / When / Then**, edge cases, out of scope. Risky item → `challenger` second opinion. Post a summary in the session, with any challenger findings shown as options with pros and cons |
 | **Output** | A spec file on the task branch |
 | ✅ **Success** | The owner replies **"approved"** in the session. Claude writes `Spec approved by owner, <date>` at the top of the spec |
 | ❌ **Failure** | Changes requested → revise and re-post. Unclear → ask, don't guess. The scope grew → split it into new backlog items |
@@ -94,7 +151,7 @@ happens on failure.
 | | |
 |---|---|
 | **Input** | The approved spec |
-| **Do** | Fill in the spec's **Plan** section: files touched, data and migration (backward-compatible with the running server?), which test proves each acceptance criterion, risks, PR split. Post it |
+| **Do** | Grill on the *how* where it involves a real choice (e.g. a new table vs a column, two UI options). Then fill in the spec's **Plan** section: files touched, data and migration (backward-compatible with the running server?), which test proves each acceptance criterion, risks, PR split. Risky item → `challenger` second opinion. Post it |
 | **Output** | A completed Plan section |
 | ✅ **Success** | The owner replies **"approved"**. Claude writes `Plan approved by owner, <date>` |
 | ❌ **Failure** | It needs a new service, a paid tier, a destructive migration, or a bulk data change → GUARDRAILS §14, stop and ask. Rejected → revise |
@@ -115,7 +172,7 @@ happens on failure.
 | | |
 |---|---|
 | **Input** | The approved plan + the failing tests |
-| **Do** | Code on the task branch (§3) until the tests pass. Follow the nested `CLAUDE.md`. Conventional Commits citing the feature ID. Update the docs the plan names, in the same branch. Run `pnpm typecheck && pnpm lint && pnpm test`. UI change → light and dark screenshots at 375px (pre-installed headless Chromium) |
+| **Do** | Code on the task branch (§3) until the tests pass. Follow the nested `CLAUDE.md`. Conventional Commits citing the feature ID. Update the docs the plan names, in the same branch. Run **`pnpm ci:local`** (the full CI pipeline against a local test Postgres). UI change → light and dark screenshots at 375px (pre-installed headless Chromium) |
 | **Output** | Commits. The spec's Test report shows ✅ per AC with a one-line check summary. Build notes list deviations and parked ideas |
 | ✅ **Success** | All checks green, every AC test passes, nothing built beyond the plan |
 | ❌ **Failure** | The plan doesn't match the code → hand back to `spec-planner` to re-plan (owner re-approves). Red after **2 honest attempts** → escalate (§1). **Never** skip, disable or loosen a test to get green. Side idea → park it in BACKLOG → Later |
@@ -193,11 +250,29 @@ ticked anyway.
 the item) → `git fetch origin main` → confirm the B-### item and its current
 stage → create or check out the task branch.
 
-**End:** run the checks → update the spec's status and BACKLOG → commit and
-push → report to the owner:
+**End:** run **`pnpm ci:local`** and see it pass (required before **every**
+push, not just the last one) → update the spec's status and BACKLOG → commit
+and push → check the GitHub CI run for that push → report to the owner:
 - **Done:** what changed, with IDs, and which stage the item has reached
 - **Not done:** anything skipped or failing, with the real output
 - **Next:** the single next step (often "approve the spec" or "ask for the PR")
+
+### CI on every push
+
+- `scripts/ci-local.sh` **is** the pipeline. GitHub Actions
+  (`.github/workflows/ci.yml`, pinned to `ubuntu-24.04`) runs `pnpm install`
+  and then `pnpm ci:local`, so local and CI checks can't drift. Change a check
+  in the script, never only in the YAML.
+- `ci:local` needs `TEST_DATABASE_URL` pointing at a **local** throwaway
+  Postgres. It refuses anything that isn't `localhost`, because it migrates
+  and seeds that database.
+- **GitHub CI red:** read the run's log or annotations first. A failure that
+  happens before any step runs (no runner assigned) is an account or
+  platform problem, not a code problem: report the exact message to the
+  owner. A step failure → reproduce it with `pnpm ci:local`, fix it, and show
+  the same check passing. Never skip, disable or loosen a check to get green.
+- As of 2026-10-31, GitHub CI can't run at all: the account has a billing lock
+  (BACKLOG B-030). Until the owner clears it, `ci:local` passing is the gate.
 
 ## 6. When production breaks
 

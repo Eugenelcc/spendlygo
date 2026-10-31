@@ -11,12 +11,25 @@ each writes only its own section.
 
 | Section | Written by | Stage |
 |---|---|---|
+| Grilling recap | main session, confirmed by the owner | before 1 |
 | Spec, Plan | `spec-planner` (Opus) | 1–2 |
+| Second opinion | `challenger` (Opus), risky items only | 1–2 |
 | Test report | `test-writer` (Sonnet) creates it; `builder` (Sonnet) fills in the results | 3–4 |
 | Build notes | `builder` (Sonnet) | 4 |
 | Review | `reviewer` (Opus) | 5 |
 
 Keep it lean: summaries and tables, never raw logs.
+
+---
+
+## Grilling recap (confirmed by owner, YYYY-MM-DD)
+<!-- Written by the main session after the grilling rounds and played back to
+     the owner. spec-planner's main input. Plain language. -->
+
+- **What we're building:**
+- **Decisions made:** <!-- each with the option chosen, and why -->
+- **Out of scope / parked:**
+- **Open risks:**
 
 ---
 
@@ -68,6 +81,11 @@ Keep it lean: summaries and tables, never raw logs.
 
 ### PR split
 <!-- One feature ID per PR. "Single PR", or "part 1 of N: …". -->
+
+---
+
+## Second opinion (risky items only, `challenger`)
+<!-- Or "n/a: not a risky item". Each finding: scenario, detail, options with pros and cons, blocking? -->
 
 ---
 

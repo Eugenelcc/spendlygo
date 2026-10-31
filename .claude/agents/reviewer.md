@@ -30,7 +30,7 @@ changes when the diff alone isn't enough context.
 3. **Plan fidelity:** nothing built that isn't in the plan; the docs the plan
    named are updated.
 4. **Correctness:** bugs, unhandled error paths, races.
-5. Run `pnpm typecheck && pnpm lint && pnpm test` and report the real result.
+5. Run `pnpm ci:local` and report the real result.
 
 ## Never
 Edit code or tests. You only write the spec's **Review** section.

@@ -150,6 +150,8 @@ with their own ID above are tracked there. This list is the remainder.
 
 | ID | Item | Status |
 |---|---|---|
+| B-029 | **Unapproved work on branch `claude/telegram-expense-tracker-06gr8u`** (another Claude session, 2026-10-31, 3 commits ahead of `main`): (1) foreign-currency capture using the external Frankfurter FX API: PRD §5.2 defers multi-currency to v3, and GUARDRAILS §1 requires asking before any new external service; (2) who-owes-who split expenses, a new `transaction_splits` table with no PRD feature; (3) a savings-goal progress chart. Its ADR 0007 also clashes with the ADR 0007 planned for B-011. The owner has **not** approved these. **Don't merge that branch** until the owner decides | owner decision |
+| B-030 | **GitHub CI has never run:** every run since #1 (2026-08-27) fails before starting with *"The job was not started because your account is locked due to a billing issue."* Owner action: GitHub → Settings → Billing and plans (failed payment or unpaid invoice), else GitHub Support. Until it's cleared, `pnpm ci:local` passing is the gate (WORKFLOW §5) | owner action |
 | B-027 | `PATCH /api/settings` accepts any non-empty `timezone` string, with no IANA check. A bad value would break every day boundary for that user. Found while planning B-004 | todo |
 
 ## Done
@@ -159,6 +161,7 @@ Newest first. Earlier work (P0–P6 to date: PRs #4–#12) predates this backlog
 | ID | Title | Feature | PR |
 |---|---|---|---|
 | B-015 | README figures refreshed: 450 tests, Mini App bundle 86.1 KB gzipped | — | (this branch) |
+| B-031 | Grilling before spec/plan, the never-assume rule, `challenger` second-opinion agent, `pnpm ci:local` as the single CI pipeline, CI pinned to ubuntu-24.04 | — | (this branch) |
 | B-025 | Model routing (Opus plan/review, Sonnet test/build) via `.claude/agents/`; spec file as the agent handoff; root CLAUDE.md slimmed 18.7 → 12.6 KB | — | (this branch) |
 | B-024 | Workflow v2: spec stage, success/failure per stage, review checklist, spec template, Mini App target architecture | — | (this branch) |
 | B-000 | Docs foundation: WORKFLOW.md, BACKLOG.md, nested CLAUDE.md files, F13–F16 in the PRD, drift fixes | — | (this branch) |

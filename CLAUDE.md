@@ -135,6 +135,7 @@ pnpm typecheck            # tsc --noEmit everywhere  ← must pass before commit
 pnpm lint                 # eslint + prettier check  ← must pass before commit
 pnpm test                 # vitest run               ← must pass before commit
 pnpm test:watch
+pnpm ci:local             # the full CI pipeline (needs TEST_DATABASE_URL at local Postgres) ← before every push
 
 pnpm db:generate          # generate a migration from schema changes
 pnpm db:migrate           # apply migrations
@@ -200,23 +201,26 @@ The full process is in [`WORKFLOW.md`](./WORKFLOW.md). In short:
 
 1. **Read `GUARDRAILS.md` before changing anything.** It is short, and it is
    binding.
-2. **Every task is a `BACKLOG.md` item.** Unless it's a small fix (WORKFLOW
-   §1), write a spec, then a plan, in `docs/specs/`. Each needs the owner's
-   "approved" before moving on. After 2 failed attempts at anything, stop and
+2. **Never assume.** If you're unsure, ask the owner, with a plain-language
+   scenario and options with pros and cons (WORKFLOW §1).
+3. **Every task is a `BACKLOG.md` item.** Unless it's a small fix (WORKFLOW
+   §1), grill the owner first, then write a spec, then a plan, in
+   `docs/specs/`. Each needs the owner's "approved" before moving on. After 2 failed attempts at anything, stop and
    escalate.
-3. **Cite the backlog and feature IDs** in the branch, commits and PR body.
+4. **Cite the backlog and feature IDs** in the branch, commits and PR body.
    One feature ID per PR.
-4. **Test the dangerous five**: money maths, the text parser, safe-to-spend,
+5. **Test the dangerous five**: money maths, the text parser, safe-to-spend,
    recurrence dates, timezone boundaries. That's where silent, expensive bugs
    live. No change to them ships without tests.
-5. **Run `pnpm typecheck && pnpm lint && pnpm test`** before every commit.
-6. **Update docs in the same PR** whenever behaviour, layout or a lesson
+6. **Run `pnpm typecheck && pnpm lint && pnpm test`** before every commit,
+   and **`pnpm ci:local`** before every push.
+7. **Update docs in the same PR** whenever behaviour, layout or a lesson
    changes, so the docs never drift from the code.
-7. **Park side ideas** in `BACKLOG.md` → Later. Never build them in the
+8. **Park side ideas** in `BACKLOG.md` → Later. Never build them in the
    current task.
-8. **Ask when uncertain**, especially about cost, data loss or scope
+9. **Ask when uncertain**, especially about cost, data loss or scope
    (`GUARDRAILS.md` §14). Guessing is the expensive option here.
-9. **Record non-obvious decisions** as a short ADR in `docs/adr/`.
+10. **Record non-obvious decisions** as a short ADR in `docs/adr/`.
 
 ### Git
 

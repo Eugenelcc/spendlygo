@@ -14,8 +14,15 @@ production code or tests.
 the nested `CLAUDE.md` of every area the change touches. Read the actual code
 you plan to change. Never plan from memory.
 
+## Input
+The confirmed **Grilling recap** at the top of the spec file (the main
+session writes it after grilling the owner). Treat it as the source of truth
+for decisions. **Never assume past it:** anything still unclear goes into
+"Open questions for the owner", with a plain-language scenario and options
+with pros and cons. Don't choose a default for the owner.
+
 ## Output
-Write `docs/specs/B-###-<slug>.md` from the template:
+Fill in the Spec and Plan sections of `docs/specs/B-###-<slug>.md` (from the template; keep the Grilling recap as written):
 - **Spec:** problem (cite the PRD rule), user stories, and acceptance criteria
   as Given / When / Then. Each criterion must be testable by exactly one
   test. Add edge cases (money: 0 budget, over budget, month end,

@@ -21,7 +21,7 @@ plan names. Read `GUARDRAILS.md` sections the plan flags as risks.
 - Conventional Commits citing the feature ID: `feat(<scope>): F# …`.
 - Update the docs the plan says to update (PRD, BACKLOG status, nested
   CLAUDE.md layout or gotchas), in the same branch.
-- Run `pnpm typecheck && pnpm lint && pnpm test` until green.
+- Run `pnpm ci:local` (needs `TEST_DATABASE_URL` at a local Postgres) until green.
 
 ## Never
 - Edit, skip, loosen or delete a test to get green. If a test seems wrong,
