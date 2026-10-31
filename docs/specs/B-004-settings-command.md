@@ -293,6 +293,7 @@ Out of scope: the same pattern in `handleUndo` (tracked as B-026).
 | AC16 | settings.test.ts › a callback only changes the sender's own settings | ❌ failing (expected) | ✅ |
 | AC17 | settings.test.ts › opening the hour picker edits the keyboard without writing | ❌ failing (expected) | ✅ |
 | AC18 | settings.test.ts › /settings is in the bot's command menu | ❌ failing (expected) | ✅ |
+| AC19 | settings.test.ts › a rejected "Saved" answer still saves and redraws | ❌ failing (expected) | |
 
 **Checks (after build):** typecheck ✓ lint ✓ test 468 passed / 0 skipped.
 

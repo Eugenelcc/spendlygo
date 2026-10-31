@@ -209,6 +209,9 @@ describe('/settings callbacks without a database', () => {
     const botCtx = fakeBotCtx(userWith(), 'set:d:0');
     await expect(handleSettingsCallback(appContext(), botCtx)).rejects.toBeDefined();
     expect(botCtx.answerCallbackQuery).toHaveBeenCalledTimes(1);
+    expect(botCtx.answerCallbackQuery).toHaveBeenCalledWith({
+      text: "Couldn't save that — try again.",
+    });
   });
 
   it('opening the hour picker edits the keyboard without writing', async () => {
@@ -351,6 +354,24 @@ describeIfDb('/settings callbacks (DB)', () => {
     expect((await reload(userA)).digestEnabled).toBe(false);
     expect(first.answerCallbackQuery).toHaveBeenCalledTimes(1);
     expect(second.answerCallbackQuery).toHaveBeenCalledTimes(1);
+    expect(second.editMessageText).toHaveBeenCalledTimes(1);
+  });
+
+  it('a rejected "Saved" answer still saves and redraws', async () => {
+    const botCtx = fakeBotCtx(userA, 'set:d:0');
+    mock(botCtx.answerCallbackQuery).mockRejectedValueOnce(
+      new Error('Bad Request: query is too old and response timeout expired'),
+    );
+    await expect(handleSettingsCallback(ctx, botCtx)).resolves.toBeUndefined();
+
+    expect((await reload(userA)).digestEnabled).toBe(false);
+    expect(botCtx.editMessageText).toHaveBeenCalledTimes(1);
+    const [text, options] = mock(botCtx.editMessageText).mock.calls[0] as [
+      string,
+      { reply_markup: { inline_keyboard: unknown[][] } },
+    ];
+    expect(text).toContain('Daily digest: *off*');
+    expect(callbackData(options.reply_markup)).toContain('set:d:1');
   });
 
   it("a callback only changes the sender's own settings", async () => {
