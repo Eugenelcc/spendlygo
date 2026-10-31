@@ -17,6 +17,7 @@
     "format": "prettier --write .",
     "test": "vitest run",
     "test:watch": "vitest",
+    "ci:local": "bash scripts/ci-local.sh",
     "db:generate": "pnpm --filter @spendlygo/db generate",
     "db:migrate": "pnpm --filter @spendlygo/db migrate",
     "db:studio": "pnpm --filter @spendlygo/db studio",

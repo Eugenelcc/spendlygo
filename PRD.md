@@ -1,7 +1,7 @@
 # Spendlygo — Product Requirements Document
 
-**Status:** v1 draft · **Owner:** @eugenelcc · **Last updated:** 2026-08-27
-**Related docs:** [`CLAUDE.md`](./CLAUDE.md) · [`GUARDRAILS.md`](./GUARDRAILS.md) · [`DESIGN.md`](./DESIGN.md)
+**Status:** v1 · **Owner:** @eugenelcc · **Last updated:** 2026-10-31
+**Related docs:** [`CLAUDE.md`](./CLAUDE.md) · [`GUARDRAILS.md`](./GUARDRAILS.md) · [`DESIGN.md`](./DESIGN.md) · [`WORKFLOW.md`](./WORKFLOW.md) · [`BACKLOG.md`](./BACKLOG.md)
 
 ---
 
@@ -82,6 +82,13 @@ is typed into, capture friction has regressed and we've built the wrong thing.
 - **F10** Categories (seeded defaults, user-editable)
 - **F11** Edit / delete / undo a transaction
 - **F12** Shared spaces (personal + any number of shared, switch between them)
+- **F13** Proactive budget alerts (80% and 100% of the month's budget)
+- **F14** Savings goals, tracked separately from the budget
+- **F15** Logging streaks
+- **F16** On-demand recap (month or year)
+
+F13–F16 were built after the original scope was written and given IDs on
+2026-10-31. Their sections in §7 describe the behaviour as built.
 
 ### 5.2 Out of scope — deferred
 
@@ -386,14 +393,86 @@ they behave identically everywhere: capture, safe-to-spend, stats, export.
 
 ---
 
+### F13 — Proactive budget alerts
+
+A warning that arrives when it matters, not just at digest time.
+
+- **F13.1** Checked on **every hourly tick**, not only at the digest hour.
+- **F13.2** Two thresholds: **80%** and **100%** of the month's budget, based on
+  total month-to-date spend (the same figure safe-to-spend uses). Alerts don't
+  depend on category.
+- **F13.3** Each threshold is announced **once per month**. Idempotency comes
+  from `budget_alerts`, unique on `(user_id, year, month, threshold_pct)`. The
+  record is reserved before sending and released if delivery fails, so a later
+  tick retries.
+- **F13.4** No budget set → no alerts.
+- **F13.5** Disableable on its own via `users.alerts_enabled`, independent of
+  the digest.
+- **F13.6** One user's failure never stops other users' alerts.
+
+---
+
+### F14 — Savings goals
+
+Saving toward something without distorting the daily number.
+
+- **F14.1** A goal has a name, a target amount and an optional target date.
+  Goals are **personal**, even inside a shared space.
+- **F14.2** A goal is funded by **tagging a transfer** transaction to it
+  (`transactions.savings_goal_id`). Transfers are excluded from the budget
+  (F6.7), so contributing never moves safe-to-spend.
+- **F14.3** Progress is the **net** of tagged transactions: tagged `out` adds
+  to the goal, tagged `in` withdraws. It's computed, never stored, and a
+  negative net reads as 0.
+- **F14.4** With a target date, the app suggests a monthly amount: remaining ÷
+  months left, counting the current month, **rounded up**. This is the one
+  deliberate exception to round-down (GUARDRAILS §2), so the final month
+  doesn't fall short.
+- **F14.5** Flags: achieved, and overdue (target date passed, not achieved).
+- **F14.6** Archive, never delete (same rule as F10.3).
+- **F14.7** Surfaces: `/goals`, `/goals add <amount> <name> [by YYYY-MM-DD]`,
+  `/goals put <amount> <name>`, and the goals section in Mini App Settings.
+
+---
+
+### F15 — Logging streaks
+
+A habit nudge tied to the "habit sticks" metric (§4). It's not a money
+figure.
+
+- **F15.1** A day counts if it has any transaction (income or expense) with that
+  `occurred_on` in the user's timezone.
+- **F15.2** **Current streak:** consecutive logged days ending today *or
+  yesterday*. Not logging yet today doesn't break it until today is over.
+- **F15.3** **Longest streak:** the longest run found anywhere in the history.
+- **F15.4** Shown only once it's at least **2 days** (`🔥 N-day streak`), in
+  `/today`, on the Mini App's Today screen, and in the daily digest. The recap
+  shows the longest streak.
+
+---
+
+### F16 — Recap
+
+A shareable wrap-up the user asks for, unlike the digest, which is a quiet
+scheduled nudge.
+
+- **F16.1** `/recap` for this month and `/recap year` for this year. The Mini
+  App has a recap card too.
+- **F16.2** Built from the same period stats as F7 (in/out/net, categories,
+  comparison with the previous period) plus the streak (F15). Aggregated in
+  SQL.
+- **F16.3** On demand only. Never scheduled, never pushed.
+
+---
+
 ## 8. Bot command surface
 
 | Command | Behaviour |
 |---|---|
 | `/start` | Onboarding: timezone, monthly budget, opens Mini App |
 | `/app` | Opens the Mini App |
-| `/today` | Spent today + safe-to-spend + pace |
-| `/month` | Month summary |
+| `/today` | Spent today + safe-to-spend + pace + streak |
+| `/month` | Month summary — *not built yet (BACKLOG B-003)* |
 | `/budget [amount]` | Show or set the active space's monthly budget |
 | `/recent` | Last 10 transactions with edit buttons |
 | `/undo` | Undo the most recent transaction |
@@ -402,7 +481,9 @@ they behave identically everywhere: capture, safe-to-spend, stats, export.
 | `/household [invite\|leave]` | Show, share, or stop sharing the active space |
 | `/join CODE` | Join a shared space and switch into it |
 | `/switch [n]` | List your spaces, or switch to space `n` |
-| `/settings` | Timezone, digest time, notification toggles |
+| `/goals [add\|put …]` | List, create, or fund savings goals (F14) |
+| `/recap [year]` | Month or year recap (F16) |
+| `/settings` | Timezone, digest time, notification toggles — *not built yet (BACKLOG B-004); the Mini App's Settings screen covers these today* |
 | `/help` | Grammar cheat-sheet with examples |
 
 Plain text with a leading amount is a capture. Anything else gets a gentle
@@ -412,19 +493,34 @@ Plain text with a leading amount is a capture. Anything else gets a gentle
 
 ## 9. Data model (logical)
 
+This section summarises `packages/db/src/schema.ts`. **The schema file is the
+source of truth**, so update this summary in the same PR as any schema change.
+
 ```
 users            id, telegram_id (unique), first_name, username, timezone,
-                 currency, locale, monthly_budget_cents, digest_hour,
-                 digest_enabled, nudge_enabled, onboarded_at, created_at
+                 currency, locale, digest_hour, digest_enabled,
+                 nudge_enabled, alerts_enabled, active_household_id,
+                 onboarded_at, created_at, updated_at
 
-categories       id, user_id (nullable = system default), name, emoji,
+households       id, created_by, is_personal, monthly_budget_cents,
+                 created_at, updated_at
+                 (a "space" — F12; the budget lives here, not on users)
+
+household_members  id, household_id, user_id, joined_at
+                   (many-to-many membership — ADR 0006)
+
+household_invites  id, household_id, code, created_by, expires_at,
+                   used_by, used_at, created_at
+
+categories       id, user_id (nullable = system default), slug, name, emoji,
                  color_token, kind (expense|income), keywords[],
                  exclude_from_budget, sort_order, archived_at
 
-transactions     id, user_id, direction (in|out), amount_cents (int, > 0),
-                 category_id, note, occurred_on (date, user tz),
-                 occurred_at (timestamptz), source (chat|miniapp|recurring),
-                 recurring_rule_id, deleted_at, created_at, updated_at
+transactions     id, user_id, household_id, direction (in|out),
+                 amount_cents (int, > 0), category_id, note,
+                 occurred_on (date, user tz), occurred_at (timestamptz),
+                 source (chat|miniapp|recurring), recurring_rule_id,
+                 savings_goal_id, deleted_at, created_at, updated_at
 
 attachments      id, transaction_id, user_id, tg_file_id, tg_file_unique_id,
                  width, height, file_size, ocr_status, ocr_payload, created_at
@@ -437,9 +533,16 @@ recurring_runs   id, rule_id, occurrence_date, transaction_id, created_at
                  UNIQUE (rule_id, occurrence_date)      ← idempotency key
 
 budget_periods   id, user_id, year, month, budget_cents, created_at
-                 (historical budgets so past months stay accurate)
+                 (meant to keep past months' budgets accurate — defined
+                 but not yet read or written by any code: BACKLOG B-005)
 
-events           id, user_id, kind, payload_json, created_at
+budget_alerts    id, user_id, year, month, threshold_pct, created_at
+                 UNIQUE (user_id, year, month, threshold_pct)  ← F13 idempotency
+
+savings_goals    id, user_id, name, target_cents (> 0), target_date,
+                 archived_at, created_at, updated_at        ← F14
+
+events           id, user_id, kind, payload, created_at
                  (append-only audit; also powers Undo)
 ```
 
@@ -513,16 +616,20 @@ in the same hour must be a no-op.
 
 ## 13. Phased roadmap
 
-| Phase | Contents | Definition of done |
-|---|---|---|
-| **P0 — Skeleton** | Monorepo, DB schema + migrations, health check, webhook, `/start`, deployed | Bot replies in production |
-| **P1 — Capture** | F1 parser, F10 categories, F11 undo/edit, confirmation cards | 20 parser fixtures green; can log a day of real spending from chat |
-| **P2 — Mini App** | F2 form, auth, transaction list, design system, motion | Opens from chat, logs a transaction, feels native |
-| **P3 — Goals** | F6 safe-to-spend, budget onboarding, pace, ring | The number is right for every edge case in the test suite |
-| **P4 — Stats** | F7 daily/monthly/yearly, drill-through, charts | All three periods, all charts animated |
-| **P5 — Automation** | F5 recurring, F9 digest, cron wiring, F3 net cashflow | Rent auto-logs; 21:00 digest arrives |
-| **P6 — Polish** | F4 photo viewer + OCR pre-fill, F8 export, empty states, error states, onboarding | Ready to hand to a second person |
-| **v2** | Voice capture | — |
+| Phase | Contents | Definition of done | Status (2026-10-31) |
+|---|---|---|---|
+| **P0 — Skeleton** | Monorepo, DB schema + migrations, health check, webhook, `/start`, deployed | Bot replies in production | Done |
+| **P1 — Capture** | F1 parser, F10 categories, F11 undo/edit, confirmation cards | 20 parser fixtures green; can log a day of real spending from chat | Done; F10.5 unverified (B-008) |
+| **P2 — Mini App** | F2 form, auth, transaction list, design system, motion | Opens from chat, logs a transaction, feels native | Done |
+| **P3 — Goals** | F6 safe-to-spend, budget onboarding, pace, ring | The number is right for every edge case in the test suite | Done; F6.6 suggestion not wired in (B-006) |
+| **P4 — Stats** | F7 daily/monthly/yearly, drill-through, charts | All three periods, all charts animated | Done; `/month` missing (B-003) |
+| **P5 — Automation** | F5 recurring, F9 digest, cron wiring, F3 net cashflow, F13 alerts | Rent auto-logs; 21:00 digest arrives | Done; F3.3 unverified (B-009) |
+| **P6 — Polish** | F4 photo viewer + OCR pre-fill, F8 export, empty states, error states, onboarding | Ready to hand to a second person | In progress: F4, F8 done; purge, deletion, audit open (B-001, B-002, B-010) |
+| *(extras)* | F12 spaces, F14 goals, F15 streaks, F16 recap | — | Done |
+| **v2** | Voice capture | — | Deferred |
+
+Live task tracking lives in [`BACKLOG.md`](./BACKLOG.md). This table only
+shows phase status.
 
 ---
 

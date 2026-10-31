@@ -12,7 +12,7 @@ import type { Api } from 'grammy';
 import { describeError, logger } from '../logger.js';
 
 // Telegram's own URL lasts ~60 minutes; re-resolving a little early avoids a
-// request landing right as it expires (CLAUDE.md gotchas).
+// request landing right as it expires (apps/server/CLAUDE.md gotchas).
 const CACHE_TTL_MS = 50 * 60 * 1000;
 
 interface CachedUrl {
