@@ -260,34 +260,36 @@ Single PR, feature ID **F9**: `feat(bot): F9 /settings command with digest, nudg
 
 | AC | Test file › test name | Before build | After build |
 |---|---|---|---|
-| AC1 | settings.test.ts › shows digest state and hour, timezone, nudge and alerts | ❌ failing (expected) | |
-| AC2 | settings.test.ts › pads midnight to 00:00 and escapes the timezone | ❌ failing (expected) | |
-| AC3 | settings.test.ts › each toggle button carries the opposite of the current state | ❌ failing (expected) | |
-| AC4 | settings.test.ts › every callback_data is set:-prefixed and within 64 bytes | ❌ failing (expected) | |
-| AC5 | settings.test.ts › links to the Mini App over HTTPS | ❌ failing (expected) | |
-| AC6 | settings.test.ts › points to /app when the Mini App cannot launch | ❌ failing (expected) | |
-| AC7 | settings.test.ts › hour picker lists 24 hours in order, marks the current one, and has Back | ❌ failing (expected) | |
-| AC8 | settings.test.ts › parseSettingsCallback accepts only well-formed data | ❌ failing (expected) | |
-| AC9 | settings.test.ts › turning the digest off saves, answers and re-renders | ❌ failing (expected) | |
-| AC10 | settings.test.ts › turning the nudge off changes only nudge_enabled | ❌ failing (expected) | |
-| AC11 | settings.test.ts › turning alerts off leaves the digest on | ❌ failing (expected) | |
-| AC12 | settings.test.ts › picking an hour saves it and returns to the main view | ❌ failing (expected) | |
-| AC13 | settings.test.ts › a redelivered callback is idempotent and tolerates "message is not modified" | ❌ failing (expected) | |
-| AC14 | settings.test.ts › stale or malformed data is answered without writing | ❌ failing (expected) | |
-| AC15 | settings.test.ts › answers the callback even when saving fails | ❌ failing (expected) | |
-| AC16 | settings.test.ts › a callback only changes the sender's own settings | ❌ failing (expected) | |
-| AC17 | settings.test.ts › opening the hour picker edits the keyboard without writing | ❌ failing (expected) | |
-| AC18 | settings.test.ts › /settings is in the bot's command menu | ❌ failing (expected) | |
+| AC1 | settings.test.ts › shows digest state and hour, timezone, nudge and alerts | ❌ failing (expected) | ✅ |
+| AC2 | settings.test.ts › pads midnight to 00:00 and escapes the timezone | ❌ failing (expected) | ✅ |
+| AC3 | settings.test.ts › each toggle button carries the opposite of the current state | ❌ failing (expected) | ✅ |
+| AC4 | settings.test.ts › every callback_data is set:-prefixed and within 64 bytes | ❌ failing (expected) | ✅ |
+| AC5 | settings.test.ts › links to the Mini App over HTTPS | ❌ failing (expected) | ✅ |
+| AC6 | settings.test.ts › points to /app when the Mini App cannot launch | ❌ failing (expected) | ✅ |
+| AC7 | settings.test.ts › hour picker lists 24 hours in order, marks the current one, and has Back | ❌ failing (expected) | ✅ |
+| AC8 | settings.test.ts › parseSettingsCallback accepts only well-formed data | ❌ failing (expected) | ✅ |
+| AC9 | settings.test.ts › turning the digest off saves, answers and re-renders | ❌ failing (expected) | ✅ |
+| AC10 | settings.test.ts › turning the nudge off changes only nudge_enabled | ❌ failing (expected) | ✅ |
+| AC11 | settings.test.ts › turning alerts off leaves the digest on | ❌ failing (expected) | ✅ |
+| AC12 | settings.test.ts › picking an hour saves it and returns to the main view | ❌ failing (expected) | ✅ |
+| AC13 | settings.test.ts › a redelivered callback is idempotent and tolerates "message is not modified" | ❌ failing (expected) | ✅ |
+| AC14 | settings.test.ts › stale or malformed data is answered without writing | ❌ failing (expected) | ✅ |
+| AC15 | settings.test.ts › answers the callback even when saving fails | ❌ failing (expected) | ✅ |
+| AC16 | settings.test.ts › a callback only changes the sender's own settings | ❌ failing (expected) | ✅ |
+| AC17 | settings.test.ts › opening the hour picker edits the keyboard without writing | ❌ failing (expected) | ✅ |
+| AC18 | settings.test.ts › /settings is in the bot's command menu | ❌ failing (expected) | ✅ |
 
-**Checks:** all 18 fail at import (`./settings.js` missing); `pnpm typecheck` fails on the same missing module (expected while red).
+**Checks (after build):** typecheck ✓ lint ✓ test 468 passed / 0 skipped.
+
+**Checks (before build):** all 18 fail at import (`./settings.js` missing); `pnpm typecheck` fails on the same missing module (expected while red).
 **Screenshots:** n/a (bot only)
 
 ---
 
 ## Build notes (Stage 4)
 
-- **Deviations from plan:**
-- **Parked ideas:**
+- **Deviations from plan:** `logger.info` field `fields` is a comma-joined string (the logger type rejects arrays). No other deviation.
+- **Parked ideas:** none.
 
 ---
 
