@@ -59,6 +59,7 @@ Each toggle button carries the **target value**, never "toggle".
 | AC16 | (DB) users A and B both exist, with digest on | B presses `set:d:0` | Only B's row changes; A's `digest_enabled` is still true (identity comes from the callback's sender, never from callback data) |
 | AC17 | `set:hp` is pressed | the callback handler runs | No settings write happens; the message's keyboard becomes the hour picker and the callback is answered |
 | AC18 | the bot is configured at boot | `configureBotMenu` runs | `setMyCommands` includes `{ command: 'settings', … }` |
+| AC19 | (DB) a user with digest on, and Telegram rejects the success-path `answerCallbackQuery` (e.g. "query is too old") | they press `set:d:0` | `digest_enabled` is false, the message is still edited to show the new state, and the handler does not throw |
 
 ### Edge cases
 - **Redelivered webhook / stale message:** buttons carry absolute target
@@ -226,6 +227,7 @@ All in `apps/server/src/bot/commands/settings.test.ts`.
 | AC16 | settings.test.ts › a callback only changes the sender's own settings |
 | AC17 | settings.test.ts › opening the hour picker edits the keyboard without writing (non-DB: `ctx.db = {} as never`) |
 | AC18 | settings.test.ts › /settings is in the bot's command menu (`new Bot<BotContext>('111111:token', { botInfo: undefined as never })` as in `tasks/alerts.test.ts`; replace `bot.api.setMyCommands` and `bot.api.setChatMenuButton` with `vi.fn().mockResolvedValue(true)`; call `configureBotMenu(bot, ctx)`) |
+| AC19 | settings.test.ts › a rejected "Saved" answer still saves and redraws |
 
 ### Risks & guardrails
 - **Cost (§1):** none. No new service, dependency, env var, or Render change.
@@ -253,6 +255,19 @@ All in `apps/server/src/bot/commands/settings.test.ts`.
 
 ### PR split
 Single PR, feature ID **F9**: `feat(bot): F9 /settings command with digest, nudge and alert toggles`.
+
+---
+
+## Review follow-up (owner decision, 2026-10-31)
+
+The owner chose to fix the three minor review findings before the PR:
+1. **AC19 (new):** the success-path `answerCallbackQuery({ text: 'Saved' })` in
+   `settings.ts` gets `.catch(() => {})`, like the error path, so a rejected
+   answer never skips the redraw or the log line.
+2. **AC13 tightened:** also assert the second `editMessageText` was called.
+3. **AC15 tightened:** also assert the error text `"Couldn't save that — try again."`.
+
+Out of scope: the same pattern in `handleUndo` (tracked as B-026).
 
 ---
 
