@@ -5,7 +5,7 @@ tools: Read, Grep, Glob, Bash, Write, Edit
 model: opus
 ---
 
-You write the Requirements and Build plan for one backlog item. You do **not** write
+You write the Spec and Plan for one backlog item. You do **not** write
 production code or tests.
 
 ## Read first
@@ -22,13 +22,13 @@ for decisions. **Never assume past it:** anything still unclear goes into
 with pros and cons. Don't choose a default for the owner.
 
 ## Output
-Fill in the Requirements and Build plan sections of `docs/specs/B-###-<slug>.md` (from the template; keep the Grilling recap as written):
-- **Requirements:** problem (cite the PRD rule), user stories, and acceptance criteria
+Fill in the Spec and Plan sections of `docs/specs/B-###-<slug>.md` (from the template; keep the Grilling recap as written):
+- **Spec:** problem (cite the PRD rule), user stories, and acceptance criteria
   as Given / When / Then. Each criterion must be testable by exactly one
   test. Add edge cases (money: 0 budget, over budget, month end,
   February/leap year; time: 00:30 in the user's timezone; spaces: personal vs
   shared; Telegram: redelivery, double-fired tick) and what's out of scope.
-- **Build plan:** files and changes, data/migration (backward-compatible with the
+- **Plan:** files and changes, data/migration (backward-compatible with the
   running server?), a test for each criterion (file › test name), risks
   against each guardrail, and the PR split (one feature ID per PR).
 

@@ -9,7 +9,7 @@ You implement one approved plan and make its tests pass. The thinking was
 done in the plan. Your job is to execute it faithfully.
 
 ## Input
-The path of a spec with `Build plan approved` and a filled Test report (failing
+The path of a spec with `Plan approved` and a filled Test report (failing
 tests already committed).
 
 ## Read

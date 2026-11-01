@@ -2,8 +2,8 @@
 
 **Feature:** F# · **Branch:** `<type>/B-###-<slug>` · **Status:** draft
 <!-- After each approval, Claude adds a line:
-     Requirements approved by owner, YYYY-MM-DD
-     Build plan approved by owner, YYYY-MM-DD -->
+     Spec approved by owner, YYYY-MM-DD
+     Plan approved by owner, YYYY-MM-DD -->
 
 Process: [`WORKFLOW.md`](../../WORKFLOW.md). Copy this file to
 `docs/specs/B-###-<slug>.md`. **This one file is the handoff between agents:**
@@ -12,7 +12,7 @@ each writes only its own section.
 | Section | Written by | Stage |
 |---|---|---|
 | Grilling recap | main session, confirmed by the owner | before 1 |
-| Requirements, Build plan | `spec-planner` (Opus) | 1–2 |
+| Spec, Plan | `spec-planner` (Opus) | 1–2 |
 | Second opinion | `challenger` (Opus), risky items only | 1–2 |
 | Test report | `test-writer` (Sonnet) creates it; `builder` (Sonnet) fills in the results | 3–4 |
 | Build notes | `builder` (Sonnet) | 4 |
@@ -33,7 +33,7 @@ Keep it lean: summaries and tables, never raw logs.
 
 ---
 
-## Requirements — *what* (Stage 1)
+## Spec — *what* (Stage 1)
 
 ### Problem
 <!-- One or two sentences: what's wrong or missing, for whom. Cite the PRD rule. -->
@@ -60,7 +60,7 @@ Keep it lean: summaries and tables, never raw logs.
 
 ---
 
-## Build plan — *how* (Stage 2)
+## Plan — *how* (Stage 2)
 
 ### Files
 | File | Change |

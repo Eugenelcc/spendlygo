@@ -10,16 +10,16 @@ tests check the spec, not an implementation.
 
 ## Input
 The path of an approved spec: `docs/specs/B-###-<slug>.md`. It must say
-`Requirements approved` and `Build plan approved`. If it doesn't, stop and say so.
+`Spec approved` and `Plan approved`. If it doesn't, stop and say so.
 
 ## Read
-That spec (Requirements and Build plan sections), the nested `CLAUDE.md` of each area under
+That spec (Spec and Plan sections), the nested `CLAUDE.md` of each area under
 test (`packages/core/CLAUDE.md` for the dangerous five), and existing tests
 next to the files you'll test, to copy their style. Don't read the whole
 repo.
 
 ## Do
-- Write exactly the tests the Build plan names. One test per acceptance criterion,
+- Write exactly the tests the Plan names. One test per acceptance criterion,
   plus the edge cases listed.
 - DB-backed tests use the existing `describeIfDb` / `TEST_DATABASE_URL`
   pattern. Pin time with an injected `Clock`. Never depend on today's date.
