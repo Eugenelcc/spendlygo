@@ -995,6 +995,7 @@ the plan should say so.**
 | P4-AC10 | `settings.test.ts` › `/settings callbacks (DB) › pay cycle (B-032 Part 4) › a picker for another space is answered "out of date" and writes nothing` | ✅ passes before build (regression guard: unknown data is already answered "out of date"; it must still pass once the handler parses the data and compares the space id) | |
 | P4-AC11 | `pay-cycle.test.ts` › `PATCH /api/settings › a partner's change sends one message to each other member, and none when nothing changed` | ✅ passes after build (was ❌ failing (expected)) (400) | |
 | P4-AC12 | `pay-cycle.test.ts` › `PATCH /api/settings › a personal space change messages nobody` | ✅ passes after build (was ❌ failing (expected)) (400) | |
+| P4-AC6 (review finding 1) | `settings.test.ts` › `/settings callbacks (DB) › pay cycle (B-032 Part 4) › a toggle keeps the cycle line in the edited message` | ❌ failing (expected) (the edited text after `set:d:0` has no `Budget cycle:` line) | |
 | P4-AC13 | `settings.test.ts` › `/settings callbacks (DB) › pay cycle (B-032 Part 4) › a redelivered set:c in a shared space messages the partner once` | ✅ passes after build (was ❌ failing (expected)) (day stays 1) | |
 | P4-AC14 | `pay-cycle.test.ts` › `PATCH /api/settings › a blocked partner never fails the change` | ✅ passes after build (was ❌ failing (expected)) (400) | |
 | P4-AC15 | `pay-cycle.test.ts` › `PATCH /api/settings › a 429 is retried once after retry_after` | ✅ passes after build (was ❌ failing (expected)) (400) | |

@@ -509,6 +509,19 @@ describeIfDb('/settings callbacks (DB)', () => {
       expect(await cycleDayOf(shared.id)).toBe(1);
     });
 
+    it('a toggle keeps the cycle line in the edited message', async () => {
+      const space = await householdsRepo.personalSpaceOf(handle.db, userA.id);
+      await householdsRepo.updateCycleStartDay(handle.db, space.id, 20);
+      const october = { ...ctx, clock: fixedClock('2026-10-31T04:00:00Z') };
+
+      const botCtx = fakeBotCtx(userA, 'set:d:0');
+      await handleSettingsCallback(october, botCtx);
+
+      expect(botCtx.editMessageText).toHaveBeenCalledTimes(1);
+      const [text] = mock(botCtx.editMessageText).mock.calls[0] as [string];
+      expect(text).toContain('Budget cycle: starts on the 20th (20 Oct – 19 Nov)');
+    });
+
     it('a redelivered set:c in a shared space messages the partner once', async () => {
       const shared = await householdsRepo.create(handle.db, userA.id);
       const invite = await householdsRepo.createInvite(handle.db, shared.id, userA.id);
