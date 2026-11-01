@@ -61,6 +61,7 @@ import type { AppContext } from '../context.js';
 import { requireInitData, type ApiEnv } from '../middleware/auth.js';
 import { resolveFileUrl } from '../telegram/photos.js';
 import { buildExportCsv, parseExportRange } from './export.js';
+import { notifyCycleChange } from './cycle-change-notice.js';
 import { buildRecap } from './recap.js';
 import {
   activeHouseholdId,
@@ -68,7 +69,6 @@ import {
   cycleLabel,
   computeSafeToSpend,
   computeStreak,
-  effectiveBudgetCents,
   recentDailySpend,
   toApiSavingsGoal,
   toApiTransaction,
@@ -118,7 +118,12 @@ function serialiseSafeToSpend(result: Awaited<ReturnType<typeof computeSafeToSpe
   };
 }
 
-export function createApiRouter(ctx: AppContext, bot: SpendlygoBot): Hono<ApiEnv> {
+export function createApiRouter(
+  ctx: AppContext,
+  bot: SpendlygoBot,
+  /** Test seam: replaces the real timer when a 429 is retried. */
+  sleep?: (ms: number) => Promise<void>,
+): Hono<ApiEnv> {
   const api = new Hono<ApiEnv>();
 
   api.use('*', requireInitData(ctx));
@@ -163,7 +168,7 @@ export function createApiRouter(ctx: AppContext, bot: SpendlygoBot): Hono<ApiEnv
   api.patch('/settings', async (c) => {
     const user = c.get('user');
     const input = await parseBody(c, updateSettingsSchema);
-    const { monthlyBudgetCents, ...personalInput } = input;
+    const { monthlyBudgetCents, cycleStartDay, ...personalInput } = input;
 
     // The budget always lives on the active space — personal or shared, they
     // work identically (packages/db/src/schema.ts).
@@ -171,8 +176,16 @@ export function createApiRouter(ctx: AppContext, bot: SpendlygoBot): Hono<ApiEnv
       await householdsRepo.updateBudget(ctx.db, activeHouseholdId(user), monthlyBudgetCents);
     }
 
+    if (cycleStartDay !== undefined) {
+      const householdId = activeHouseholdId(user);
+      const changed = await householdsRepo.updateCycleStartDay(ctx.db, householdId, cycleStartDay);
+      // Only a real change tells the other members; never fails the request.
+      if (changed) await notifyCycleChange(ctx, bot.api, user, householdId, cycleStartDay, sleep);
+    }
+
     const updated = await usersRepo.updateSettings(ctx.db, user.id, personalInput);
-    const effectiveCents = await effectiveBudgetCents(ctx, updated);
+    const spaceSettings = await activeSpaceSettings(ctx, updated);
+    const effectiveCents = spaceSettings.budgetCents;
 
     return c.json({
       user: {
@@ -182,6 +195,7 @@ export function createApiRouter(ctx: AppContext, bot: SpendlygoBot): Hono<ApiEnv
         digestEnabled: updated.digestEnabled,
         nudgeEnabled: updated.nudgeEnabled,
         alertsEnabled: updated.alertsEnabled,
+        cycleStartDay: spaceSettings.cycleStartDay,
       },
     });
   });

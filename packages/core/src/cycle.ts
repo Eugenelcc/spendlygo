@@ -108,3 +108,11 @@ export function cycleAlertKey(cycle: BudgetCycle): { year: number; month: number
   const { year, month } = parseIsoDate(cycle.end);
   return { year, month };
 }
+
+/** "1st", "2nd", "3rd", "4th" … "11th", "12th", "13th" … "21st" … "31st" (Part 4 copy). */
+export function ordinalDay(day: number): string {
+  const lastTwo = day % 100;
+  if (lastTwo >= 11 && lastTwo <= 13) return `${day}th`;
+  const suffix = { 1: 'st', 2: 'nd', 3: 'rd' }[day % 10] ?? 'th';
+  return `${day}${suffix}`;
+}

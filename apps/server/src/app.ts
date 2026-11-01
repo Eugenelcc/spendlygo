@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { secureHeaders } from 'hono/secure-headers';
-import { webhookCallback } from 'grammy';
+import { webhookCallback, type Bot } from 'grammy';
 import type { HealthResponse } from '@spendlygo/shared';
 import type { AppContext } from './context.js';
 import type { SpendlygoBot } from './bot/index.js';
@@ -20,9 +20,18 @@ export interface CreateAppOptions {
    * can receive an update while the bot is still initialising.
    */
   state: RuntimeState;
+  /** Test seam only: replaces the real timer when a Telegram 429 is retried. */
+  sleep?: (ms: number) => Promise<void>;
 }
 
-export function createApp(ctx: AppContext, bot: SpendlygoBot, options: CreateAppOptions): Hono {
+export function createApp(
+  ctx: AppContext,
+  // `Bot` (plain context) is accepted so a test can pass a bare `new Bot(token)`
+  // whose `api.sendMessage` is mocked; the real process always passes the full bot.
+  botArg: SpendlygoBot | Bot,
+  options: CreateAppOptions,
+): Hono {
+  const bot = botArg as SpendlygoBot;
   const app = new Hono();
 
   app.onError(onError);
@@ -89,7 +98,7 @@ export function createApp(ctx: AppContext, bot: SpendlygoBot, options: CreateApp
     return handleUpdate(c);
   });
 
-  app.route('/api', createApiRouter(ctx, bot));
+  app.route('/api', createApiRouter(ctx, bot, options.sleep));
   app.route('/tasks', createTasksRouter(ctx, bot));
 
   app.get('/', (c) =>

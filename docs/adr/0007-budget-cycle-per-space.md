@@ -46,6 +46,20 @@ the cycle containing any date, so History's "Cycle" chip steps with the day
 before `from` / after `to` and needs no new endpoint. The cost is a heavier
 response than the chip needs, fetched only when the chip is used.
 
+## Rollback of Part 4
+
+Part 4 ships as two commits so each can be reverted alone. A Mini App problem:
+revert commit 2 only; the server keeps `PATCH cycleStartDay` and the bot's
+`/settings` picker, so any space can still be set back to the 1st from chat. A
+server problem: reverting commit 1 removes every way to change the day, but
+Parts 1-3 still honour the stored day, so affected spaces are frozen on their
+chosen cycle, not broken. Before reverting, list them read-only
+(`SELECT id, cycle_start_day FROM households WHERE cycle_start_day <> 1`) and
+tell the owner. Putting a space back to 1 without the UI is a one-row UPDATE per
+space and needs the owner's explicit approval (GUARDRAILS 3, 14); never a bulk
+update. Reverting Part 1 after Part 4 silently returns every space to calendar
+months (the old code ignores the column); no data is lost.
+
 ## Later parts
 
 `budget_periods` (Part 5) is added to this ADR when it lands.
