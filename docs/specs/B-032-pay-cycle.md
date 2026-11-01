@@ -2,11 +2,11 @@
 
 **Feature:** F17 (new: pay cycle) · **Branch:** `feat/B-032-pay-cycle` · **Status:** approved — Part 1 in progress
 
-Requirements approved by owner, 2026-10-31
-Build plan approved by owner, 2026-10-31 (Parts 1–4; Part 5 to be planned and approved separately)
+Spec approved by owner, 2026-10-31
+Plan approved by owner, 2026-10-31 (Parts 1–4; Part 5 to be planned and approved separately)
 <!-- After each approval, Claude adds a line:
-     Requirements approved by owner, YYYY-MM-DD
-     Build plan approved by owner, YYYY-MM-DD -->
+     Spec approved by owner, YYYY-MM-DD
+     Plan approved by owner, YYYY-MM-DD -->
 
 Process: [`WORKFLOW.md`](../../WORKFLOW.md). Copy this file to
 `docs/specs/B-###-<slug>.md`. **This one file is the handoff between agents:**
@@ -15,7 +15,7 @@ each writes only its own section.
 | Section | Written by | Stage |
 |---|---|---|
 | Grilling recap | main session, confirmed by the owner | before 1 |
-| Requirements, Build plan | `spec-planner` (Opus) | 1–2 |
+| Spec, Plan | `spec-planner` (Opus) | 1–2 |
 | Second opinion | `challenger` (Opus), risky items only | 1–2 |
 | Test report | `test-writer` (Sonnet) creates it; `builder` (Sonnet) fills in the results | 3–4 |
 | Build notes | `builder` (Sonnet) | 4 |
@@ -81,7 +81,7 @@ Keep it lean: summaries and tables, never raw logs.
 
 ---
 
-## Requirements — *what* (Stage 1)
+## Spec — *what* (Stage 1)
 
 *Revised 2026-10-31 to the owner's decisions below ("Owner decisions on open
 questions and second opinion"). Where the recap and those decisions differ,
@@ -135,7 +135,7 @@ means no change for anyone who doesn't set it.
 ### Acceptance criteria
 
 The ACs are grouped by PR part (see *PR split*). Each has one test, named in
-the Build plan › Tests table. The fixed scenario **"Owner's October"** is used
+the Plan › Tests table. The fixed scenario **"Owner's October"** is used
 throughout: timezone `Asia/Singapore`, clock `2026-10-31T04:00:00Z` (noon on
 Sat 31 Oct), active space budget S$1,500 (150 000 cents), and two expenses in
 that space: S$100 on 2026-10-05 and S$50 on 2026-10-25.
@@ -264,7 +264,7 @@ rows and captions are unchanged.
 | P4-AC14 | Shared space; sending to the creator fails with Telegram 403 (bot blocked) | The partner PATCHes day 20 | 200, the day is saved as 20, the failure is logged (`settings.cycle_notify_failed`, user id only), and nothing is retried |
 | P4-AC15 | Shared space; the first send to the creator fails with Telegram 429 `retry_after: 1` | The partner PATCHes day 20 | The helper waits 1 s (injected sleep, called with 1000) and sends once more; exactly 2 `sendMessage` calls; 200. A `retry_after` above 3 s is not waited for: logged and dropped (GUARDRAILS §10) |
 | P4-AC16 | Mini App Settings › Budget, start day 20 | The card renders | A "Budget month starts on" select (1st … 31st) sits under the amount, with the caption `This cycle: 20 Oct – 19 Nov`; for 29–31 a hint says short months start on their last day; in a shared space, a hint says it changes for everyone in the space and they'll get a message (screenshot check) |
-| P4-AC17 | Start day 20, Daily mode, S$50/day typed | The daily → monthly preview renders | `= S$1,550/month (31 days this cycle)`, using `me.cycle.days`; with start day 1 it still says `days this month` (screenshot check) |
+| P4-AC17 | Start day 20, Daily mode, $50/day typed | The daily → monthly preview renders | `= $1,550/month (31 days this cycle)`, using `me.cycle.days`; with start day 1 it still says `days this month` (screenshot check) |
 | P4-AC18 | Mini App | The user picks day 20; and separately, the server answers 400 (the old server during a deploy) | Success: the haptic and "Saved" toast fire as for the digest hour, and Today, Stats, History, Me and Recap refetch. 400: the select shows the previous day again, the error haptic fires, and there is no "Saved" toast (screenshot + dev-bot check). *That a repeated PATCH changes and sends nothing is proven server-side by P4-AC11, not by a screenshot (Q8)* |
 
 ### Edge cases
@@ -294,7 +294,7 @@ rows and captions are unchanged.
 | Telegram | Partner message fails (blocked, 429, 5xx) | Never fails the change; 429 retried once if `retry_after` ≤ 3 s (P4-AC14, P4-AC15) |
 | Deploy | New Mini App talking to the old server for a few minutes | `cycle` missing in `/api/today` and `/api/me` → the Mini App treats it as start day 1. Part 3: a cycle export to the old server is a 400 ("Export is not available"), and Everything still works. Part 4: `cycleStartDay` is a 400 from the old (strict) server, so no false "Saved" (P1-AC27, P4-AC18) |
 | Deploy | Old server running while the migration is applied | The new column has a default and the old server never reads it (see Data) |
-| Deploy | Part 4 reverted after someone set day 20 | See *Rollback* in the Build plan |
+| Deploy | Part 4 reverted after someone set day 20 | See *Rollback* in the Plan |
 
 ### Out of scope
 
@@ -329,7 +329,7 @@ questions and the challenger's options where they differ.
 | Q7 (digest) | The monthly digest fires on the cycle's last day, at the digest hour, titled with the range and compared with the previous cycle. Day 1 is unchanged |
 | Q8 (UI tests) | **Option A:** screenshots for the Mini App ACs until B-016. A "sent once" behaviour must be proven by a server test, not a screenshot (F5) |
 | F3 | Settings day-picker callbacks carry the space id. An old message can't change a different space's cycle |
-| F4 + F5 (release) | Rollback note in the Build plan, so a reverted release can't strand a space on a non-1 day. During the Part 4 deploy the old server must not silently accept and drop `cycleStartDay` (make the settings schema `.strict()` in an earlier part, or an equivalent) |
+| F4 + F5 (release) | Rollback note in the Plan, so a reverted release can't strand a space on a non-1 day. During the Part 4 deploy the old server must not silently accept and drop `cycleStartDay` (make the settings schema `.strict()` in an earlier part, or an equivalent) |
 | F5 (partner) | When a member changes a shared space's start day, the other members get one short message |
 | F5 (tidy-ups) | Include the year in export ranges that span New Year; add the `/recap` footer (`commands/recap.ts:89`) to the Part 2 files; place the History chip per the target Mini App layout (`apps/miniapp/CLAUDE.md`), not in `App.tsx`; fix the day-1 "last cycle" caption against the copy rule |
 | Q6 (`budget_periods`) | **Still open:** to be asked at final approval |
@@ -341,9 +341,9 @@ questions and the challenger's options where they differ.
   Purpose: **past cycles show the budget that applied then**, per space. Example:
   $350 until March, then $500 → the 20 Jan – 19 Feb cycle shows "of $350" and its
   real pace. DB approach: **rebuild the existing table in place** (owner's choice).
-  This is destructive, so per GUARDRAILS §3 Part 5's Build plan must include an
+  This is destructive, so per GUARDRAILS §3 Part 5's Plan must include an
   explicit backup step, and the owner approves that migration separately. Part 5 gets
-  its own grilling → Requirements → Build plan → `challenger` before any code.
+  its own grilling → Spec → Plan → `challenger` before any code.
   Parts 1–4 don't depend on it.
 - **Export file names:** "Everything" keeps `spendlygo-all-time.csv`; every bounded
   export (including `/export 2026-10` and `/export 2026` for day-1 users) gets a dated
@@ -351,7 +351,7 @@ questions and the challenger's options where they differ.
 
 ---
 
-## Build plan — *how* (Stage 2)
+## Plan — *how* (Stage 2)
 
 *Revised 2026-10-31 to the owner's decisions. Read `apps/server/CLAUDE.md`,
 `apps/miniapp/CLAUDE.md` and `packages/core/CLAUDE.md` before each part.*
@@ -506,7 +506,7 @@ labels do when the range spans New Year.
 | `apps/server/src/tasks/digest-periods.test.ts` | P2-AC9 to AC11 (existing tests untouched, they cover AC11's no-argument form) |
 | `apps/server/src/tasks/digest.test.ts` | P2-AC12, P2-AC13 (`sendDueDigests` with a `vi.fn` `sendMessage`, as in `alerts.test.ts`) |
 | `apps/server/src/tasks/alerts.test.ts` | New `describe('pay cycle (F17)')` with its own `ctx`/clock and a distinct `TELEGRAM_ID`: P2-AC14 to AC21. Change the start day with `householdsRepo.updateCycleStartDay` (Part 1) and move the clock by building a new `ctx` with another `fixedClock` |
-| `PRD.md` | F7 Monthly view (cycle; Year stays calendar), F9.5 ("last day of the budget cycle"), F13.2–F13.3 ("once per cycle", the key, **the limitation paragraph from the Requirements**), F16.1 |
+| `PRD.md` | F7 Monthly view (cycle; Year stays calendar), F9.5 ("last day of the budget cycle"), F13.2–F13.3 ("once per cycle", the key, **the limitation paragraph from the Spec**), F16.1 |
 | `apps/server/CLAUDE.md` | Gotcha row: "`budget_alerts.year/month` = the month the cycle ends in, not the calendar month of today. Moving the start day can skip one threshold once; never double-sends" |
 | `docs/adr/0007-…` | Add the alert-key section with the limitation, and why History reuses `/api/stats` |
 
@@ -580,7 +580,7 @@ wiring).
   start day, every cycle ends in a different calendar month, so the key is unique
   per cycle. For start day 1, the end month *is* the calendar month, so rows
   written by the old server are read identically (P2-AC18). Limitation and
-  never-double-send: see the Requirements (P2-AC20, P2-AC21).
+  never-double-send: see the Spec (P2-AC20, P2-AC21).
 - **`budget_periods`:** not touched, pending Q6.
 - Nothing stored changes on a start-day change. History is re-grouped at read
   time (decision 5).
@@ -1210,7 +1210,7 @@ bundle 86.6 KB gz (43% of budget).
 |---|---|---|---|---|
 | 1 | **Medium (blocking, cheap fix)** | `apps/miniapp/src/App.tsx:147-151`, `:179-185` | While the cycle query is pending, `historyRange` is `{}`. The History list query then uses key `['transactions', null, null]`, the **"All" list**. That key is always cached, because `historyPeriod` defaults to `'all'`. So tapping "Cycle", and every ‹/› press onto an uncached cycle, first shows the **all-time list** under the Cycle chip with a "…" label, then swaps. It also fires an extra 200-row unfiltered request each time. On `isError`, it stays on the all-time list for good, with a blank label and no error | Day-20 user opens History (All) and taps Cycle. For about 1 s on a warm server, or tens of seconds on a free-tier cold start, they see 1–19 Oct and every older row as if they were "this cycle". If `/api/stats` 5xxs, they're stuck looking at all-time rows labelled as a cycle. **Fix (a few lines):** disable the history query (`enabled: tab === 'history' && !(historyPeriod === 'month' && cycleStartDay !== 1 && !historyCycle.from)`), so the screen shows its existing loading skeleton, and render a short error/retry line in `CycleStepper` when `historyCycle.isError`. Re-screenshot the chip tap |
 | 2 | Low (§7 perf) | `apps/server/src/api/index.ts:476` | `/api/stats` now awaits `activeSpaceSettings` **before** `buildStats`. That adds one sequential round trip to every Stats load, including `period=day`/`year`, which don't use it. `handleRecap` also reads the space twice (`buildRecap` + footer, `bot/commands/recap.ts:97`). The digest day reads it twice too (`send-digests.ts` + `currentCycle`) | Tens of ms extra per Stats tab open on the Supabase pooler. Never wrong. Fix later: return `cycleStartDay` from `buildRecap`, and only look the start day up for `period === 'month'` |
-| 3 | Low (doc) | `apps/server/CLAUDE.md` gotcha row, `docs/adr/0007-budget-cycle-per-space.md` "Alert keys" | PRD F13.3 says alerts are keyed by **user, not space** (so day-1 personal and day-20 shared spaces can share keys). The Requirements say this wording "goes into PRD F13 and `apps/server/CLAUDE.md`", but the gotcha row and the ADR omit it | A future reader of the gotcha assumes per-space keys and "fixes" a perceived bug, or is surprised by a skip after `/switch`. Add one clause to both |
+| 3 | Low (doc) | `apps/server/CLAUDE.md` gotcha row, `docs/adr/0007-budget-cycle-per-space.md` "Alert keys" | PRD F13.3 says alerts are keyed by **user, not space** (so day-1 personal and day-20 shared spaces can share keys). The Spec says this wording "goes into PRD F13 and `apps/server/CLAUDE.md`", but the gotcha row and the ADR omit it | A future reader of the gotcha assumes per-space keys and "fixes" a perceived bug, or is surprised by a skip after `/switch`. Add one clause to both |
 | 4 | Info (dup) | `api/index.ts:770-773`, `api/recap.ts:60-64` | The same `startDay === 1 ? "Month YYYY" : formatCycleRange` label expression appears twice (`toApiCycle` and the digest use the no-year variant) | Copy drift between Stats and recap if one is edited. Could be a `cycleLabelWithYear` helper |
 | 5 | Info (process) | spec PR split | The plan named Part 2's branch `feat/B-032-pay-cycle-periods`. The work is on `feat/B-032-pay-cycle` (per the caller's instructions) | None. Note it in the PR body |
 
