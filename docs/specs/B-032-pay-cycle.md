@@ -791,24 +791,30 @@ plan needs a revision and a fresh approval before Part 1 starts.
 
 ## Part 5 — Budget history: Spec — *what* (Stage 1)
 
-*Written 2026-11-01 by `spec-planner`. Also resolves BACKLOG B-005. Parts 1–4
-are merged (PR #19). This section and the Part 5 Plan below are approved
-separately from Parts 1–4, and the **migration** is approved separately again
-(see the approval lines at the top of the file).*
+*Written 2026-11-01 by `spec-planner`, revised the same day after the second
+opinion (P5-F1 to F6) and the owner's answers to Q-P5-1 to Q-P5-4. Also
+resolves BACKLOG B-005. Parts 1–4 are merged (PR #19). This section and the
+Part 5 Plan below are approved separately from Parts 1–4, and the
+**migration** is approved separately again (see the approval lines at the top
+of the file).*
 
 ### Part 5 owner decisions (approved 2026-11-01)
 
 | # | Decision |
 |---|---|
 | Q1 A | Store budget history as a **dated list of changes per space** ("from date D: budget X"), not one row per cycle. Any cycle, under any start day, looks up its budget, so a later start-day change stays correct |
-| Q2 A | A cycle whose budget changed partway shows the **last** budget in effect within that cycle (what Today showed at the cycle's end). Precisely: the change with the greatest effective date ≤ the cycle's end date |
+| Q2 A | A cycle whose budget changed partway shows the **last** budget in effect within that cycle (what Today showed at the cycle's end). Precisely: the change with the greatest effective date ≤ the cycle's end date. *(Finished cycles only; the current cycle uses the live budget, Q-P5-3.)* |
 | Q3 A | On ship, **seed each space's current budget as effective "from the beginning"**. Nothing that exists today changes on ship day |
 | Q4 A | **Rebuild `budget_periods` in place** (per space + effective date, nullable budget for "no budget"). The migration **refuses to run if the table has any rows**. The Plan includes an explicit **backup step**. The owner approves the migration separately |
-| Q5 B | Shown in **Stats › Month (cycle) only**: one line `Budget $350 · $40 under` / `· $25 over`, for past and current cycles; hidden when that cycle had no budget. API: a nullable field on the stats response for `period=month` only, backward-compatible both ways |
+| Q5 B | Shown in **Stats › Month (cycle) only**: one line under the totals, hidden when that cycle had no budget. API: a nullable field on the stats response for `period=month` only, backward-compatible both ways |
 | Q6 A | Removing a budget is recorded as a change to "no budget"; such cycles show no line |
 | Q7 A | No budget line on the Day or Year views |
 | Writes | Every budget write path also appends a history row, in the same transaction. Shared spaces: one history per space |
 | Out of scope | Budget line in Recap / `/recap`; entering pre-Part-5 budgets by hand; year totals (park in BACKLOG › Later) |
+| Q-P5-1 A + P5-F2 | **‹ › cycle arrows on Stats › Month** (any start day), never past the current cycle. `CycleStepper` moves from `features/history/` to `ui/` and is used by both History and Stats. The budget line is **hidden when the cycle has no transactions** (the stats `count` is 0), so cycles before you used the app never show "$500.00 under" |
+| Q-P5-2 A | The line compares the budget with **budgeted spending** (excluded categories left out, PRD F6.7), the same figure Today and the alerts use. Caveat, accepted: the "excluded" flag is read as it is **now**, so flipping a category's flag later changes past cycles' verdicts (Today behaves the same way) |
+| Q-P5-3 A + P5-F4 | The **current** cycle (the cycle containing the viewer's today, in their timezone) uses the **live** budget (`households.monthly_budget_cents`, same as Today) and reads `Budget $1,500.00 · $1,200.00 left`, or `Budget $1,500.00 · $25.00 over` when over. **Finished** cycles use the history and read `· $40.00 under`, `· $25.00 over` or `· on budget` |
+| Q-P5-4 A + P5-F1 + P5-F5 | Deploy checklist: (1) before deploy, export the current budgets as CSV from the Supabase web dashboard (SQL in the Plan). That CSV **is** the backup. `pg_dump` is optional; store any copy carefully (personal financial data). (2) Don't change budgets during the deploy. (3) Run the read-only drift check after the deploy, **and after any failed deploy or Render rollback**. (4) Fix a mismatch only with an owner-approved one-row insert dated on the drift day, never by toggling the budget (that can fire or suppress an alert) |
 
 ### Problem
 
@@ -820,8 +826,8 @@ meant to fix this, `budget_periods` (PRD §9, B-005), is keyed by **user +
 calendar month** and has never been read or written. Budgets are per space
 (F12.5) and months are now cycles (F17). Part 5 re-shapes that table into a
 per-space list of dated changes. Every budget write appends to it, and the
-Stats month view says what the budget was for that cycle and how the cycle
-ended against it.
+Stats month view, which gains ‹ › arrows to reach past cycles, says what the
+budget was for that cycle and how the cycle went against it.
 
 ### Terms used below
 
@@ -838,10 +844,21 @@ ended against it.
   the same date replaces the first (last write of the day wins).
 - **Unchanged value:** if the new value equals the space's current budget
   (including null = null), **nothing is written**: no history row, and
-  `households.updated_at` is not touched. (Recommendation adopted from the
-  brief. It makes redelivered `/budget` updates and repeated PATCHes no-ops.)
-- **Budget for a cycle:** the budget of the change with the greatest
-  `effective_from` ≤ `cycle.end`. No such row → no budget → no line.
+  `households.updated_at` is not touched. (It makes redelivered `/budget`
+  updates and repeated PATCHes no-ops.)
+- **Current cycle:** the cycle that contains **the viewer's today** (their
+  timezone, `todayFor(ctx, user)`): `cycle.start ≤ today ≤ cycle.end`. Every
+  other cycle is **finished** (or, for an anchor after today, in the future,
+  which the arrows never reach).
+- **Budget for a cycle:** current cycle → the live budget
+  (`households.monthly_budget_cents` of the active space, the figure Today
+  uses). Finished cycle → the budget of the change with the greatest
+  `effective_from` ≤ `cycle.end`. None (null live budget, or no such row) →
+  no budget → no line.
+- **Cycle with no transactions:** the stats response's `count` is 0 (no
+  income and no expense in the cycle). The line is hidden (`budget: null`)
+  even if a budget applies. A cycle with only income, or only spending in
+  excluded categories, has `count` > 0 and does show the line.
 - **Epoch:** the seed's "from the beginning" date, **`1970-01-01`**
   (constant `BUDGET_HISTORY_EPOCH` in core). It is never shown to anyone.
   *Why not each space's `created_at`:* every personal space that existed
@@ -849,29 +866,39 @@ ended against it.
   than the budget and transactions it inherited. Cycles before it would wrongly
   show "no budget". `created_at` is also a UTC instant, and its date depends
   on whose timezone you read it in. A fixed epoch has neither problem.
-- **Budget line (Mini App, proposed copy):** `Budget $350.00 · $40.00 under`,
-  `Budget $350.00 · $25.00 over`, and for exactly on: **`Budget $350.00 · on
-  budget`** (proposed, see Q-P5-3). Amounts are formatted with the Mini App's
-  `formatMoney`, like every other Stats amount, so they carry cents.
 - **Spent, for the line:** `budgetedOutCents` for the whole cycle (out minus
-  categories excluded from the budget, PRD F6.7). That is the figure Today and
-  the alerts measure. **Pending Q-P5-2**, because Stats' headline "Spent" is
-  `outCents`, which includes excluded categories.
+  categories excluded from the budget, PRD F6.7), Q-P5-2 A. It can differ from
+  the "Spent" headline just above it, which is `outCents`.
+- **Budget line (Mini App copy):** amounts formatted with the Mini App's
+  `formatMoney`, like every other Stats amount, so they carry cents.
+
+  | Cycle | Status | Text |
+  |---|---|---|
+  | Finished | under | `Budget $350.00 · $40.00 under` |
+  | Finished | over | `Budget $500.00 · $25.00 over` |
+  | Finished | on | `Budget $350.00 · on budget` |
+  | Current | under | `Budget $500.00 · $450.00 left` |
+  | Current | on | `Budget $500.00 · $0.00 left` (the owner's rule: "left" unless over) |
+  | Current | over | `Budget $500.00 · $25.00 over` |
 
 ### User stories
 
-- As the owner, I want 20 Jan – 19 Feb to say "Budget $350.00 · $40.00 under"
-  even though my budget is now $500, so I can judge past cycles fairly.
-- As someone who changed the budget mid-cycle, I want that cycle to show the
-  budget I ended it on, the same one Today showed me then.
+- As the owner, I want to step back to 20 Jan – 19 Feb in Stats › Month and
+  see "Budget $350.00 · $40.00 under" even though my budget is now $500, so I
+  can judge past cycles fairly.
+- As someone mid-cycle, I want the current cycle to show the same budget Today
+  shows and how much is left.
+- As someone who changed the budget mid-cycle, I want that cycle, once
+  finished, to show the budget I ended it on, the same one Today showed me
+  then.
 - As someone who later moves the start day, I want past cycles to still show
   the right budget for the dates they now cover.
 - As a member of a shared space, I want one history for the space, whichever
   of us made the change.
-- As someone with no budget for a cycle, I want no line rather than a made-up
-  one (F6.6).
+- As someone with no budget for a cycle, or who wasn't using the app yet, I
+  want no line rather than a made-up one (F6.6, F7.4).
 
-### Acceptance criteria (30: 28 firm + 2 pending an owner answer)
+### Acceptance criteria (34)
 
 **Fixed scenario "Owner's history"** (extends "Owner's October"): timezone
 `Asia/Singapore`, clock `2026-10-31T04:00:00Z` (noon, Sat 31 Oct), start day
@@ -879,17 +906,22 @@ ended against it.
 "$350 from the beginning") and `(2026-03-05, 50 000)` ($500 from 5 Mar). So the
 live budget is $500. Expenses (non-excluded categories): $310 on 2026-02-01
 (cycle 20 Jan – 19 Feb), $525 on 2026-03-01 (cycle 20 Feb – 19 Mar), and the
-Owner's October $100 on 2026-10-05 + $50 on 2026-10-25.
+Owner's October $100 on 2026-10-05 + $50 on 2026-10-25. The current cycle is
+20 Oct – 19 Nov.
 
 **D5** = touches the dangerous five (money maths, timezone boundaries).
 Safe-to-spend, the parser and recurrence are **not** touched: Today, alerts
 and digests keep reading `households.monthly_budget_cents`, unchanged.
 
+The `budget` object on the stats response is
+`{ budgetCents, spentCents, status, differenceCents, isCurrent }`; the rows
+below list the values in that order.
+
 | # | D5 | Given | When | Then |
 |---|---|---|---|---|
 | P5-AC1 | money | Budgets and spends in cents: (35 000, 31 000), (35 000, 37 500), (35 000, 35 000), (0, 0), (0, 1 200) | `compareWithBudget(budget, spent)` | `{under, 4 000}`, `{over, 2 500}`, `{on, 0}`, `{on, 0}`, `{over, 1 200}`. `differenceCents` is never negative. A negative or non-integer input throws `ValidationError` |
 | P5-AC2 | time | Writer's today and the space's latest change date | `budgetChangeEffectiveFrom(today, latest)` with (2026-11-01, none), (2026-10-31, 2026-11-01), (2026-11-02, 2026-11-01), (2026-11-01, 1970-01-01) | 2026-11-01, **2026-11-01** (never before the latest), 2026-11-02, 2026-11-01 |
-| P5-AC3 | — | The migration guard SQL (`0006_budget_periods_guard.sql`) | It runs against a `budget_periods` with one row, then against an empty one (each inside a rolled-back transaction) | With a row it raises an exception whose message contains `budget_periods` and `refusing`, so the whole migration batch rolls back. Empty, it succeeds and changes nothing |
+| P5-AC3 | — | The guard SQL file (`0006_budget_periods_guard.sql`) on its own | It runs against a `budget_periods` with one row, then against an empty one (each inside a rolled-back transaction on the shared test DB) | With a row it **raises an exception** whose message contains `budget_periods` and `refusing`. Empty, it succeeds and changes nothing. *(That the whole batch then rolls back is P5-AC33.)* |
 | P5-AC4 | — | Space A with budget 35 000, space B with no budget, empty history for both | The seed SQL (`0009_budget_periods_seed.sql`) runs, then runs again | A has exactly one change `(1970-01-01, 35 000)`. B has none. The second run adds nothing |
 | P5-AC5 | — | The rebuilt table | Raw inserts of `budget_cents` −1; two rows with the same (space, effective_from); a row with `budget_cents` null; a row for a non-existent space | −1 rejected by `budget_periods_budget_ck`; duplicate rejected by `budget_periods_household_effective_uq`; null accepted; unknown space rejected by the FK |
 | P5-AC6 | — | A space with budget null and no history | `householdsRepo.updateBudget(db, id, 35 000, '2026-01-10')` | The space's budget is 35 000, and history has exactly one change `(2026-01-10, 35 000)` |
@@ -897,50 +929,60 @@ and digests keep reading `households.monthly_budget_cents`, unchanged.
 | P5-AC8 | — | A space at 35 000 since 1970-01-01 | Three changes on 2026-03-05: 50 000, then 42 000, then 50 000 | One change dated 2026-03-05 with 50 000 (last write of the day wins); the epoch row is untouched; 2 rows in total |
 | P5-AC9 | — | A space at 50 000 | `updateBudget(db, id, null, '2026-06-01')` (budget removed) | The space's budget is null, and history gains `(2026-06-01, null)` (Q6 A) |
 | P5-AC10 | time | Shared space; the latest change is `(2026-11-01, 50 000)`, written by an SGT member just after midnight | A member whose today is still 2026-10-31 sets 60 000 | No row dated 2026-10-31. The 2026-11-01 change now holds 60 000. The latest change equals `households.monthly_budget_cents` (60 000) |
-| P5-AC11 | — | A space at 35 000 since 1970-01-01 | Concurrently (`Promise.all`): `updateBudget(…, 50 000, d)` and `updateBudget(…, 60 000, d)`; then separately two concurrent `updateBudget(…, 70 000, d2)` | Both runs finish without error, and each time the latest change equals the space's final budget. The identical pair adds exactly one row (row lock, then compare) |
+| P5-AC11 | — | A space at 35 000 since 1970-01-01. A **second connection** opens a transaction, locks the space row (`SELECT … FOR UPDATE`), sets `monthly_budget_cents` to 50 000 and inserts `(2026-03-05, 50 000)`, and stays open (a concurrent change, mid-transaction) | `updateBudget(db, id, 35 000, '2026-03-05')` starts; the test waits until Postgres reports it blocked on a lock, then commits the second connection | `updateBudget` does not finish before the commit. Afterwards the space's budget is **35 000** and the 2026-03-05 change holds 35 000: the second change is **not lost** (without the row lock it would read the stale 35 000, skip as "unchanged", and leave 50 000) |
 | P5-AC12 | — | Space S has changes `(1970-01-01, 35 000)`, `(2026-03-05, 50 000)`, `(2026-06-01, null)`; space T has `(1970-01-01, 99 900)` | `budgetPeriodsRepo.budgetInEffectOn(db, S, d)` for d = 2026-02-19, 2026-03-04, 2026-03-05, 2026-05-31, 2026-06-01; and for a space U with no rows | 35 000, 35 000, 50 000, 50 000, null; U → null. T's rows never affect S's answers (space isolation) |
 | P5-AC13 | time | Owner's history; clock `2026-10-19T16:30:00Z` (00:30 on 20 Oct in Singapore, 19 Oct in UTC) | `PATCH /api/settings {"monthlyBudgetCents": 60000}` | 200, and history gains `(2026-10-20, 60 000)`, never 2026-10-19 |
 | P5-AC14 | — | Bot `/budget 500` from a user whose space is at 35 000, clock = Owner's October | `handleBudget` runs | It calls `householdsRepo.updateBudget(db, <active space>, 50 000, '2026-10-31')` (today in the user's timezone). The reply text is unchanged from today |
-| P5-AC15 | — | A shared space (creator + partner), budget 100 000 since 1970-01-01 | The **partner** PATCHes 150 000; then the creator PATCHes 150 000 | One change `(2026-10-31, 150 000)` for the shared space after both (the creator's is unchanged, so it's a no-op). Neither member's personal space gains a row. The creator's `GET /api/stats?period=month` shows `budget.budgetCents` 150 000 |
-| P5-AC16 | — | Owner's history | `PATCH /api/settings {"monthlyBudgetCents": null}`, then `GET /api/stats?period=month` | History gains `(2026-10-31, null)`. The stats response has `budget: null` (current cycle 20 Oct – 19 Nov ends after the removal) |
-| P5-AC17 | money | Owner's history | `GET /api/stats?period=month&anchor=2026-02-01` (cycle 20 Jan – 19 Feb 2026) | `budget` = `{budgetCents 35000, spentCents 31000, status "under", differenceCents 4000}` (**the owner's $350 → $500 example**) |
-| P5-AC18 | money | Owner's history | `GET /api/stats?period=month&anchor=2026-03-01` (cycle 20 Feb – 19 Mar 2026, budget changed on 5 Mar) | `budget` = `{budgetCents 50000, spentCents 52500, status "over", differenceCents 2500}` (**mid-cycle change: last wins**, Q2 A) |
-| P5-AC19 | money | Owner's history | `GET /api/stats?period=month` (current cycle 20 Oct – 19 Nov) | `budget` = `{budgetCents 50000, spentCents 5000, status "under", differenceCents 45000}`. All Part 2 fields are unchanged (P2-AC1 still passes) |
+| P5-AC15 | — | A shared space (creator + partner), budget 100 000 since 1970-01-01, one $20 expense dated 2026-10-31 | The **partner** PATCHes 150 000; then the creator PATCHes 150 000 | One change `(2026-10-31, 150 000)` for the shared space after both (the creator's is unchanged, so it's a no-op). Neither member's personal space gains a row. The creator's `GET /api/stats?period=month` shows `budget.budgetCents` 150 000 |
+| P5-AC16 | — | Owner's history | `PATCH /api/settings {"monthlyBudgetCents": null}`, then `GET /api/stats?period=month` | History gains `(2026-10-31, null)`. The stats response has `budget: null` (current cycle, live budget now null) |
+| P5-AC17 | money | Owner's history | `GET /api/stats?period=month&anchor=2026-02-01` (cycle 20 Jan – 19 Feb 2026) | `budget` = `{35000, 31000, "under", 4000, false}` (**the owner's $350 → $500 example**) |
+| P5-AC18 | money | Owner's history | `GET /api/stats?period=month&anchor=2026-03-01` (cycle 20 Feb – 19 Mar 2026, budget changed on 5 Mar) | `budget` = `{50000, 52500, "over", 2500, false}` (**mid-cycle change: last wins**, Q2 A) |
+| P5-AC19 | money | Owner's history | `GET /api/stats?period=month` (current cycle 20 Oct – 19 Nov) | `budget` = `{50000, 5000, "under", 45000, true}`. All Part 2 fields are unchanged (P2-AC1 still passes) |
 | P5-AC20 | time | Owner's history, then the start day is changed to 1 (Part 4 path) | `GET /api/stats?period=month&anchor=2026-03-01` and `anchor=2026-02-10` | 1–31 Mar → `budgetCents` 50 000 (change of 5 Mar ≤ 31 Mar); 1–28 Feb → 35 000. **A start-day change after history exists stays correct** (Q1 A) |
-| P5-AC21 | time | Changes `(1970-01-01, 35 000)`, `(2026-02-28, 50 000)` and start day 31; then `(2028-02-29, 60 000)` with start day 1 | Stats month for anchors 2026-02-27, 2026-02-28 (day 31) and 2028-02-15 (day 1) | 31 Jan – 27 Feb 2026 → 35 000 (the change falls on the next cycle's first day); 28 Feb – 30 Mar 2026 → 50 000; Feb 2028 (ends 29 Feb, leap) → 60 000 |
-| P5-AC22 | — | Owner's history plus `(2026-06-01, null)` | Stats month for anchors 2026-06-25 (cycle 20 Jun – 19 Jul) and 2026-06-05 (cycle 20 May – 19 Jun, which contains the removal) | `budget: null` for both (**removal → no line**, Q6 A; last wins) |
-| P5-AC23 | — | Only the seeded change `(1970-01-01, 35 000)` (**"from the beginning"**, Q3 A) | Stats month for anchor 2024-01-05 | `budget.budgetCents` 35 000 |
-| P5-AC24 | money | Changes `(1970-01-01, 0)` (a budget of $0, not "no budget") | Stats month with 1 200 spent in the cycle, and in another cycle with nothing spent | `{0, 1200, "over", 1200}` and `{0, 0, "on", 0}` |
+| P5-AC21 | time | Changes `(1970-01-01, 35 000)`, `(2026-02-28, 50 000)` and start day 31; then `(2028-02-29, 60 000)` with start day 1. Each cycle below has one $10 expense | Stats month for anchors 2026-02-27, 2026-02-28 (day 31) and 2028-02-15 (day 1), clock 2028-03-15 | 31 Jan – 27 Feb 2026 → 35 000 (the change falls on the next cycle's first day); 28 Feb – 30 Mar 2026 → 50 000; Feb 2028 (ends 29 Feb, leap) → 60 000 |
+| P5-AC22 | — | Owner's history plus `(2026-06-01, null)`, and a $10 expense in each cycle below | Stats month for anchors 2026-06-25 (cycle 20 Jun – 19 Jul) and 2026-06-05 (cycle 20 May – 19 Jun, which contains the removal) | `budget: null` for both (**removal → no line**, Q6 A; last wins) |
+| P5-AC23 | — | Only the seeded change `(1970-01-01, 35 000)` (**"from the beginning"**, Q3 A), and a $10 expense on 2024-01-05 | Stats month for anchor 2024-01-05 | `budget.budgetCents` 35 000 |
+| P5-AC24 | money | Changes `(1970-01-01, 0)` (a budget of $0, not "no budget"); live budget 0 | Stats month for a finished cycle with $12 spent (anchor 2026-05-05), and for a finished cycle whose only transaction is a $50 **income** (anchor 2026-06-05) | `{0, 1200, "over", 1200, false}` and `{0, 0, "on", 0, false}` |
 | P5-AC25 | — | Owner's history | `GET /api/stats?period=day` and `period=year` | Neither response has a `budget` key (Q7 A). Day and year bodies are otherwise unchanged |
 | P5-AC26 | — | Owner's history; stranger B with no budget and no history | B calls `GET /api/stats?period=month&anchor=2026-02-01`; and an unauthenticated call | B gets `budget: null` and none of the owner's spend; unauthenticated is 401 |
-| P5-AC27 | — | `statsResponseSchema` | It parses a body **without** `budget` (an old server), with `budget: null`, and with a full `budget` object; and a body with `status: "maybe"` | The first three parse; the last fails. *Why:* a new Mini App must cope with an old server, and an old Mini App ignores the extra field (it never validates responses, `lib/api.ts` `request<T>` only casts) |
-| P5-AC28 | — | Stats › Month in the Mini App (start day 20 and start day 1, light + dark, 375px) | It renders: under (Owner's history, anchor Feb), over (anchor Mar), exactly on, no budget, an old server's response with no `budget` field, and the Day and Year tabs | One line under the totals: `Budget $350.00 · $40.00 under`, `Budget $500.00 · $25.00 over`, `Budget $350.00 · on budget`; nothing when `budget` is null or missing; nothing on Day or Year. Tokens only, not red (DESIGN: expenses are not red) (screenshot check, Q8 A) |
-| P5-AC29 | money | **Pending Q-P5-2.** Owner's history plus a $100 transfer (an `excludeFromBudget` category) on 2026-02-02 | Stats month for anchor 2026-02-01 | If Q-P5-2 = A: `spentCents` 31 000, still `$40 under` (headline Spent shows $410). If B: `spentCents` 41 000, `$60 over` |
-| P5-AC30 | — | **Pending Q-P5-1.** Start day 20, Stats › Month | The user wants to see 20 Jan – 19 Feb | Depends on the answer: A, ‹ › arrows on Stats Month (never past the current cycle); B, the line also shows in History's Cycle stepper; C, current cycle only. Written as a screenshot check once answered |
+| P5-AC27 | — | `statsResponseSchema` | It parses a body **without** `budget` (an old server), with `budget: null`, and with a full `budget` object; and bodies with `status: "maybe"` or without `isCurrent` | The first three parse; the last two fail. *Why:* a new Mini App must cope with an old server, and an old Mini App ignores the extra field (it never validates responses, `lib/api.ts` `request<T>` only casts) |
+| P5-AC28 | — | Stats › Month in the Mini App (start day 20 and start day 1, light + dark, 375px) | It renders: finished under (Owner's history, anchor Feb), finished over (anchor Mar), finished exactly on, current under, current over, no budget, an old server's response with no `budget` field, and the Day and Year tabs | One line under the totals, exactly as in the *Budget line* copy table: `Budget $350.00 · $40.00 under`, `Budget $500.00 · $25.00 over`, `Budget $350.00 · on budget`, `Budget $500.00 · $450.00 left`, `Budget $500.00 · $25.00 over`; nothing when `budget` is null or missing; nothing on Day or Year. Tokens only, not red (DESIGN: expenses are not red) (screenshot check, Q8 A) |
+| P5-AC29 | money | Owner's history plus a $100 transfer (an `excludeFromBudget` category) on 2026-02-02 | Stats month for anchor 2026-02-01 | `spentCents` 31 000, still `{…, "under", 4000, false}`, while `outCents` (the headline Spent) is 41 000 (Q-P5-2 A) |
+| P5-AC30 | — | Owner's history in the Mini App, Stats › Month on the current cycle (start day 20, then start day 1) | Tap ‹ nine times, then › once, then switch to Year and back to Month | The label steps 20 Sep – 19 Oct … 20 Jan – 19 Feb, which shows `Budget $350.00 · $40.00 under` and that cycle's totals and charts; › then shows 20 Feb – 19 Mar; › is disabled on the current cycle; on start day 1 the label is the month name; Day and Year show no arrows; after Year → Month it is back on the current cycle (screenshot check, Q-P5-1 A) |
+| P5-AC31 | — | Owner's history; no transactions between 20 May 2023 and 19 Jun 2023; one $50 **income** (no expenses) on 2024-03-10 | Stats month for anchors 2023-06-05 (cycle 20 May – 19 Jun 2023) and 2024-03-10 (cycle 20 Feb – 19 Mar 2024) | 2023-06-05 → `budget: null` (**no transactions → no line**, P5-F2, even though the epoch row applies); 2024-03-10 → `{35000, 0, "under", 35000, false}` (income alone counts as a transaction) |
+| P5-AC32 | time | Shared space, start day 1, history `(1970-01-01, 50 000)`; viewer V in `Europe/London`, partner P in `Asia/Singapore`; a $20 expense on 2026-10-10 and on 2026-09-10; clock `2026-10-31T17:30:00Z` (01:30 on 1 Nov in Singapore, 17:30 on 31 Oct in London) | P PATCHes 60 000 (dated 2026-11-01); then V calls `GET /api/stats?period=month` and `…&anchor=2026-09-15` | October (V's current cycle) → `{60000, 2000, "under", 58000, true}`: the **live** budget, matching V's Today, although the history alone would give 50 000. September (finished) → `{50000, 2000, "under", 48000, false}` (P5-F4) |
+| P5-AC33 | — | A **scratch database** migrated to 0005 only (a temporary copy of the migrations folder whose journal stops at 0005), holding a user, a space with budget 35 000, a space with no budget, and one old-shape `budget_periods` row | `migrate()` runs with the real migrations folder (0006–0009 pending); then the row is deleted and `migrate()` runs again | The first run **throws** (message contains `refusing`), and afterwards `budget_periods` still has `user_id` and no `household_id`, the old row is still there, and `drizzle.__drizzle_migrations` still has 6 rows: **the whole batch rolled back**. The second run succeeds: 10 migration rows, the budget space has exactly `(1970-01-01, 35 000)`, the other space has none |
+| P5-AC34 | — | Start day 20, History › Cycle chip, after `CycleStepper` moved to `ui/` | Step ‹ twice and › once | Same labels, transactions and disabled › on the current cycle as before the move; no budget line in History (Q5 B) (screenshot check) |
 
 ### Edge cases
 
 | Area | Case | Expected |
 |---|---|---|
-| Money | Budget 0 | A real $0 budget: line shows `over` or `on budget`, never hidden (P5-AC24). Distinct from null |
+| Money | Budget 0 | A real $0 budget: line shows `over` or `on budget`, never hidden for being 0 (P5-AC24). Distinct from null |
 | Money | Over / under / exactly on | P5-AC1, P5-AC17–AC19, P5-AC24. `differenceCents` ≥ 0; integer cents; no division, so no rounding question |
-| Money | Mid-cycle change | Last change ≤ cycle end wins (P5-AC18, P5-AC22). Today's safe-to-spend is unchanged: it still uses the live budget for the whole current cycle |
-| Money | Current cycle | The line compares the budget with the cycle's whole spend so far (including any future-dated entries in the cycle, as Stats' totals do). Wording pending Q-P5-3 |
-| Dates | A change on a cycle's last / first day, Feb, leap Feb, day 29–31 clamping | Looked up by `cycle.end` only, so clamping is inherited from `cycleContaining` (P5-AC21) |
-| Dates | Start day changed after history exists | Cycles are re-grouped (Part 1 decision 5); each new cycle looks up its own end date (P5-AC20) |
+| Money | Mid-cycle change | Finished cycle: last change ≤ cycle end wins (P5-AC18, P5-AC22). Current cycle: the live budget (P5-AC19, P5-AC32). Today's safe-to-spend is unchanged |
+| Money | Current cycle | Live budget against the cycle's whole budgeted spend so far (including any future-dated entries in the cycle, as Stats' totals do); reads `left` unless over (copy table) |
+| Money | Excluded categories | Left out of the line's spend (P5-AC29). The flag is read as it is now, so flipping a category's "excluded" setting later changes the verdict of every past cycle that used it. Accepted (Q-P5-2 A); Today behaves the same |
+| Money | Cycle with no transactions | No line (P5-AC31), including a brand-new current cycle before its first entry, and every cycle before you started using the app |
+| Dates | A change on a cycle's last / first day, Feb, leap Feb, day 29–31 clamping | Finished cycles look up by `cycle.end` only, so clamping is inherited from `cycleContaining` (P5-AC21) |
+| Dates | Start day changed after history exists | Cycles are re-grouped (Part 1 decision 5); each finished cycle looks up its own end date (P5-AC20) |
 | Dates | Cycle before any change | Only possible for a space whose first budget came after ship: no row ≤ cycle end → no line |
+| Dates | Anchor after the current cycle (API only; the arrows never go there) | Not current, so history: the latest change, which equals the live budget. Usually no transactions, so no line |
 | Time | 00:30 in Singapore | The change is dated the Singapore day (P5-AC13) |
-| Time | Shared space, members in different timezones | Never dated before the latest change (P5-AC10). Accepted consequence: a member in a "behind" timezone may see a change land one day later than their own calendar says. Dates never go backwards, and the latest row always equals the live budget |
-| Spaces | Personal vs shared | One history per space; written by whichever member changes it (P5-AC15). Switching spaces switches which history Stats reads |
+| Time | Shared space, members in different timezones | Never dated before the latest change (P5-AC10). The current cycle always shows the live budget, so it matches each viewer's Today (P5-AC32). Accepted for finished cycles: a member in a "behind" timezone may see a change land one day later than their own calendar says |
+| Time | "Current" at a cycle boundary | Decided by the viewer's today in their timezone; at 00:30 on the 20th in Singapore the new cycle is current |
+| Spaces | Personal vs shared | One history per space; written by whichever member changes it (P5-AC15). Switching spaces switches which history and live budget Stats reads |
 | Spaces | New space created after ship | Starts with no budget and no history (`householdsRepo.create`, `usersRepo.upsertByTelegramId`); the first budget set writes the first row |
 | Spaces | Join / leave / switch | No budget change, so no history write (verified in `households.ts`) |
 | Telegram | Redelivered `/budget 500` | Same value → nothing written (P5-AC7, P5-AC14) |
 | Telegram | Double-fired tick | Not involved: no tick job reads or writes budget history |
-| Concurrency | Two members change it at once | Row lock on the space, then compare, then write; the latest row always equals the live budget (P5-AC11) |
-| Deploy | Old server running after the migration | It never reads or writes `budget_periods` (verified: only `schema.ts` defines it, only the `BudgetPeriod` type is exported, no query anywhere). But a budget changed through the **old** server in that window updates `households` without a history row. See Q-P5-4 and the Plan's post-deploy check |
-| Deploy | New Mini App, old server | No `budget` field → no line (P5-AC27, P5-AC28) |
+| Concurrency | Two members change it at once | Row lock (`FOR NO KEY UPDATE`) on the space, then compare, then write; a change that waits is never lost (P5-AC11) |
+| Concurrency | A capture while a budget changes | Not blocked: the lock is `FOR NO KEY UPDATE`, which doesn't conflict with the `FOR KEY SHARE` lock a transaction insert takes on its space |
+| Mini App | Stats arrows | Never past the current cycle; no lower bound (empty cycles show no line, P5-AC31); reset to the current cycle on period or tab change (P5-AC30). The category drill-down follows the shown cycle's `from`/`to` |
+| Deploy | Old server running on the migrated database | It never reads or writes `budget_periods` (verified: only `schema.ts` defines it, only the `BudgetPeriod` type is exported, no query anywhere). But a budget changed through the **old** server updates `households` without a history row. This window is "migration committed → a healthy new server", which can last **days** if the new server fails to start, or come back after a **Render rollback** (P5-F1). Finished cycles may then show a stale budget; the current cycle can't (live budget). Deploy checklist step 3 finds it |
+| Deploy | New Mini App, old server | No `budget` field → no line (P5-AC27, P5-AC28). The arrows work against the old server too (the `anchor` parameter exists since Part 2) |
 | Deploy | Old Mini App, new server | Extra field ignored (no response validation in the Mini App) |
-| Data | Non-empty `budget_periods` in production | The migration refuses and the deploy fails at build, with the old server still serving (P5-AC3) |
+| Data | Non-empty `budget_periods` in production | The migration refuses and the whole batch rolls back; the deploy fails at build, with the old server still serving (P5-AC3, P5-AC33) |
 
 ### Out of scope (park in BACKLOG › Later)
 
@@ -952,93 +994,13 @@ and digests keep reading `households.monthly_budget_cents`, unchanged.
   today; Today always uses the live budget).
 - Showing who changed the budget, or a change log screen (no `set_by` column).
 - A space-level timezone.
+- A lower bound for the Stats/History arrows (e.g. the first transaction).
+- Remembering the "excluded" flag per cycle (Q-P5-2 caveat).
 
 ### Open questions for the owner (Part 5)
 
-**Q-P5-1 — How do you reach a past cycle in Stats? (affects the Mini App only)**
-
-*Scenario:* you open Stats › Month to see how 20 Jan – 19 Feb went. Today,
-Stats has **no arrows**: it only ever shows the current cycle
-(`screens/Stats.tsx`, the query is `['stats', period]` with no anchor). The
-only screen that steps through past cycles is History's "Cycle" chip
-(Part 2), and it already loads `/api/stats?period=month&anchor=…` for each
-cycle. So with Stats-only (Q5 B) as it stands, you'd only ever see the
-current cycle's line.
-
-- **A. Add ‹ › arrows to Stats › Month**, like History's Cycle chip (never
-  past the current cycle). Move the presentational `CycleStepper` from
-  `features/history/` to `ui/`, so both use one component. *Pro:* matches your
-  "Stats only" choice and makes past cycles reachable where you asked for
-  them. *Con:* more Mini App work (stepper state, query key gets an anchor,
-  charts re-animate between cycles); touches History's import.
-- **B. Also show the line in History's Cycle view.** *Pro:* nearly free, since
-  the data is already fetched there; you can already step back through cycles.
-  *Con:* goes against Q5 B ("Stats only"); History becomes partly a stats
-  screen.
-- **C. Current cycle only for now**; park navigation. *Pro:* smallest. *Con:*
-  your $350 example isn't visible anywhere until navigation is added.
-
-*Recommendation:* **A**, because it's the only option that delivers your
-example where you said you wanted it. But it's your call.
-
-**Q-P5-2 — Which "spent" does the line compare with the budget?**
-
-*Scenario:* in 20 Jan – 19 Feb you spent $310 on food and so on, and moved
-$100 to savings (a category excluded from the budget). Stats' headline says
-**Spent $410.00**. Under it the line says either `Budget $350.00 · $40.00
-under` (A) or `· $60.00 over` (B).
-
-- **A. Budgeted spend (excludes excluded categories, PRD F6.7).** *Pro:* the
-  same figure Today, the 80/100% alerts and safe-to-spend use, so the verdict
-  matches what the app told you during the cycle. *Con:* it can differ from
-  the "Spent" number right above it, which may look like a mismatch.
-- **B. The headline "Spent" (`outCents`).** *Pro:* the arithmetic is visible
-  on screen. *Con:* a transfer to savings would count as "over budget",
-  contradicting Today and the alerts.
-
-*Recommendation:* **A**. If the mismatch worries you, the line could say
-`Budget $350.00 · $40.00 under (budgeted spending)`. That's a copy tweak, not
-a data change.
-
-**Q-P5-3 — Wording for the current cycle, and for "exactly on".**
-
-*Scenario:* it's 31 Oct, the cycle runs to 19 Nov, and you've spent $50 of
-$500. "`$450.00 under`" is true but reads like a final result.
-
-- **A. Same words for every cycle:** `under` / `over` / `on budget`.
-  *Pro:* one rule, exactly what you specified. *Con:* "under" mid-cycle can
-  read as "done".
-- **B. Current cycle says `$450.00 left`** (and `over` when over); past
-  cycles say `under` / `over` / `on budget`. *Pro:* reads naturally while the
-  cycle is running. *Con:* two wordings; the Mini App needs to know whether
-  the cycle is current (it can compare `to` with `me.today`).
-
-For "exactly on" the proposal is **`on budget`** (alternatives: `right on
-budget`, `$0.00 under`). *Recommendation:* **B** with `on budget`.
-
-**Q-P5-4 — A budget changed during the deploy minutes.**
-
-*Scenario:* Render builds the new version and the migration copies your
-$500 into history. In the minute or two before the new server takes over, the
-old one is still answering, and you happen to change the budget to $600. The
-old server doesn't know about history, so history still says $500 while your
-budget is $600. Today is right ($600). But when this cycle becomes a past
-cycle, Stats would show $500.
-
-- **A. Accept it, plus a read-only check after deploy** (in the Plan). If it
-  finds a mismatch, you fix it with your approval (simplest: set the budget to
-  any other value and back to $600 in the app, which writes correct history;
-  or an approved one-row insert). *Pro:* no extra code. *Con:* relies on
-  running the check.
-- **B. Same as A, and don't change any budget during the deploy.** You and
-  your partner are the only users, so the risk is nearly zero. *Pro:* almost
-  never needs the fix. *Con:* a manual rule.
-- **C. The new server repairs it at boot** (writes a history row whenever the
-  latest change differs from the live budget). *Pro:* automatic. *Con:* an
-  automatic data-repair write at every boot (GUARDRAILS §3 "ask first"), more
-  code and tests, and it would also hide real bugs.
-
-*Recommendation:* **B** (it includes A's check).
+None. Q-P5-1 to Q-P5-4 and P5-F2 were answered on 2026-11-01 (see *Part 5
+owner decisions* above).
 
 ---
 
@@ -1053,19 +1015,28 @@ cycle, Stats would show $500.
 
 **Source of truth stays the same.** `households.monthly_budget_cents` remains
 the live budget for safe-to-spend, Today, alerts, digests, recap and
-`/budget`. None of those change. `budget_periods` is a **history log**, read
-only by the Stats month view. One invariant ties them together: **for every
-space with at least one change, the latest change's `budget_cents` equals
-`households.monthly_budget_cents`** (P5-AC10, P5-AC11).
+`/budget`. None of those change. It is also the budget the Stats line uses
+for the **current** cycle. `budget_periods` is a **history log**, read only by
+the Stats month view for **finished** cycles. One invariant ties them
+together: **for every space with at least one change, the latest change's
+`budget_cents` equals `households.monthly_budget_cents`** (P5-AC10,
+P5-AC11).
 
 **The one write path.** Both production budget writes (`PATCH /api/settings`
-in `api/index.ts:175`, bot `/budget` in `bot/commands/money.ts:126`) already
+in `api/index.ts:176`, bot `/budget` in `bot/commands/money.ts:126`) already
 go through `householdsRepo.updateBudget`. Nothing else writes a budget:
 `householdsRepo.create` and `usersRepo.upsertByTelegramId` create spaces with
 null and need no history; join/leave/switch don't touch budgets; `start.ts`
 (onboarding) and `scripts/seed.ts` (categories only) don't write budgets.
 **So history is appended inside `updateBudget`.** Every caller, including
 tests, gets it, and no call site can forget.
+
+**The read path (Stats month only).** `GET /api/stats?period=month` already
+loads the active space's settings (`activeSpaceSettings`, which includes the
+live `budgetCents`). `buildStats` decides `isCurrent` from the viewer's
+today, takes the live budget for the current cycle or one history lookup for
+a finished one (in the existing `Promise.all`), hides the line when the cycle
+has no transactions, and compares with `budgetedOutCents`.
 
 ### New core module `packages/core/src/budget-history.ts` (pure)
 
@@ -1080,7 +1051,7 @@ export function budgetChangeEffectiveFrom(writerToday: IsoDate, latest: IsoDate 
 
 export type BudgetStatus = 'under' | 'over' | 'on';
 export interface BudgetComparison { status: BudgetStatus; differenceCents: AmountCents }
-/** How a cycle ended against its budget. differenceCents is always ≥ 0. */
+/** How a cycle went against its budget. differenceCents is always ≥ 0. */
 export function compareWithBudget(budgetCents: AmountCents, spentCents: AmountCents): BudgetComparison;
    // validate both with positiveOrZero integer check (throw ValidationError, as centsOf does);
    // spent < budget → under, budget − spent; spent > budget → over, spent − budget; else on, 0.
@@ -1096,10 +1067,10 @@ Replace the `budgetPeriods` block (keep the `// --- budget history` heading):
 ```ts
 /**
  * Budget history per space (F17 Part 5, B-005): a dated list of changes.
- * A cycle's budget is the change with the greatest effective_from ≤ the
- * cycle's end. budget_cents null = "no budget". Written only by
- * householdsRepo.updateBudget, in the same transaction as the live value
- * (households.monthly_budget_cents), so the latest row always equals it.
+ * A finished cycle's budget is the change with the greatest effective_from ≤
+ * the cycle's end (the current cycle uses households.monthly_budget_cents).
+ * budget_cents null = "no budget". Written only by householdsRepo.updateBudget,
+ * in the same transaction as the live value, so the latest row always equals it.
  */
 export const budgetPeriods = pgTable('budget_periods', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -1127,17 +1098,27 @@ Four migration files, **in this order, each made by drizzle-kit** so the
 journal and snapshots stay consistent (GUARDRAILS §3: generated, committed,
 reviewed, applied by the tool). Two are drizzle **custom** migrations
 (`drizzle-kit generate --custom`, the tool's supported way to add SQL that
-isn't a schema diff, as 0004's data steps did). Two are schema diffs, split so
-drizzle never asks the interactive "rename or create?" question (a removal
-and an addition on the same table in one diff triggers it, and the build agent
-has no TTY).
+isn't a schema diff). *0004 is not a precedent for this:* it is one file that
+mixes DDL with hand-added `INSERT`s, and its journal `when`
+(1788169200000) looks hand-set. Two are schema diffs, split so drizzle never
+asks the interactive "rename or create?" question (a removal and an addition
+on the same table in one diff triggers it, and the build agent has no TTY).
+The challenger generated both diffs on a scratch copy with stdin closed: no
+prompt, and exactly the statements listed below.
+
+All four use the **same command form** (run from the repo root), so the
+`--name` reaches drizzle-kit unchanged and the file names match *Files*:
 
 | # | Command (from repo root) | Content |
 |---|---|---|
 | 0006 | `pnpm --filter @spendlygo/db exec drizzle-kit generate --custom --name=budget_periods_guard` | Fill the empty file with the guard below |
-| 0007 | Edit `schema.ts` to the **intermediate** shape: `budgetPeriods` = `id`, `budgetCents: integer('budget_cents')` (nullable), `createdAt`, with only the new `budget_periods_budget_ck`. Then `pnpm db:generate -- --name=budget_periods_drop_user_month` | Generated: drop the FK, the unique index, `budget_periods_month_ck`; `budget_cents` DROP NOT NULL; replace the budget check; drop `user_id`, `year`, `month`. Removals only, so no prompt |
-| 0008 | Edit `schema.ts` to the **end** shape above. `pnpm db:generate -- --name=budget_periods_add_space_columns` | Generated: add `household_id uuid NOT NULL` + FK, `effective_from date NOT NULL`, `updated_at`, unique index. Additions only, so no prompt. `NOT NULL` without a default is fine because 0006 guarantees the table is empty |
+| 0007 | Edit `schema.ts` to the **intermediate** shape: `budgetPeriods` = `id`, `budgetCents: integer('budget_cents')` (nullable), `createdAt`, with only the new `budget_periods_budget_ck`. Then `pnpm --filter @spendlygo/db exec drizzle-kit generate --name=budget_periods_drop_user_month` | Generated: drop the FK, the unique index, `budget_periods_month_ck`; `budget_cents` DROP NOT NULL; replace the budget check; drop `user_id`, `year`, `month`. Removals only, so no prompt |
+| 0008 | Edit `schema.ts` to the **end** shape above. `pnpm --filter @spendlygo/db exec drizzle-kit generate --name=budget_periods_add_space_columns` | Generated: add `household_id uuid NOT NULL` + FK, `effective_from date NOT NULL`, `updated_at`, unique index. Additions only, so no prompt. `NOT NULL` without a default is fine because 0006 guarantees the table is empty |
 | 0009 | `pnpm --filter @spendlygo/db exec drizzle-kit generate --custom --name=budget_periods_seed` | Fill with the seed below |
+
+After each command, check the new file name is exactly
+`000N_<name>.sql`. If drizzle-kit asks any question, stop (don't answer it):
+the schema step was done wrong.
 
 Guard (0006):
 
@@ -1171,14 +1152,17 @@ ON CONFLICT ("household_id", "effective_from") DO NOTHING;
 **Why this is safe to apply (verify each in the PR):**
 - **One transaction.** drizzle's pg migrator runs *all pending migrations in
   one transaction* (`drizzle-orm/pg-core/dialect.js` `migrate()`:
-  `session.transaction(...)` around the loop). If 0006 raises, 0007–0009 never
-  commit. `scripts/migrate.ts` exits 1, the Render build fails, and the old
-  server keeps serving.
+  `session.transaction(...)` around the loop, drizzle-orm 0.38.4). If 0006
+  raises, 0007–0009 and their `__drizzle_migrations` rows never commit.
+  `scripts/migrate.ts` sets exit code 1, the `&&` chain in `render.yaml`
+  fails the build before `db:seed`, and the old server keeps serving.
+  **P5-AC33 rehearses exactly this** on a filled scratch database at 0005, so
+  the claim is tested, not only read from drizzle's source.
 - **Ordering gotcha.** The migrator only applies files whose journal `when`
   is **greater** than the last applied one. Generate 0006 → 0009 one after
   another and check in `meta/_journal.json` that each `when` is greater than
   the one before, and greater than 0005's `1793464731783`. Don't hand-edit
-  `when`.
+  `when`. (P5-AC33 also fails if the order is wrong: it expects 10 rows.)
 - **Old server compatibility.** The running server never reads or writes
   `budget_periods`. Verified: the only references are the table definition in
   `schema.ts` and the `BudgetPeriod` type re-export in `packages/db/src/index.ts`.
@@ -1191,38 +1175,91 @@ ON CONFLICT ("household_id", "effective_from") DO NOTHING;
   approval.
 - **Bulk insert** (the seed) is the owner-approved Q3 A backfill. It's one
   statement in the same transaction.
+- **Locks.** `households` is only read, plus a short lock while the FK is
+  created. The deploy takes seconds on this data size.
 
-### Backup step (owner, before merging; Claude never connects to production, GUARDRAILS §3)
+### Deploy checklist (owner; Claude never connects to production, GUARDRAILS §3)
 
-1. In the Supabase dashboard › SQL editor of the **production** project, run
-   these read-only queries:
-   `SELECT count(*) FROM budget_periods;` → expect **0** (if not 0, stop: the
-   guard will fail the deploy anyway; tell Claude).
-   `SELECT id, monthly_budget_cents FROM households WHERE monthly_budget_cents IS NOT NULL;`
-   → download the result as CSV. This is exactly what the seed will copy.
-2. Take a dump of both tables from your own machine (a session-mode or direct
-   connection string, not the 6543 transaction pooler; `pg_dump` must be the
-   same major version as Supabase's Postgres or newer):
-   `pg_dump "<prod connection string>" --table=public.budget_periods --table=public.households --format=custom --file=spendlygo-before-B032-P5-2026-11-XX.dump`
-   Keep it **outside the repo** (GUARDRAILS §12: never commit real data).
-3. Don't change any budget while the deploy runs (Q-P5-4).
-4. Record the approval line at the top of this file: `Part 5 migration
-   approved by owner, YYYY-MM-DD (backup taken: yes)`.
-
-**After deploy (read-only check, owner or main session with the owner):**
+**1. Before merging: the backup (Q-P5-4, P5-F5).** In the Supabase web
+dashboard, open the **production** project › SQL editor and run these
+read-only queries, one at a time:
 
 ```sql
-SELECT h.id, h.monthly_budget_cents, bp.budget_cents AS latest_history
+SELECT count(*) FROM budget_periods;
+```
+
+Expect **0**. If it isn't 0, stop and tell Claude (the guard would fail the
+deploy anyway).
+
+```sql
+SELECT * FROM households ORDER BY created_at;
+```
+
+Use the result panel's **Download › CSV**. That file **is the backup**: it
+holds every column of every space, including each budget, which is all the
+migration reads (the guard proves `budget_periods` is empty). Name it
+`spendlygo-households-before-B032-P5-YYYY-MM-DD.csv`.
+
+*Optional, for a full copy:* `pg_dump` from your own machine. On the free
+plan the direct connection is IPv6-only, so use the **Session pooler**
+connection string (Supabase › Connect › Session pooler, port 5432, not the
+6543 transaction pooler). `pg_dump` must be the same major version as
+Supabase's Postgres or newer:
+`pg_dump "<session pooler string>" --table=public.budget_periods --table=public.households --format=custom --file=spendlygo-before-B032-P5-YYYY-MM-DD.dump`
+
+**Store any backup carefully: it is personal financial data.** Keep it on
+your own computer, outside the repo (GUARDRAILS §12: never commit real data)
+and out of cloud-synced folders, and delete it once Part 5 has run cleanly
+for a week.
+
+Then record the approval line at the top of this file: `Part 5 migration
+approved by owner, YYYY-MM-DD (backup taken: yes)`.
+
+**2. During the deploy: don't change any budget** (you and your partner),
+from merge until Render shows the new API deploy as **Live**.
+
+**3. After the deploy, and again after any failed deploy or Render
+rollback (P5-F1):** run this read-only drift check in the SQL editor:
+
+```sql
+SELECT h.id, h.monthly_budget_cents, bp.effective_from AS latest_change_on,
+       bp.budget_cents AS latest_history, h.updated_at
 FROM households h
 LEFT JOIN LATERAL (
-  SELECT budget_cents FROM budget_periods
+  SELECT effective_from, budget_cents FROM budget_periods
   WHERE household_id = h.id ORDER BY effective_from DESC LIMIT 1
 ) bp ON true
 WHERE h.monthly_budget_cents IS DISTINCT FROM bp.budget_cents;
 ```
 
-Expect **0 rows**. Any row is a deploy-window drift (Q-P5-4). Report it.
-Fixing it needs the owner's approval.
+Expect **0 rows**. A failed deploy (the migration committed but the new
+server never became healthy) or a Render rollback leaves the **old** server
+running on the migrated database, for as long as it takes to ship a good
+deploy, and every budget change in that time misses its history row. So:
+run the check after the failure or rollback, keep not changing budgets if
+you can, and run it again after the next good deploy.
+
+**4. Fixing a mismatch (only with the owner's approval, GUARDRAILS §3).**
+Report each row to the owner first. The fix is **one row per space**, run by
+the owner in the SQL editor:
+
+```sql
+INSERT INTO budget_periods (household_id, effective_from, budget_cents)
+VALUES ('<id>', DATE '<drift day>', <monthly_budget_cents, or NULL>)
+ON CONFLICT (household_id, effective_from)
+DO UPDATE SET budget_cents = excluded.budget_cents, updated_at = now();
+```
+
+`<drift day>` is the day the budget was changed on the old server, in the
+changer's timezone. `h.updated_at` from the check is a hint (it also moves
+when the start day changes), and the owner confirms the day. It must be on
+or after `latest_change_on` (the never-before-latest rule): if earlier, use
+`latest_change_on`. Re-run the check: 0 rows. **Never fix drift by changing
+the budget to another value and back in the app.** A lower value can make
+the hourly tick record an 80%/100% alert for this cycle (suppressing the
+real one later), a higher one can hide a due alert, and either way the
+correction is dated today, so cycles ending between the drift and the fix
+keep the old budget.
 
 ### Rollback
 
@@ -1231,12 +1268,14 @@ reverted alone:
 
 1. **Commit 1 — data + write path:** core `budget-history.ts`, schema,
    migrations 0006–0009, `updateBudget` + new repo, both write call sites, DB
-   tests.
-2. **Commit 2 — Stats API:** `budget` on `/api/stats` month, shared schema,
-   API tests.
-3. **Commit 3 — Mini App:** the budget line (+ navigation per Q-P5-1).
+   tests (including the P5-AC33 rehearsal).
+2. **Commit 2 — Stats API:** `budget` on `/api/stats` month (current vs
+   finished, no-transactions rule), shared schema, API tests.
+3. **Commit 3 — Mini App:** `CycleStepper` moved to `ui/`, Stats › Month
+   arrows, the budget line.
 
-- Mini App problem → revert commit 3. The server field is ignored.
+- Mini App problem → revert commit 3. The server field is ignored, and
+  History's stepper goes back to `features/history/` with it.
 - Stats API problem → revert commit 2 (and 3). The history keeps being written,
   so nothing is lost. The new Mini App hides the line when the field is
   missing.
@@ -1244,20 +1283,27 @@ reverted alone:
   matches them). Reverting `schema.ts` without its migrations would make the
   next `db:generate` emit a reverse, destructive migration. If commit 1's
   *code* misbehaves, fix forward. The old code ignores the table, so the
-  database itself is never the emergency. If history stopped being written for
-  a while, the post-deploy check above finds the drift. Fixing it needs owner
-  approval.
+  database itself is never the emergency.
+- **Render's "Rollback" button or a failed deploy** is different from a git
+  revert: the database stays migrated and the old server serves on it. That
+  is safe (it never touches `budget_periods`), but budget changes made then
+  get no history row. Run deploy checklist step 3 after it and after the next
+  good deploy; fix only per step 4.
 
 ### Deploy order
 
 One PR. The Render API build runs `db:migrate` (0006–0009 in one
-transaction), then the new server passes its health check and takes over. The
-static site may deploy before or after:
-- New Mini App + old server: no `budget` field, so no line (P5-AC27/28).
+transaction), then `db:seed`, then the new server must pass its health check
+before it takes over. The static site may deploy before or after:
+- New Mini App + old server: no `budget` field, so no line (P5-AC27/28). The
+  arrows still work (the `anchor` parameter exists since Part 2).
 - Old Mini App + new server: extra field ignored.
-- Old server + migrated DB (build → switch-over window): fine, it never
-  touches the table. The only gap is a budget changed in that window
-  (Q-P5-4, post-deploy check).
+- Old server + migrated DB: from the migration's commit until a healthy new
+  server, which is normally a minute or two but can be **days** if the new
+  server fails to start, and recurs after a Render rollback. Fine for the
+  table; the only gap is a budget changed in that window (checklist steps
+  2–4). The current cycle's line can't show this drift (it reads the live
+  budget).
 
 ### Files
 
@@ -1267,28 +1313,44 @@ static site may deploy before or after:
 | `packages/core/src/budget-history.test.ts` | **New**: P5-AC1, P5-AC2 |
 | `packages/core/src/index.ts` | `export * from './budget-history.js';` |
 | `packages/db/src/schema.ts` | `budgetPeriods` → end shape (via the intermediate shape for 0007). Doc comment as above |
-| `packages/db/migrations/0006_budget_periods_guard.sql`, `0007_budget_periods_drop_user_month.sql`, `0008_budget_periods_add_space_columns.sql`, `0009_budget_periods_seed.sql` + `meta/0006–0009_snapshot.json` + `meta/_journal.json` | Made by drizzle-kit as in *Data*. Only the two custom files' bodies are written by hand (the guard and the seed, verbatim from this plan) |
-| `packages/db/src/repositories/households.ts` | `updateBudget(db, householdId, monthlyBudgetCents: number \| null, effectiveFrom: IsoDate): Promise<Household>`. Body: `db.transaction(async (tx) => { … })`: (1) `tx.select().from(households).where(eq(households.id, householdId)).for('update').limit(1)` → missing → throw `No household ${id}` (as today); (2) if `current.monthlyBudgetCents === monthlyBudgetCents` return `current` (no write); (3) `latest = max(effective_from)` for the space (`tx.select({ d: sql<string \| null>\`max(${budgetPeriods.effectiveFrom})\` })…where(eq(budgetPeriods.householdId, householdId))`); (4) `on = budgetChangeEffectiveFrom(effectiveFrom, latest)`; (5) update `households` (`monthlyBudgetCents`, `updatedAt`) `.returning()`; (6) `tx.insert(budgetPeriods).values({ householdId, effectiveFrom: on, budgetCents: monthlyBudgetCents }).onConflictDoUpdate({ target: [budgetPeriods.householdId, budgetPeriods.effectiveFrom], set: { budgetCents: sql\`excluded.budget_cents\`, updatedAt: new Date() } })` (**`excluded.*`**, see the gotcha in `apps/server/CLAUDE.md`); return the updated row. Doc comment: the only budget writer; appends history; unchanged value = no write. Copy the transaction style of `joinByCode` (reads through `tx`) |
+| `packages/db/migrations/0006_budget_periods_guard.sql`, `0007_budget_periods_drop_user_month.sql`, `0008_budget_periods_add_space_columns.sql`, `0009_budget_periods_seed.sql` + `meta/0006–0009_snapshot.json` + `meta/_journal.json` | Made by drizzle-kit as in *Data*, all with the `pnpm --filter @spendlygo/db exec drizzle-kit generate … --name=…` form. Only the two custom files' bodies are written by hand (the guard and the seed, verbatim from this plan) |
+| `packages/db/src/repositories/households.ts` | `updateBudget(db, householdId, monthlyBudgetCents: number \| null, effectiveFrom: IsoDate): Promise<Household>`. Body: `db.transaction(async (tx) => { … })`: (1) `tx.select().from(households).where(eq(households.id, householdId)).for('no key update').limit(1)` → missing → throw `No household ${id}` (as today); (2) if `current.monthlyBudgetCents === monthlyBudgetCents` return `current` (no write); (3) `latest = max(effective_from)` for the space (`tx.select({ d: sql<string \| null>\`max(${budgetPeriods.effectiveFrom})\` })…where(eq(budgetPeriods.householdId, householdId))`); (4) `on = budgetChangeEffectiveFrom(effectiveFrom, latest)`; (5) update `households` (`monthlyBudgetCents`, `updatedAt`) `.returning()`; (6) `tx.insert(budgetPeriods).values({ householdId, effectiveFrom: on, budgetCents: monthlyBudgetCents }).onConflictDoUpdate({ target: [budgetPeriods.householdId, budgetPeriods.effectiveFrom], set: { budgetCents: sql\`excluded.budget_cents\`, updatedAt: new Date() } })` (**`excluded.*`**, see the gotcha in `apps/server/CLAUDE.md`); return the updated row. Doc comment: the only budget writer; appends history; unchanged value = no write; why `no key update` (below). Copy the transaction style of `joinByCode` (reads through `tx`) |
 | `packages/db/src/repositories/budget-periods.ts` | **New**. `budgetInEffectOn(db, householdId: string, date: IsoDate): Promise<number \| null>`: `select budget_cents … where household_id = $1 and effective_from <= $2 order by effective_from desc limit 1`; no row → null. `listForSpace(db, householdId)` (ordered by `effective_from`, used by tests only, also scoped). Both filter by space themselves |
 | `packages/db/src/index.ts` | `export * as budgetPeriodsRepo from './repositories/budget-periods.js';` |
-| `packages/db/src/repositories/households.test.ts` | Existing `updateBudget › is visible to every member`: add the 4th argument `'2026-10-31'` (mechanical, no assertion changes). New `describe('budget history (B-032 P5)')`: P5-AC5 to AC11 |
+| `packages/db/src/repositories/households.test.ts` | Existing `updateBudget › is visible to every member`: add the 4th argument `'2026-10-31'` (mechanical, no assertion changes). New `describe('budget history (B-032 P5)')`: P5-AC5 to AC11. For P5-AC11, see *Test-writer notes* |
 | `packages/db/src/repositories/budget-periods.test.ts` | **New**, DB-backed (`describeIfDb`, cleanup copied from `households.test.ts`, distinct telegram ids `970000000001n…`): P5-AC12 |
-| `packages/db/src/budget-periods-migration.test.ts` | **New**, DB-backed. Read the two custom SQL files with `readFileSync(new URL('../migrations/0006_budget_periods_guard.sql', import.meta.url))`; run each inside `handle.db.transaction(async (tx) => { …; tx.rollback() })` (or a raw `BEGIN … ROLLBACK` on a single `postgres` connection), so the shared test DB is never changed: P5-AC3, P5-AC4. The seed assertion checks only the test's own spaces (other rows in the DB are irrelevant) |
-| `apps/server/src/api/index.ts` | `PATCH /settings`: `householdsRepo.updateBudget(ctx.db, activeHouseholdId(user), monthlyBudgetCents, todayFor(ctx, user))`. `buildStats`: month branch only, add `budgetPeriodsRepo.budgetInEffectOn(ctx.db, householdId, to)` to the existing `Promise.all` (no new sequential stage); build `budget` = null when the lookup is null, else `{ budgetCents, spentCents: totals.budgetedOutCents, ...compareWithBudget(centsOf(budget), centsOf(totals.budgetedOutCents)) }` **(spent basis pending Q-P5-2; B = `totals.outCents`)**. Day and year: don't set the key at all (Q7 A). Commit 1: the PATCH line; commit 2: stats |
+| `packages/db/src/budget-periods-migration.test.ts` | **New**, DB-backed (`describeIfDb`). Two `describe`s. (a) P5-AC3, P5-AC4 on the shared test DB: read the two custom SQL files with `readFileSync(new URL('../migrations/0006_budget_periods_guard.sql', import.meta.url))`; run each inside `handle.db.transaction(async (tx) => { …; tx.rollback() })` (or a raw `BEGIN … ROLLBACK` on a single `postgres` connection), so the shared DB is never changed; the seed assertion checks only the test's own spaces. (b) P5-AC33 on a scratch database, see *Test-writer notes* |
+| `apps/server/src/api/index.ts` | `PATCH /settings`: `householdsRepo.updateBudget(ctx.db, activeHouseholdId(user), monthlyBudgetCents, todayFor(ctx, user))` (commit 1). `GET /stats` (commit 2): for `period === 'month'` keep the one `activeSpaceSettings(ctx, user)` call and pass both its `cycleStartDay` and `budgetCents`, plus `today`, to `buildStats` (new last parameter `month?: { today: IsoDate; liveBudgetCents: AmountCents \| null }`; day/year pass nothing). In `buildStats`' month branch: `isCurrent = compareIsoDate(cycle.start, today) <= 0 && compareIsoDate(today, cycle.end) <= 0`; add a 5th entry to the existing `Promise.all`: `isCurrent ? Promise.resolve(liveBudgetCents) : budgetPeriodsRepo.budgetInEffectOn(ctx.db, householdId, to)` (no new sequential stage). Then `budget = budgetCents === null \|\| totals.count === 0 ? null : { budgetCents, spentCents: totals.budgetedOutCents, ...compareWithBudget(centsOf(budgetCents), centsOf(totals.budgetedOutCents)), isCurrent }`. Day and year: don't set the key at all (Q7 A). Put the selection in a small local function `cycleBudget(…)` beside `buildStats`, with a comment citing Q-P5-1/2/3 and P5-F2/F4 |
 | `apps/server/src/bot/commands/money.ts` | `handleBudget`: pass `todayFor(ctx, user)` as the 4th argument. Reply unchanged |
 | `apps/server/src/bot/commands/money.test.ts` | The `updateBudget` mock becomes a `vi.fn()`; new test P5-AC14 asserts its arguments. Existing assertions unchanged |
 | Test helpers calling `updateBudget` (`tasks/alerts.test.ts:83, 321`, `tasks/digest.test.ts:69, 292`, `api/pay-cycle.test.ts:162, 208, 228, 318`, `api/recap.test.ts:173`) | Add the 4th argument `BUDGET_HISTORY_EPOCH` (or the test's today). **Type-only/mechanical**, no assertion changes. Allowed edit, listed here so the reviewer can check nothing else moved |
-| `packages/shared/src/index.ts` | `export const budgetStatusSchema = z.enum(['under', 'over', 'on']);` and on `statsResponseSchema`: `budget: z.object({ budgetCents: nonneg int, spentCents: nonneg int, status: budgetStatusSchema, differenceCents: nonneg int }).nullable().optional()`. Doc: *"Month (cycle) view only: the budget in effect at the cycle's end (B-032 P5). null = no budget that cycle. Absent on day/year, and from servers before Part 5; the Mini App must treat absent as null."* Export `StatsBudget` type |
-| `apps/server/src/api/budget-history.test.ts` | **New**, DB-backed, setup copied from `pay-cycle.test.ts` (`auth()`, `makeApp`, `fixedClock`, distinct telegram ids `930000000001n…`). Seed history with `updateBudget(…, BUDGET_HISTORY_EPOCH)` then `updateBudget(…, '2026-03-05')`. P5-AC13, AC15 to AC26. Plus a pure `describe` (no DB) for P5-AC27 (`statsResponseSchema.safeParse`) |
-| `apps/miniapp/src/features/stats/BudgetLine.tsx` + `budget-line.css` | **New** (target layout; `features/stats` is created here, B-020 moves the rest later). Props `{ budget: StatsBudget \| null \| undefined; currency; locale }`; returns null unless `budget` is an object; text per *Terms* (wording per Q-P5-3); `formatMoney` from `lib/format.ts`. Tokens only (`--text-subtle`), never red, ≤ 60 lines |
-| `apps/miniapp/src/screens/Stats.tsx` | Under the totals in the first card, `{period === 'month' && <BudgetLine budget={data.budget} … />}`. Copy-only wiring. No other change unless Q-P5-1 = A |
-| *(only if Q-P5-1 = A)* `apps/miniapp/src/ui/CycleStepper.tsx` + `cycle-stepper.css` (moved from `features/history/`), `features/history` import updated, `App.tsx` stats query key `['stats', period, anchor ?? 'current']` + anchor state reset on tab/period change, Stats Month renders the stepper (never past the current cycle, as History's `canGoNext`) | Exact wiring is written into this plan after the answer, before build |
-| `PRD.md` | §9: replace the `budget_periods` row with the new shape and its rule. F7: Month view shows the budget line (Part 5). F17: a "Budget history" item (dated changes per space, last change ≤ cycle end, seeded from the epoch, removal = no budget) |
-| `docs/adr/0007-budget-cycle-per-space.md` | Replace "Later parts" with a **Budget history (Part 5)** section: dated changes vs per-cycle rows (Q1 A), last-wins (Q2 A), epoch vs `created_at`, writer's timezone + never-before-latest, the guarded in-place rebuild, forward-only rollback |
-| `apps/server/CLAUDE.md` | Gotchas: (1) "`householdsRepo.updateBudget` is the **only** budget writer and appends `budget_periods` in its transaction. Never `UPDATE households SET monthly_budget_cents` anywhere else (B-032 P5)". (2) "Migration order is by journal `when`, and all pending migrations run in one transaction. A custom guard migration (`drizzle-kit generate --custom`) can abort the whole batch" |
+| `packages/shared/src/index.ts` | `export const budgetStatusSchema = z.enum(['under', 'over', 'on']);` and on `statsResponseSchema`: `budget: z.object({ budgetCents: nonneg int, spentCents: nonneg int, status: budgetStatusSchema, differenceCents: nonneg int, isCurrent: z.boolean() }).nullable().optional()`. Doc: *"Month (cycle) view only (B-032 P5). Current cycle: the live budget; finished cycle: the budget in effect at its end. spentCents is budgeted spending (excluded categories left out). null = no budget, or no transactions in the cycle. Absent on day/year, and from servers before Part 5; the Mini App must treat absent as null."* Export `StatsBudget` type |
+| `apps/server/src/api/budget-history.test.ts` | **New**, DB-backed, setup copied from `pay-cycle.test.ts` (`auth()`, `makeApp`, `fixedClock`, distinct telegram ids `930000000001n…`). Seed history with `updateBudget(…, BUDGET_HISTORY_EPOCH)` then `updateBudget(…, '2026-03-05')`. P5-AC13, AC15 to AC26, AC29, AC31, AC32. Plus a pure `describe` (no DB) for P5-AC27 (`statsResponseSchema.safeParse`) |
+| `apps/miniapp/src/ui/CycleStepper.tsx` + `apps/miniapp/src/ui/cycle-stepper.css` | **Moved** with `git mv` from `features/history/` (no content change except the import path of `haptics`, now `../lib/telegram`). `ui/` may import `lib/telegram` (not `lib/api.ts`), per `apps/miniapp/CLAUDE.md` |
+| `apps/miniapp/src/App.tsx` | (1) Import `CycleStepper` from `./ui/CycleStepper` (History unchanged otherwise, P5-AC34). (2) New state `const [statsAnchor, setStatsAnchor] = useState<string \| undefined>(undefined)`; the stats query becomes `queryKey: ['stats', period, period === 'month' ? (statsAnchor ?? 'current') : 'current']`, `queryFn: () => api.stats(period, period === 'month' ? statsAnchor : undefined)`. For month this is the **same key and fetch** as History's `useHistoryCycle` (`['stats', 'month', anchor ?? 'current']`), so they share the cache; `['stats']` invalidation still covers both. (3) Reset `statsAnchor` to `undefined` in `onPeriodChange` and whenever `tab` changes to `'stats'`. (4) Stepping also clears `selectedCategoryKey` (as `onPeriodChange` does). (5) Pass to `StatsScreen` a `cycleStepper` element (month only): `<CycleStepper label={stats.data?.label} loading={stats.isPending} canGoNext={stats.data !== undefined && stats.data.to < todayIso} onPrevious={() => step(addDays(stats.data.from, -1))} onNext={() => step(addDays(stats.data.to, 1))} />`, the same anchor maths as `use-history-cycle.ts`. Keep the additions small; this wiring moves into `features/stats/` with B-020 |
+| `apps/miniapp/src/screens/Stats.tsx` | New optional prop `cycleStepper?: ReactNode`, rendered under the period switch when `period === 'month'`. Under the totals in the first card, `{period === 'month' && <BudgetLine budget={data.budget} … />}`. No other change |
+| `apps/miniapp/src/features/stats/BudgetLine.tsx` + `budget-line.css` | **New** (target layout; `features/stats` is created here, B-020 moves the rest later). Props `{ budget: StatsBudget \| null \| undefined; currency; locale }`; returns null unless `budget` is an object; text exactly per the *Budget line* copy table (`isCurrent` and `status` pick the wording; `differenceCents` is the amount); `formatMoney` from `lib/format.ts`. Tokens only (`--text-subtle`), never red, ≤ 60 lines |
+| `PRD.md` | §9: replace the `budget_periods` row with the new shape and its rule. F7: Month view has ‹ › cycle arrows and the budget line (Part 5: current = live budget, `left`; finished = history; hidden with no transactions). F17: a "Budget history" item (dated changes per space, last change ≤ cycle end, seeded from the epoch, removal = no budget, budgeted spending, the excluded-flag caveat) |
+| `docs/adr/0007-budget-cycle-per-space.md` | Replace "Later parts" with a **Budget history (Part 5)** section: dated changes vs per-cycle rows (Q1 A), last-wins (Q2 A), live budget for the current cycle (P5-F4), epoch vs `created_at`, hide with no transactions (P5-F2), writer's timezone + never-before-latest, the guarded in-place rebuild, forward-only rollback, and the accepted caveat that past verdicts follow the categories' **current** "excluded" flag |
+| `apps/server/CLAUDE.md` | Gotchas: (1) "`householdsRepo.updateBudget` is the **only** budget writer and appends `budget_periods` in its transaction. Never `UPDATE households SET monthly_budget_cents` anywhere else (B-032 P5)". (2) "Migration order is by journal `when`, and all pending migrations run in one transaction. A custom guard migration (`drizzle-kit generate --custom`) can abort the whole batch. Generate with `pnpm --filter @spendlygo/db exec drizzle-kit generate --name=…`". (3) "`budget-periods-migration.test.ts` creates and drops a scratch database: the local test role needs `CREATEDB` (CI's `postgres` user has it)". (4) "Lock a space row for a budget change with `FOR NO KEY UPDATE`, not `FOR UPDATE`, so captures (FK `KEY SHARE`) don't wait" |
 | `packages/core/CLAUDE.md` | Map row: `budget-history.ts`, budget change dating and cycle-vs-budget comparison, F17 |
-| `CLAUDE.md` (root) | Layout: `budget-history.ts # F17 budget history: change dating, budget comparison` |
-| `BACKLOG.md` | B-005 → Done (resolved by B-032 Part 5). Later: "Budget line in Recap and `/recap`", "Enter budgets for cycles before budget history existed", "Year budget totals" (and Stats navigation if Q-P5-1 = C) |
+| `CLAUDE.md` (root) | Layout: `budget-history.ts # F17 budget history: change dating, budget comparison`; `ui/` example list gains `CycleStepper` |
+| `apps/miniapp/CLAUDE.md` | `ui/` list gains `CycleStepper`; current-layout note: `features/stats/` exists (BudgetLine) |
+| `BACKLOG.md` | B-005 → Done (resolved by B-032 Part 5). Later: "Budget line in Recap and `/recap`", "Enter budgets for cycles before budget history existed", "Year budget totals", "Lower bound for the cycle arrows", "Per-cycle snapshot of excluded categories". **B-029 row, add (P5-F6):** "Its migrations `0005_classy_absorbing_man` / `0006_unique_dexter_bennett` have journal `when` 1793442114195 / 1793442831235, **earlier** than main's 0005 (1793464731783). drizzle's migrator applies only entries newer than the last applied one, so merging it would **silently skip** both and the server would query missing tables. If ever adopted, regenerate its migrations on top of main (they would also need numbers after B-032's 0006–0009)" |
+
+**Why `FOR NO KEY UPDATE` (P5-F3), not `FOR UPDATE`.** What the lock must
+do: two `updateBudget` calls on one space run one after the other, and the
+second re-reads the first's committed value before its "unchanged?" check.
+`FOR NO KEY UPDATE` conflicts with itself, with `FOR UPDATE`, and with any
+plain `UPDATE households` (which takes `FOR NO KEY UPDATE` on rows whose key
+columns don't change, e.g. `updateCycleStartDay`). Under READ COMMITTED a
+blocked locking `SELECT` returns the row's newest committed version once it
+gets the lock. So it gives exactly the same guarantee for this purpose.
+What it doesn't do is block `FOR KEY SHARE`, the lock every `transactions`
+(and `budget_periods`) insert takes on the referenced space for its FK
+check, so a capture never waits behind a budget change. Nothing changes
+`households.id`, the only key column referenced. P5-AC11 proves the
+guarantee (it fails with no lock at all).
 
 ### Tests
 
@@ -1296,22 +1358,22 @@ static site may deploy before or after:
 |---|---|
 | P5-AC1 | `packages/core/src/budget-history.test.ts` › `compareWithBudget › under, over, on and a $0 budget, never a negative difference` |
 | P5-AC2 | `budget-history.test.ts` › `budgetChangeEffectiveFrom › the writer's today, never before the latest change` |
-| P5-AC3 | `packages/db/src/budget-periods-migration.test.ts` › `the guard refuses a non-empty budget_periods and passes an empty one` |
-| P5-AC4 | `budget-periods-migration.test.ts` › `the seed copies each space's budget from 1970-01-01, skips no-budget spaces, and is re-runnable` |
+| P5-AC3 | `packages/db/src/budget-periods-migration.test.ts` › `guard SQL › raises on a non-empty budget_periods and passes an empty one` |
+| P5-AC4 | `budget-periods-migration.test.ts` › `seed SQL › copies each space's budget from 1970-01-01, skips no-budget spaces, and is re-runnable` |
 | P5-AC5 | `packages/db/src/repositories/households.test.ts` › `budget history (B-032 P5) › the table rejects negatives, duplicate dates and unknown spaces, and accepts null` |
 | P5-AC6 | `households.test.ts` › `budget history (B-032 P5) › updateBudget records a change dated the given day` |
 | P5-AC7 | `households.test.ts` › `budget history (B-032 P5) › an unchanged budget writes nothing` |
 | P5-AC8 | `households.test.ts` › `budget history (B-032 P5) › several changes on one day keep only the last` |
 | P5-AC9 | `households.test.ts` › `budget history (B-032 P5) › removing the budget records a change to no budget` |
 | P5-AC10 | `households.test.ts` › `budget history (B-032 P5) › a change from a timezone behind is never dated before the latest change` |
-| P5-AC11 | `households.test.ts` › `budget history (B-032 P5) › concurrent changes leave the latest change equal to the live budget` |
+| P5-AC11 | `households.test.ts` › `budget history (B-032 P5) › a change that waits for a concurrent one re-reads it and is never lost` |
 | P5-AC12 | `packages/db/src/repositories/budget-periods.test.ts` › `budgetInEffectOn › the latest change on or before the date, per space` |
 | P5-AC13 | `apps/server/src/api/budget-history.test.ts` › `PATCH /api/settings › a change at 00:30 in Singapore is dated that Singapore day` |
 | P5-AC14 | `apps/server/src/bot/commands/money.test.ts` › `/budget › records the change under today in the user's timezone` |
 | P5-AC15 | `budget-history.test.ts` › `PATCH /api/settings › a shared space keeps one history, whichever member changes it` |
 | P5-AC16 | `budget-history.test.ts` › `PATCH /api/settings › removing the budget hides the line for the current cycle` |
 | P5-AC17 | `budget-history.test.ts` › `GET /api/stats › owner's example: 20 Jan – 19 Feb shows the $350 that applied, $40 under` |
-| P5-AC18 | `budget-history.test.ts` › `GET /api/stats › a cycle with a mid-cycle change shows the last budget, $25 over` |
+| P5-AC18 | `budget-history.test.ts` › `GET /api/stats › a finished cycle with a mid-cycle change shows the last budget, $25 over` |
 | P5-AC19 | `budget-history.test.ts` › `GET /api/stats › the current cycle shows the live budget and keeps every Part 2 field` |
 | P5-AC20 | `budget-history.test.ts` › `GET /api/stats › after a start-day change each cycle still finds its own budget` |
 | P5-AC21 | `budget-history.test.ts` › `GET /api/stats › a change on a cycle boundary in February and leap February` |
@@ -1320,46 +1382,96 @@ static site may deploy before or after:
 | P5-AC24 | `budget-history.test.ts` › `GET /api/stats › a $0 budget is over or on, never hidden` |
 | P5-AC25 | `budget-history.test.ts` › `GET /api/stats › day and year views have no budget field` |
 | P5-AC26 | `budget-history.test.ts` › `GET /api/stats › rejects unauthenticated; a stranger never sees another space's budget` |
-| P5-AC27 | `budget-history.test.ts` › `statsResponseSchema › parses with and without budget, rejects an unknown status` |
-| P5-AC28 | Screenshot check (Q8 A, no Mini App harness until B-016): Stats Month under/over/on/none/old-server, Day and Year, start day 20 and 1, light + dark, 375px |
-| P5-AC29 | `budget-history.test.ts` › `GET /api/stats › the line compares the budget with <budgeted spending \| total spending>` (name fixed once Q-P5-2 is answered) |
-| P5-AC30 | Screenshot check, defined once Q-P5-1 is answered |
+| P5-AC27 | `budget-history.test.ts` › `statsResponseSchema › parses with and without budget, rejects an unknown status or a missing isCurrent` |
+| P5-AC28 | Screenshot check (Q8 A, no Mini App harness until B-016): Stats Month finished under/over/on, current left/over, none, old server; Day and Year; start day 20 and 1; light + dark; 375px |
+| P5-AC29 | `budget-history.test.ts` › `GET /api/stats › the line compares the budget with budgeted spending, not the headline Spent` |
+| P5-AC30 | Screenshot check: Stats › Month arrows (‹ ×9 to 20 Jan – 19 Feb with its line, › back, › disabled on the current cycle, start day 1 month names, no arrows on Day/Year, reset after Year → Month); light + dark; 375px |
+| P5-AC31 | `budget-history.test.ts` › `GET /api/stats › a cycle with no transactions shows no line; income alone still counts` |
+| P5-AC32 | `budget-history.test.ts` › `GET /api/stats › the current cycle uses the live budget across timezones, a finished cycle uses the history` |
+| P5-AC33 | `packages/db/src/budget-periods-migration.test.ts` › `rehearsal › a filled database at 0005 refuses the whole batch, then upgrades once emptied` |
+| P5-AC34 | Screenshot check: History › Cycle chip after the `CycleStepper` move (‹ ×2, › ×1, › disabled on current); light + dark; 375px |
 
-Test-writer notes: AC17–AC24 build history with `updateBudget(…,
-BUDGET_HISTORY_EPOCH)` then later-dated calls; the epoch row stands in for
-the migration's seed (which AC4 proves). Assert amounts as cents in the API,
-and as `$` strings only in the screenshot check. Every new DB test uses its own
-telegram ids and cleans up households before users (the `restrict` FK, see
-`households.test.ts`).
+**Test-writer notes.**
+- AC17–AC24, AC29, AC31 build history with `updateBudget(…,
+  BUDGET_HISTORY_EPOCH)` then later-dated calls; the epoch row stands in for
+  the migration's seed (which AC4 and AC33 prove). Since a cycle with no
+  transactions shows no line (P5-AC31), every stats AC that expects a
+  `budget` object creates at least one transaction in that cycle, as its row
+  says. Assert amounts as cents in the API, and as `$` strings only in the
+  screenshot checks. Every new DB test uses its own telegram ids and cleans
+  up households before users (the `restrict` FK, see `households.test.ts`).
+- **P5-AC11 (deterministic, no `Promise.all`).** Open a second raw client
+  `postgres(TEST_DATABASE_URL, { max: 1 })`. Inside `holder.begin(async (sql)
+  => { … })`: `SELECT 1 FROM households WHERE id = ${id} FOR UPDATE`, `UPDATE
+  households SET monthly_budget_cents = 50000 …`, `INSERT INTO budget_periods
+  … ('2026-03-05', 50000)`, then signal "locked" and `await` a release
+  promise. Start `const pending = householdsRepo.updateBudget(handle.db, id,
+  35000, '2026-03-05')` (not awaited). Poll `pg_stat_activity` (every 20 ms,
+  up to 5 s) until a backend with `wait_event_type = 'Lock'` and `query ILIKE
+  '%no key update%'` exists, and assert `pending` hasn't settled (track it
+  with a flag set in `.then`). Release (the holder commits), `await pending`,
+  then assert the live budget is 35 000 and `listForSpace` has the 2026-03-05
+  change at 35 000. Close the holder client in `finally`. The final
+  assertions fail if the lock is missing (B would skip as "unchanged"),
+  whatever the timing.
+- **P5-AC33 (scratch database).** In `beforeAll`: an admin client
+  `postgres(TEST_DATABASE_URL, { max: 1, onnotice: () => {} })`; name
+  `spendlygo_p5_rehearsal_${process.pid}_${Date.now()}`; `admin.unsafe(\`CREATE
+  DATABASE "${name}"\`)`; scratch URL = `TEST_DATABASE_URL` with the path
+  replaced by `/${name}` (`new URL(…)`). Make a temp copy of the migrations
+  folder (`mkdtempSync(join(tmpdir(), 'spendlygo-p5-'))`, `cpSync(…, {
+  recursive: true })`) and rewrite its `meta/_journal.json` keeping only
+  entries with `idx <= 5`. Run `migrate(drizzle(scratch), { migrationsFolder:
+  <copy> })` from `drizzle-orm/postgres-js/migrator` (the same call as
+  `src/scripts/migrate.ts`). Create two users with
+  `usersRepo.upsertByTelegramId` on `drizzle(scratch, { schema })` (the
+  `users`/`households` tables are identical at 0005 and 0009), set one
+  space's budget with raw SQL `UPDATE households SET monthly_budget_cents =
+  35000` (not `updateBudget`, which needs the new table), and insert an
+  old-shape row `INSERT INTO budget_periods (user_id, year, month,
+  budget_cents) VALUES (…, 2026, 1, 1)`. Then: `await
+  expect(migrate(…, { migrationsFolder: <real folder> })).rejects.toThrow(/refusing/)`;
+  assert via `information_schema.columns` that `budget_periods` has
+  `user_id` and not `household_id`, the old row is still there, and
+  `SELECT count(*) FROM drizzle.__drizzle_migrations` is 6. Delete the row,
+  migrate again (resolves), assert 10 migration rows and the seeded rows. In
+  `afterAll` (always): end the scratch client, `DROP DATABASE IF EXISTS
+  "${name}" WITH (FORCE)`, end the admin client, `rmSync` the temp folder.
+  CI's Postgres 16 `postgres` user can `CREATE DATABASE`; a local role
+  without `CREATEDB` makes this test fail loudly (don't skip it).
 
 ### Risks & guardrails
 
 | Guardrail | Risk | Mitigation |
 |---|---|---|
 | §1 Cost | None | No service, dependency or Render service |
-| §2 Money | Wrong under/over; negative difference; float | Integer cents, `AmountCents`, `subtractCents`, no division; `differenceCents` ≥ 0 and validated (P5-AC1, P5-AC24). Safe-to-spend untouched |
-| §3 Destructive migration | Dropping columns of a table with unknown data | Guard migration aborts the whole batch if any row exists (P5-AC3); backup step; separate owner approval; one transaction |
-| §3 Generated migrations | Hand-written SQL | All four files made by drizzle-kit (two `--custom`); only the guard and seed bodies are hand-filled, verbatim from this plan, reviewed in the PR |
-| §3 Backfill | Bulk insert | The seed is the owner-approved Q3 A; one statement, idempotent (`ON CONFLICT DO NOTHING`) (P5-AC4) |
+| §2 Money | Wrong under/over/left; negative difference; float | Integer cents, `AmountCents`, `subtractCents`, no division; `differenceCents` ≥ 0 and validated (P5-AC1, P5-AC24). Safe-to-spend untouched. Budgeted spending as Today (P5-AC29) |
+| §2 Money | Verdict on a cycle before the app existed | Hidden when the cycle has no transactions (P5-AC31) |
+| §2 Money | Current line disagrees with Today | Current cycle reads the live budget (P5-AC19, P5-AC32) |
+| §3 Destructive migration | Dropping columns of a table with unknown data | Guard migration (P5-AC3) aborts the whole batch, rehearsed on a filled scratch DB from 0005 (P5-AC33); CSV backup; separate owner approval; one transaction |
+| §3 Generated migrations | Hand-written SQL | All four files made by drizzle-kit with one command form (two `--custom`); only the guard and seed bodies are hand-filled, verbatim from this plan, reviewed in the PR |
+| §3 Backfill | Bulk insert | The seed is the owner-approved Q3 A; one statement, idempotent (`ON CONFLICT DO NOTHING`) (P5-AC4, P5-AC33) |
 | §3 Idempotency / multi-row writes | Redelivered `/budget`, repeated PATCH, concurrent members | `updateBudget` is one transaction: row lock → compare → update + upsert history; unchanged = no write (P5-AC7, P5-AC11, P5-AC14) |
-| §3 Correctness | History drifts from the live budget | Single writer (`updateBudget`); invariant tested (P5-AC10, P5-AC11); post-deploy read-only check; gotcha row in `apps/server/CLAUDE.md` |
-| §4 Auth | Another space's budget leaks | Space only from `activeHouseholdId(user)`; repo filters by space (P5-AC12); stranger + 401 test (P5-AC26). No new input fields |
-| §6 Privacy | Logging amounts | No new log lines |
-| §7 Runtime | Extra query on Stats | One index-backed `LIMIT 1` lookup in the existing `Promise.all`, month only; no extra sequential stage. Aggregation stays in SQL |
-| §8 Frontend | Bundle, colours | One small component; tokens only; not red |
-| §9 Time | Change dated in UTC; cross-timezone ordering | `todayFor(ctx, user)` (injected Clock); 00:30 SGT test (P5-AC13); never-before-latest (P5-AC2, P5-AC10); Feb/leap cycle boundaries (P5-AC21) |
+| §3 Correctness | History drifts from the live budget (old server after a failed deploy or Render rollback) | Single writer (`updateBudget`); invariant tested (P5-AC10, P5-AC11); deploy checklist steps 2–4 (no budget changes, drift check after every deploy outcome, owner-approved one-row fix, never toggling); gotcha row in `apps/server/CLAUDE.md` |
+| §3 Data fixes | A drift fix is a production write | Only the owner runs it, after approving it, one row per space (checklist step 4) |
+| §4 Auth | Another space's budget leaks | Space only from `activeHouseholdId(user)`; repo filters by space (P5-AC12); stranger + 401 test (P5-AC26). No new input fields (`anchor` already validated by `parseAnchor`) |
+| §6 Privacy | Logging amounts; a backup file left lying around | No new log lines. Checklist: store the CSV/dump outside the repo and cloud sync, delete after a week |
+| §7 Runtime | Extra query on Stats | At most one index-backed `LIMIT 1` lookup in the existing `Promise.all`, month and finished cycles only; no extra sequential stage. Aggregation stays in SQL. The lock is `FOR NO KEY UPDATE`, so captures don't wait |
+| §8 Frontend | Bundle, colours, motion | One small component and a moved one; tokens only; not red; arrows reuse History's markup and haptics |
+| §9 Time | Change dated in UTC; cross-timezone ordering; "current" in the wrong timezone | `todayFor(ctx, user)` (injected Clock); 00:30 SGT test (P5-AC13); never-before-latest (P5-AC2, P5-AC10); current by the viewer's today (P5-AC32); Feb/leap cycle boundaries (P5-AC21) |
 | §10 Telegram | None | No new sends; `/budget` reply unchanged |
-| §11 Scope | Recap line, year totals, pace on past cycles | Out of scope, parked in BACKLOG |
-| Deploy | Old server writes during the window | Q-P5-4; post-deploy check |
+| §11 Scope | Recap line, year totals, pace on past cycles, arrow lower bound | Out of scope, parked in BACKLOG |
+| Deploy | Old server writes during the window | Checklist steps 2–4; the current cycle can't show it |
 | Tests not weakened | Existing tests edited | Only the mechanical 4th argument to `updateBudget` and the `vi.fn()` mock; listed in *Files* |
 
 ### PR split
 
 Single PR, **F17** (closes B-005), on `feat/B-032-pay-cycle`, as three commits
 in the order of *Rollback* (data + write path · Stats API · Mini App). It
-contains the migration, so the PR body links the backup step and the owner's
-migration approval line. Part 5 total: **30 ACs** (28 firm + P5-AC29/AC30
-pending Q-P5-2 / Q-P5-1). B-032 total with Parts 1–4: 116.
+contains the migration, so the PR body links the deploy checklist and the
+owner's migration approval line. Part 5 total: **34 ACs**, all firm (31
+automated tests + 3 screenshot checks: P5-AC28, AC30, AC34). B-032 total with
+Parts 1–4: 120.
 
 ---
 
