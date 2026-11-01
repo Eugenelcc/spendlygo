@@ -14,12 +14,12 @@ import {
   type SafeToSpendResult,
 } from '@spendlygo/core';
 
-const mocks = vi.hoisted(() => ({ result: null as unknown }));
+const mocks = vi.hoisted(() => ({ result: null as unknown, updateBudget: vi.fn() }));
 
 vi.mock('@spendlygo/db', () => ({
   householdsRepo: {
     findById: async () => ({ isPersonal: true }),
-    updateBudget: async () => undefined,
+    updateBudget: mocks.updateBudget,
   },
   transactionsRepo: {},
 }));
@@ -116,5 +116,20 @@ describe('/budget text', () => {
         'That is $1,450.00 a day for the 1 day left this month.',
       ].join('\n'),
     );
+  });
+});
+
+describe('/budget', () => {
+  it("records the change under today in the user's timezone", async () => {
+    mocks.updateBudget.mockClear();
+    const text = await budgetReply(1, '500');
+    expect(mocks.updateBudget).toHaveBeenCalledTimes(1);
+    expect(mocks.updateBudget).toHaveBeenCalledWith(
+      expect.anything(),
+      'household-1',
+      50_000,
+      '2026-10-31',
+    );
+    expect(text).toContain('Monthly budget set to *$500.00*.');
   });
 });

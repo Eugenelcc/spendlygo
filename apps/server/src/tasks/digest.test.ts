@@ -1,7 +1,7 @@
 import { eq } from 'drizzle-orm';
 import { Bot } from 'grammy';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { fixedClock, type IsoDate } from '@spendlygo/core';
+import { BUDGET_HISTORY_EPOCH, fixedClock, type IsoDate } from '@spendlygo/core';
 import {
   createDatabase,
   householdsRepo,
@@ -66,7 +66,12 @@ describeIfDb('the digest family', () => {
   });
 
   async function setBudget(cents: number): Promise<void> {
-    await householdsRepo.updateBudget(handle.db, user.activeHouseholdId as string, cents);
+    await householdsRepo.updateBudget(
+      handle.db,
+      user.activeHouseholdId as string,
+      cents,
+      BUDGET_HISTORY_EPOCH,
+    );
   }
 
   describe('buildDigest (daily)', () => {
@@ -289,7 +294,7 @@ describeIfDb('the digest family', () => {
 
     it("sends the monthly digest on the cycle's last day, not the calendar month end", async () => {
       const spaceId = user.activeHouseholdId as string;
-      await householdsRepo.updateBudget(handle.db, spaceId, 150_000);
+      await householdsRepo.updateBudget(handle.db, spaceId, 150_000, BUDGET_HISTORY_EPOCH);
       await householdsRepo.updateCycleStartDay(handle.db, spaceId, 20);
 
       // 21:00 in Singapore on 31 Oct: the calendar month ends, the cycle doesn't.

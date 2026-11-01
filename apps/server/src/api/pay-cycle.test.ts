@@ -13,7 +13,7 @@ import { Bot, GrammyError } from 'grammy';
 import type { BotContext } from '../bot/middleware.js';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { eq } from 'drizzle-orm';
-import { fixedClock } from '@spendlygo/core';
+import { BUDGET_HISTORY_EPOCH, fixedClock } from '@spendlygo/core';
 import {
   createDatabase,
   householdsRepo,
@@ -159,7 +159,7 @@ describeIfDb('pay cycle API (F17)', () => {
   /** Owner's October: S$1,500 budget, S$100 on 5 Oct, S$50 on 25 Oct. */
   async function ownersOctober(startDay: number) {
     const { space } = await personalSpaceFor(OWNER);
-    await householdsRepo.updateBudget(handle.db, space.id, 150_000);
+    await householdsRepo.updateBudget(handle.db, space.id, 150_000, BUDGET_HISTORY_EPOCH);
     if (startDay !== 1) await householdsRepo.updateCycleStartDay(handle.db, space.id, startDay);
     await expense(app, OWNER, 10_000, '2026-10-05');
     await expense(app, OWNER, 5_000, '2026-10-25');
@@ -205,7 +205,7 @@ describeIfDb('pay cycle API (F17)', () => {
 
     it('a 00:30 entry on the start day is in the new cycle', async () => {
       const { space } = await personalSpaceFor(OWNER);
-      await householdsRepo.updateBudget(handle.db, space.id, 150_000);
+      await householdsRepo.updateBudget(handle.db, space.id, 150_000, BUDGET_HISTORY_EPOCH);
       await householdsRepo.updateCycleStartDay(handle.db, space.id, 20);
       await expense(lateApp, OWNER, 4_000, '2026-10-19', OCT_20_0030_SG);
       await expense(lateApp, OWNER, 1_200, undefined, OCT_20_0030_SG);
@@ -225,7 +225,7 @@ describeIfDb('pay cycle API (F17)', () => {
       const shared = await householdsRepo.create(handle.db, creator.user.id);
       const invite = await householdsRepo.createInvite(handle.db, shared.id, creator.user.id);
       await householdsRepo.joinByCode(handle.db, invite.code, partner.user.id);
-      await householdsRepo.updateBudget(handle.db, shared.id, 150_000);
+      await householdsRepo.updateBudget(handle.db, shared.id, 150_000, BUDGET_HISTORY_EPOCH);
       await householdsRepo.updateCycleStartDay(handle.db, shared.id, 20);
 
       const mine = await json(await app.request('/api/today', { headers: auth(OWNER) }));
@@ -315,7 +315,7 @@ describeIfDb('pay cycle API (F17)', () => {
       const shared = await householdsRepo.create(handle.db, creator.user.id);
       const invite = await householdsRepo.createInvite(handle.db, shared.id, creator.user.id);
       await householdsRepo.joinByCode(handle.db, invite.code, partner.user.id);
-      await householdsRepo.updateBudget(handle.db, shared.id, 150_000);
+      await householdsRepo.updateBudget(handle.db, shared.id, 150_000, BUDGET_HISTORY_EPOCH);
       return { creator, partner, shared };
     }
 

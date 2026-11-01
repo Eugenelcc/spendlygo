@@ -6,7 +6,7 @@
 
 import { eq } from 'drizzle-orm';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { fixedClock, type IsoDate } from '@spendlygo/core';
+import { BUDGET_HISTORY_EPOCH, fixedClock, type IsoDate } from '@spendlygo/core';
 import {
   createDatabase,
   householdsRepo,
@@ -170,7 +170,7 @@ describeIfDb('computeStreak and buildRecap', () => {
 
     async function ownersOctoberAtDay20(): Promise<void> {
       const spaceId = user.activeHouseholdId as string;
-      await householdsRepo.updateBudget(handle.db, spaceId, 150_000);
+      await householdsRepo.updateBudget(handle.db, spaceId, 150_000, BUDGET_HISTORY_EPOCH);
       await householdsRepo.updateCycleStartDay(handle.db, spaceId, 20);
       for (const [cents, occurredOn] of [
         [10_000, '2026-10-05'],

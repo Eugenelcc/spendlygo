@@ -9,7 +9,7 @@
 import { eq } from 'drizzle-orm';
 import { Bot } from 'grammy';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { fixedClock } from '@spendlygo/core';
+import { BUDGET_HISTORY_EPOCH, fixedClock } from '@spendlygo/core';
 import {
   alertsRepo,
   createDatabase,
@@ -80,7 +80,12 @@ describeIfDb('checkBudgetAlerts', () => {
   });
 
   async function setBudget(cents: number): Promise<void> {
-    await householdsRepo.updateBudget(handle.db, user.activeHouseholdId as string, cents);
+    await householdsRepo.updateBudget(
+      handle.db,
+      user.activeHouseholdId as string,
+      cents,
+      BUDGET_HISTORY_EPOCH,
+    );
   }
 
   it('does nothing for a user with no budget', async () => {
@@ -318,7 +323,12 @@ describeIfDb('pay cycle (F17)', () => {
     sendMessage = vi.fn().mockResolvedValue(undefined);
     bot = new Bot<BotContext>('111111:token', { botInfo: undefined as never });
     bot.api.sendMessage = sendMessage;
-    await householdsRepo.updateBudget(handle.db, user.activeHouseholdId as string, BUDGET);
+    await householdsRepo.updateBudget(
+      handle.db,
+      user.activeHouseholdId as string,
+      BUDGET,
+      BUDGET_HISTORY_EPOCH,
+    );
   });
 
   afterAll(async () => {

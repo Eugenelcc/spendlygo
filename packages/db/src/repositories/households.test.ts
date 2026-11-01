@@ -11,7 +11,14 @@
 
 import { eq, inArray, sql } from 'drizzle-orm';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { createDatabase, schema, usersRepo, type DatabaseHandle } from '../index.js';
+import postgres from 'postgres';
+import {
+  budgetPeriodsRepo,
+  createDatabase,
+  schema,
+  usersRepo,
+  type DatabaseHandle,
+} from '../index.js';
 import { JoinHouseholdError } from './households.js';
 import * as householdsRepo from './households.js';
 
@@ -337,7 +344,7 @@ describeIfDb('households', () => {
 
       // Either partner can be the one who calls this — the API layer does not
       // check who created the household, only that the caller is a member.
-      await householdsRepo.updateBudget(handle.db, household.id, 200_000);
+      await householdsRepo.updateBudget(handle.db, household.id, 200_000, '2026-10-31');
 
       const reread = await householdsRepo.findById(handle.db, household.id);
       expect(reread?.monthlyBudgetCents).toBe(200_000);
@@ -380,5 +387,165 @@ describeIfDb('households', () => {
         householdsRepo.updateCycleStartDay(handle.db, '00000000-0000-4000-8000-000000000000', 20),
       ).rejects.toThrow(/No household/);
     });
+  });
+  // --- Part 5 (B-032): budget history, P5-AC5 to AC11 ---------------------------
+
+  describe('budget history (B-032 P5)', () => {
+    async function spaceWithBudget(budget: number | null = null, since?: string) {
+      const creator = await makeUser(CREATOR_TELEGRAM_ID);
+      const space = await householdsRepo.create(handle.db, creator.id);
+      if (budget !== null && since) {
+        await householdsRepo.updateBudget(handle.db, space.id, budget, since);
+      }
+      return { creator, space };
+    }
+
+    const changes = async (spaceId: string) =>
+      (await budgetPeriodsRepo.listForSpace(handle.db, spaceId)).map((row) => ({
+        effectiveFrom: row.effectiveFrom,
+        budgetCents: row.budgetCents,
+      }));
+
+    it('the table rejects negatives, duplicate dates and unknown spaces, and accepts null', async () => {
+      const { space } = await spaceWithBudget();
+      const insert = (spaceId: string, date: string, cents: number | null) =>
+        handle.db.execute(
+          sql`INSERT INTO budget_periods (household_id, effective_from, budget_cents)
+              VALUES (${spaceId}, ${date}, ${cents})`,
+        );
+
+      await expect(insert(space.id, '2026-01-01', -1)).rejects.toThrow(/budget_periods_budget_ck/);
+      await insert(space.id, '2026-01-01', 100);
+      await expect(insert(space.id, '2026-01-01', 200)).rejects.toThrow(
+        /budget_periods_household_effective_uq/,
+      );
+      await insert(space.id, '2026-02-01', null); // null = "no budget"
+      await expect(
+        insert('00000000-0000-4000-8000-000000000000', '2026-01-01', 100),
+      ).rejects.toThrow(/foreign key|budget_periods_household_id/i);
+    });
+
+    it('updateBudget records a change dated the given day', async () => {
+      const { space } = await spaceWithBudget();
+      const updated = await householdsRepo.updateBudget(handle.db, space.id, 35_000, '2026-01-10');
+      expect(updated.monthlyBudgetCents).toBe(35_000);
+      expect(await changes(space.id)).toEqual([
+        { effectiveFrom: '2026-01-10', budgetCents: 35_000 },
+      ]);
+    });
+
+    it('an unchanged budget writes nothing', async () => {
+      const { space } = await spaceWithBudget(35_000, '2026-01-10');
+      const before = await householdsRepo.findById(handle.db, space.id);
+
+      await householdsRepo.updateBudget(handle.db, space.id, 35_000, '2026-01-12');
+
+      expect(await changes(space.id)).toEqual([
+        { effectiveFrom: '2026-01-10', budgetCents: 35_000 },
+      ]);
+      const after = await householdsRepo.findById(handle.db, space.id);
+      expect(after?.updatedAt.getTime()).toBe(before?.updatedAt.getTime());
+    });
+
+    it('several changes on one day keep only the last', async () => {
+      const { space } = await spaceWithBudget(35_000, '1970-01-01');
+      await householdsRepo.updateBudget(handle.db, space.id, 50_000, '2026-03-05');
+      await householdsRepo.updateBudget(handle.db, space.id, 42_000, '2026-03-05');
+      await householdsRepo.updateBudget(handle.db, space.id, 50_000, '2026-03-05');
+
+      expect(await changes(space.id)).toEqual([
+        { effectiveFrom: '1970-01-01', budgetCents: 35_000 },
+        { effectiveFrom: '2026-03-05', budgetCents: 50_000 },
+      ]);
+    });
+
+    it('removing the budget records a change to no budget', async () => {
+      const { space } = await spaceWithBudget(50_000, '1970-01-01');
+      const updated = await householdsRepo.updateBudget(handle.db, space.id, null, '2026-06-01');
+      expect(updated.monthlyBudgetCents).toBeNull();
+      expect(await changes(space.id)).toEqual([
+        { effectiveFrom: '1970-01-01', budgetCents: 50_000 },
+        { effectiveFrom: '2026-06-01', budgetCents: null },
+      ]);
+    });
+
+    it('a change from a timezone behind is never dated before the latest change', async () => {
+      const { creator, space } = await spaceWithBudget();
+      const partner = await makeUser(PARTNER_TELEGRAM_ID);
+      const invite = await householdsRepo.createInvite(handle.db, space.id, creator.id);
+      await householdsRepo.joinByCode(handle.db, invite.code, partner.id);
+
+      await householdsRepo.updateBudget(handle.db, space.id, 50_000, '2026-11-01'); // SGT, just after midnight
+      const updated = await householdsRepo.updateBudget(handle.db, space.id, 60_000, '2026-10-31'); // a member still on the 31st
+
+      expect(await changes(space.id)).toEqual([
+        { effectiveFrom: '2026-11-01', budgetCents: 60_000 },
+      ]);
+      expect(updated.monthlyBudgetCents).toBe(60_000);
+    });
+
+    it('a change that waits for a concurrent one re-reads it and is never lost', async () => {
+      const { space } = await spaceWithBudget(35_000, '1970-01-01');
+      const id = space.id;
+      const holder = postgres(TEST_DATABASE_URL as string, {
+        max: 1,
+        prepare: false,
+        onnotice: () => {},
+      });
+      let release!: () => void;
+      const released = new Promise<void>((resolve) => (release = resolve));
+      let locked!: () => void;
+      const lockedSignal = new Promise<void>((resolve) => (locked = resolve));
+      let pending: Promise<unknown> | undefined;
+      let holderDone: Promise<unknown> | undefined;
+      try {
+        // A second connection: a concurrent change, mid-transaction.
+        holderDone = holder.begin(async (tx) => {
+          await tx`SELECT 1 FROM households WHERE id = ${id} FOR UPDATE`;
+          await tx`UPDATE households SET monthly_budget_cents = 50000 WHERE id = ${id}`;
+          await tx`INSERT INTO budget_periods (household_id, effective_from, budget_cents)
+                   VALUES (${id}, '2026-03-05', 50000)`;
+          locked();
+          await released;
+        });
+        await Promise.race([lockedSignal, holderDone]);
+
+        let settled = false;
+        pending = householdsRepo.updateBudget(handle.db, id, 35_000, '2026-03-05').finally(() => {
+          settled = true;
+        });
+
+        // Wait until Postgres says the locking SELECT is blocked on a lock.
+        const deadline = Date.now() + 5_000;
+        let blocked = false;
+        while (!blocked && Date.now() < deadline) {
+          const rows = await handle.db.execute(
+            sql`SELECT 1 FROM pg_stat_activity
+                WHERE datname = current_database()
+                  AND wait_event_type = 'Lock'
+                  AND query ILIKE '%no key update%'`,
+          );
+          blocked = rows.length > 0;
+          if (!blocked) await new Promise((resolve) => setTimeout(resolve, 20));
+        }
+        expect(blocked).toBe(true);
+        expect(settled).toBe(false);
+
+        release();
+        await holderDone;
+        await pending;
+      } finally {
+        release();
+        await Promise.allSettled([holderDone, pending]);
+        await holder.end();
+      }
+
+      const reread = await householdsRepo.findById(handle.db, id);
+      expect(reread?.monthlyBudgetCents).toBe(35_000);
+      expect(await changes(id)).toEqual([
+        { effectiveFrom: '1970-01-01', budgetCents: 35_000 },
+        { effectiveFrom: '2026-03-05', budgetCents: 35_000 },
+      ]);
+    }, 20_000);
   });
 });
