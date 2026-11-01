@@ -1483,6 +1483,180 @@ the plan should say so.**
   catch-up", but the Edge cases table only mentions the skip, not the
   overlap.
 
+### Part 5
+
+*Reviewed 2026-11-01 against `feat/B-032-pay-cycle` @ 84d99f5, with the
+installed `drizzle-orm@0.38.4` / `drizzle-kit@0.30.6` (lockfile). What I
+checked and found to hold:*
+- *One transaction: `pg-core/dialect.js` `migrate()` wraps the loop over every
+  pending journal entry in a single `session.transaction(...)`. A `RAISE` in
+  0006 rolls back 0007–0009 and their `__drizzle_migrations` rows.
+  `scripts/migrate.ts` then sets exit code 1, and the `&&` chain in
+  `render.yaml` fails the build before `db:seed` and before the new server
+  starts.*
+- *Generation without prompts: I ran the plan's two schema steps on a scratch
+  copy of `packages/db` with stdin closed. Both generated without a prompt.
+  The intermediate step emits exactly the drops listed in the plan (including
+  `budget_cents DROP NOT NULL` and re-adding `budget_periods_budget_ck`). The
+  end step emits only `ADD COLUMN` + FK + unique index. Each `when` was
+  greater than 0005's.*
+- *Old-server compatibility: nothing reads or writes `budget_periods`.
+  Every production budget write goes through `householdsRepo.updateBudget`
+  (`api/index.ts:176`, `bot/commands/money.ts:126`). The list of test callers
+  in Files is complete.*
+- *I recomputed every numeric AC by hand (P5-AC1, 2, 13, 17–24, 29), and all
+  of them are correct. The invariant "latest change = live budget" holds under
+  the never-before-latest rule.*
+
+**Nothing here blocks approval of the Part 5 spec, plan or migration.** The
+findings below are gaps to close in the plan, plus one new owner question
+(P5-F2).
+
+**P5-F1 — The "old server + migrated database" window can last much longer
+than "a minute or two", and the suggested fix can cause a missed alert. Not
+blocking. Should be fixed in the plan before approval.**
+- *Scenario:* the migration commits, then `pnpm db:seed` fails or the new
+  server fails its health check. Render keeps the **old** server running on
+  the migrated database, maybe for days, until the next good deploy. Or,
+  after a bad release, the owner presses Render's "Rollback" (the natural
+  "revert first" move from WORKFLOW §6). Either way, every budget change in
+  that time updates the live budget without a history row. Separately, the
+  Q-P5-4 fix says "set it to *any other value* and back". If that other value
+  is lower, the hourly tick can see 80%/100% crossed and record the
+  `budget_alerts` key. The real alert for that cycle is then suppressed.
+- *Detail:* "Never revert commit 1" covers git, but not Render's rollback
+  button or a failed deploy. The migration runs in the build, so the window
+  is "migrate → a healthy new server" however long that takes. The
+  correction is also dated *today*, so cycles ending between the drift and
+  the fix still show the old budget.
+- *Options:* (a) Add to *Rollback* and *Deploy order*: "after any failed
+  deploy or Render rollback, run the drift check again", and change the
+  manual fix to "set a **higher** value, then back", or use the approved
+  one-row insert dated on the drift day. *Pro:* a few lines of docs. *Con:*
+  still relies on someone remembering. (b) Also make the Stats line read the
+  live budget for the **current** cycle (see P5-F4). *Pro:* drift can never
+  show in the current cycle. *Con:* past cycles can still drift. (c) Q-P5-4
+  C (repair at boot). *Con:* as the spec says, an automatic data repair.
+  I'd pick (a).
+
+**P5-F2 — Seeding "from 1970" plus unbounded backward navigation shows a
+verdict for cycles before you used the app. Not blocking. New owner
+question.**
+- *Scenario:* in History's Cycle view (or Stats, if Q-P5-1 = A) you tap ‹ a
+  few too many times and land on 20 Jan – 19 Feb **2024**, two years before
+  Spendlygo existed. It says `Budget $500.00 · $500.00 under`. The same
+  happens for a shared space created last month: all its earlier cycles get
+  the line.
+- *Detail:* `CycleStepper` only has `canGoNext`, so there is no lower bound
+  (`features/history/CycleStepper.tsx`). The epoch row matches every cycle
+  ever. Q3 A ("from the beginning") was agreed for the owner's real past
+  cycles. The recap doesn't show the owner was told it also covers empty,
+  pre-app cycles. PRD F7.4 asks for first-class empty states, not a
+  confident verdict on nothing.
+- *Options:* (a) Hide the line when the cycle has no transactions
+  (`count = 0`, already in the stats response). *Pro:* one condition, no
+  data change. *Con:* a real "spent nothing, $500 under" cycle also loses
+  its line. That's rare, and arguably fine. (b) Stop the stepper at the
+  space's earliest transaction. *Pro:* fixes navigation for every view.
+  *Con:* a new query, and more Mini App work. (c) Accept it. *Pro:* zero
+  work. *Con:* the screen shows something that isn't true.
+  Recommendation: (a). **Ask the owner** alongside Q-P5-1.
+
+**P5-F3 — P5-AC3 and P5-AC11 claim more than their tests can prove. Not
+blocking.**
+- *P5-AC3:* the test runs the guard SQL on its own. It can't show that "the
+  whole migration batch rolls back", because that's drizzle's behaviour, and
+  CI only ever migrates an *empty* database, where the guard passes
+  trivially. The real path (a populated database at 0005 → 0009) is first
+  exercised in production. *Options:* (a) Add one DB-backed test that
+  creates a scratch database, migrates it to 0005 (temporary journal), and
+  inserts a user, a household with a budget and one old-shape
+  `budget_periods` row. `migrate()` must throw, `user_id` must still exist
+  and `__drizzle_migrations` must be unchanged. Then delete the row, migrate
+  again, and assert the seeded epoch row. *Pro:* proves the safety claim and
+  rehearses the real upgrade. *Con:* about 60 lines, and it needs `CREATE
+  DATABASE` rights in CI (Postgres 16 service container: yes). (b) Reword
+  P5-AC3's *Then* to "raises an exception…", and cite the drizzle source
+  check (this review) in the PR. *Pro:* honest, and free. *Con:* no
+  rehearsal.
+- *P5-AC11:* `Promise.all` doesn't force an interleaving. The "identical
+  pair adds one row" result also holds **without** the row lock, because the
+  unique index merges them. So the test passes whether or not `.for('update')`
+  is there. The lock matters in one case: B's no-op check reads a stale value
+  while A is mid-transaction, and B's change is silently lost (A
+  35 000→50 000, B →35 000 sees 35 000 and skips). *Options:* make the test
+  deterministic: open a transaction on a second connection, hold
+  `SELECT … FOR UPDATE` on the space, start `updateBudget`, assert it hasn't
+  resolved, change the value, release, and assert it wrote. Or reword the
+  AC to what it really proves.
+- *Nit:* `FOR UPDATE` also blocks the `FOR KEY SHARE` lock that every
+  transaction insert takes on its space (the FK check), so a capture waits a
+  few milliseconds behind a budget change. `.for('no key update')` gives the
+  same protection without that. It's harmless either way.
+
+**P5-F4 — The current cycle's line can disagree with Today across timezones.
+Not blocking.**
+- *Scenario:* a shared space on start day 1, you're in London, and your
+  partner in Singapore changes the budget to $600 at 01:00 on 1 Nov in
+  Singapore (still 31 Oct for you). Today shows $600 for your October. Stats
+  › Month for October (your current cycle) shows `Budget $500.00`, because
+  the change is dated 1 Nov, after October ends.
+- *Detail:* P5-AC19 ("the current cycle shows the live budget") only holds
+  when everyone shares a timezone. The spec accepts this skew for *past*
+  cycles (Edge cases, Time), but not for the current one.
+- *Options:* (a) For the cycle containing the viewer's today, use
+  `households.monthly_budget_cents`, and use history only for cycles that
+  have ended. *Pro:* the current line always matches Today, and deploy-window
+  drift (P5-F1) can never show there. *Con:* two sources, one more branch,
+  and one more AC. (b) Accept it, and add it to the Edge cases row. *Pro:*
+  no code. I'd pick (a), because it's cheap.
+
+**P5-F5 — The backup step is hard for a non-technical owner, and part of it
+may not work on the free tier. Not blocking.**
+- *Detail:* on Supabase's free plan, the **direct** connection is IPv6-only
+  (IPv4 is a paid add-on), so step 2 needs the **session pooler** string,
+  not "session-mode or direct". `pg_dump` must also be installed locally at
+  version ≥ the server's. What the migration can actually affect is small:
+  the guard proves `budget_periods` is empty, and `households` is only read
+  (plus a short FK-creation lock). The step-1 CSV is already a complete copy
+  of what the seed reads. *Options:* (a) Make the step-1 CSV export (all
+  columns of `households`, plus the `count(*) = 0` result) **the** backup,
+  and keep `pg_dump` as optional. Still meets GUARDRAILS §3's "explicit
+  backup step". (b) Keep `pg_dump`, but give exact steps (installing it,
+  where to find the session pooler string). Either way, say the file holds
+  personal financial data: keep it off cloud sync and delete it after a
+  week.
+
+**P5-F6 — Smaller points. Not blocking.**
+- *B-029 migrations:* that branch has its own `0005_classy_absorbing_man`
+  and `0006_unique_dexter_bennett`, with journal `when` 1793442114195 and
+  1793442831235. Both are **earlier** than main's 0005 (1793464731783). If
+  B-029 is ever merged, drizzle's migrator compares only against the latest
+  applied `created_at`, so it would **silently skip** both, and the server
+  would query tables that don't exist. Part 5 makes this worse (a second
+  `0006_*` and four more entries). Not Part 5's to fix, but add it to the
+  B-029 note in BACKLOG.
+- *Precedent claim:* the plan says the custom files follow "0004's data
+  steps". In fact 0004 is one file with schema DDL and hand-added `INSERT`s,
+  and its `when` (1788169200000, a round 09:40:00.000) looks hand-set. That's
+  fine, but don't cite it as the `--custom` precedent.
+- *Command form:* for 0007/0008, use the same form as the custom files,
+  `pnpm --filter @spendlygo/db exec drizzle-kit generate --name=…`. Whether
+  the extra `--` in `pnpm db:generate -- --name=…` reaches drizzle-kit
+  unchanged is unverified, and a wrong name breaks the file names in *Files*.
+- *Q-P5-2:* `budgetedOutCents` reads each category's **current**
+  `excludeFromBudget` flag. Flipping a category later rewrites every past
+  verdict, even though the budget side is now historical. The same is true
+  of Today, so it's fine to accept. Mention it in the Q-P5-2 *Con*.
+- *Account deletion / leaving / export:* history now cascades from
+  `households` (it used to cascade from `users`) and has no `set_by`, so
+  B-002 has nothing personal to strip from a shared space. Leaving a space
+  writes nothing. The F8 export doesn't need history. No gaps here.
+- *Q-P5-1, Q-P5-3 and Q-P5-4:* the recommendations are sound, with the
+  caveats in P5-F2 (a lower bound for A), P5-F4 (B's "left" wording relies
+  on knowing which cycle is current, and (a) there gives the same signal)
+  and P5-F1 (the fix procedure).
+
 ---
 
 ## Test report (Stages 3–4)
