@@ -5,9 +5,9 @@
 Spec approved by owner, 2026-10-31
 Plan approved by owner, 2026-10-31 (Parts 1–4; Part 5 to be planned and approved separately)
 Part 5 decisions (Q1–Q7) approved by owner, 2026-11-01
-<!-- Part 5 spec approved by owner, YYYY-MM-DD -->
-<!-- Part 5 plan approved by owner, YYYY-MM-DD -->
-<!-- Part 5 migration (0006–0009, rebuilds budget_periods) approved by owner, YYYY-MM-DD (backup taken: yes/no) -->
+Part 5 spec approved by owner, 2026-11-01 ("$0.00 left" on the current cycle accepted with the approval)
+Part 5 plan approved by owner, 2026-11-01
+Part 5 migration (0006–0009, rebuilds budget_periods) approved by owner, 2026-11-01 (backup taken: pending — recorded on deploy day)
 <!-- After each approval, Claude adds a line:
      Spec approved by owner, YYYY-MM-DD
      Plan approved by owner, YYYY-MM-DD -->
