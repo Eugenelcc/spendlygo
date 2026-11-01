@@ -10,6 +10,7 @@
 
 import { createHmac } from 'node:crypto';
 import { Bot, GrammyError } from 'grammy';
+import type { BotContext } from '../bot/middleware.js';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { fixedClock } from '@spendlygo/core';
@@ -89,7 +90,7 @@ describeIfDb('pay cycle API (F17)', () => {
 
   function makeApp(
     now: Date,
-    bot: Bot = new Bot(BOT_TOKEN, { botInfo: undefined as never }),
+    bot: Bot<BotContext> = new Bot<BotContext>(BOT_TOKEN, { botInfo: undefined as never }),
     sleep?: (ms: number) => Promise<void>,
   ): ReturnType<typeof createApp> {
     const ctx: AppContext = {
@@ -320,7 +321,7 @@ describeIfDb('pay cycle API (F17)', () => {
 
     /** An app whose bot.api.sendMessage is a mock, as alerts.test.ts does. */
     function appWithBot(sleep?: (ms: number) => Promise<void>) {
-      const bot = new Bot(BOT_TOKEN, { botInfo: undefined as never });
+      const bot = new Bot<BotContext>(BOT_TOKEN, { botInfo: undefined as never });
       const sendMessage = vi.fn().mockResolvedValue({});
       bot.api.sendMessage = sendMessage as never;
       return { target: makeApp(OCT_31, bot, sleep), sendMessage };

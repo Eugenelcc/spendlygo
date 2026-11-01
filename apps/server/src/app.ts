@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { secureHeaders } from 'hono/secure-headers';
-import { webhookCallback, type Bot } from 'grammy';
+import { webhookCallback } from 'grammy';
 import type { HealthResponse } from '@spendlygo/shared';
 import type { AppContext } from './context.js';
 import type { SpendlygoBot } from './bot/index.js';
@@ -24,14 +24,7 @@ export interface CreateAppOptions {
   sleep?: (ms: number) => Promise<void>;
 }
 
-export function createApp(
-  ctx: AppContext,
-  // `Bot` (plain context) is accepted so a test can pass a bare `new Bot(token)`
-  // whose `api.sendMessage` is mocked; the real process always passes the full bot.
-  botArg: SpendlygoBot | Bot,
-  options: CreateAppOptions,
-): Hono {
-  const bot = botArg as SpendlygoBot;
+export function createApp(ctx: AppContext, bot: SpendlygoBot, options: CreateAppOptions): Hono {
   const app = new Hono();
 
   app.onError(onError);
