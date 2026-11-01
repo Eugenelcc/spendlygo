@@ -504,10 +504,11 @@ it, so safe-to-spend resets when the salary lands. B-032; ADR 0007.
   `/api/me`, the bot's `/today` and capture confirmations, and the Today card.
   Part 2 delivers the Stats month view, History's "Cycle" chip, recap and
   `/recap` footer, the monthly digest (last day of the cycle) and budget alerts
-  (F13.3). Year views stay calendar years. Export and setting the day follow
-  in later parts.
-- **F17.6** Setting the day (Part 4): `PATCH /api/settings { cycleStartDay }`
-  and the bot's `/settings` day picker, by either member of a shared space. In
+  (F13.3). Year views stay calendar years. Part 3 delivers export and Part 4
+  setting the day.
+- **F17.6** Setting the day (Part 4): `PATCH /api/settings { cycleStartDay }`,
+  the bot's `/settings` day picker and the Mini App's Settings › Budget
+  "Budget month starts on" select, by either member of a shared space. In
   a shared space, a real change sends each *other* member one plain message
   ("<name> set this shared space's budget month to start on the 20th. This
   cycle: 20 Oct – 19 Nov."); a repeat, or a personal space, sends nothing. A

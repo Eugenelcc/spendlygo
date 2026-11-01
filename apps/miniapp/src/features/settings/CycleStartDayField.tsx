@@ -30,6 +30,8 @@ export function CycleStartDayField({
 }: CycleStartDayFieldProps): JSX.Element {
   // What the user picked while the save is in flight; null means "show the saved day".
   const [chosen, setChosen] = useState<number | null>(null);
+  // True from the pick until the save settles, so a quick second pick can't send a second PATCH.
+  const [isSaving, setIsSaving] = useState(false);
   useEffect(() => setChosen(null), [startDay]);
 
   const shown = chosen ?? startDay;
@@ -37,7 +39,10 @@ export function CycleStartDayField({
   function pick(day: number): void {
     haptics.select();
     setChosen(day);
-    onChange(day).catch(() => setChosen(null));
+    setIsSaving(true);
+    onChange(day)
+      .catch(() => setChosen(null))
+      .finally(() => setIsSaving(false));
   }
 
   return (
@@ -50,6 +55,7 @@ export function CycleStartDayField({
           id="cycle-start-day"
           className="input"
           value={shown}
+          disabled={isSaving}
           onChange={(event) => pick(Number(event.target.value))}
         >
           {DAYS.map((day) => (

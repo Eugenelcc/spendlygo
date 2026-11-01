@@ -995,7 +995,7 @@ the plan should say so.**
 | P4-AC10 | `settings.test.ts` › `/settings callbacks (DB) › pay cycle (B-032 Part 4) › a picker for another space is answered "out of date" and writes nothing` | ✅ passes before build (regression guard: unknown data is already answered "out of date"; it must still pass once the handler parses the data and compares the space id) | |
 | P4-AC11 | `pay-cycle.test.ts` › `PATCH /api/settings › a partner's change sends one message to each other member, and none when nothing changed` | ✅ passes after build (was ❌ failing (expected)) (400) | |
 | P4-AC12 | `pay-cycle.test.ts` › `PATCH /api/settings › a personal space change messages nobody` | ✅ passes after build (was ❌ failing (expected)) (400) | |
-| P4-AC6 (review finding 1) | `settings.test.ts` › `/settings callbacks (DB) › pay cycle (B-032 Part 4) › a toggle keeps the cycle line in the edited message` | ❌ failing (expected) (the edited text after `set:d:0` has no `Budget cycle:` line) | |
+| P4-AC6 (review finding 1) | `settings.test.ts` › `/settings callbacks (DB) › pay cycle (B-032 Part 4) › a toggle keeps the cycle line in the edited message` | ✅ passing | |
 | P4-AC13 | `settings.test.ts` › `/settings callbacks (DB) › pay cycle (B-032 Part 4) › a redelivered set:c in a shared space messages the partner once` | ✅ passes after build (was ❌ failing (expected)) (day stays 1) | |
 | P4-AC14 | `pay-cycle.test.ts` › `PATCH /api/settings › a blocked partner never fails the change` | ✅ passes after build (was ❌ failing (expected)) (400) | |
 | P4-AC15 | `pay-cycle.test.ts` › `PATCH /api/settings › a 429 is retried once after retry_after` | ✅ passes after build (was ❌ failing (expected)) (400) | |
@@ -1411,6 +1411,8 @@ small bot regression worth a one-line fix before merge. 2–5 can be parked.
 | 4 | Nit (docs) | `PRD.md:507` (F17.5), F17.6 | F17.5 still says "Export and setting the day follow in later parts". Both have now shipped. F17.6 names the PATCH and the bot picker, but not the Mini App Settings › Budget field (P4-AC16) | Fix: drop the stale sentence. Add "and the Mini App's Settings › Budget select" to F17.6 |
 | 5 | Nit | `CycleStartDayField.tsx:8` | The `ordinal` helper is a copy of core's `ordinalDay`. That is documented in `apps/miniapp/CLAUDE.md`, and it has to be a copy because the Mini App can't import core | It could move to `@spendlygo/shared` later. The copy is identical, `day % 100` included |
 | 6 | Info (§10, accepted by plan) | `apps/server/src/api/index.ts:183`, `bot/commands/settings.ts:207` | Both paths `await notifyCycleChange`, which may sleep up to 3 s per member on a 429. The plan asks for exactly this. In the bot it runs **after** `answerCallbackQuery` and the edit, so the spinner never waits. The worst case for a 2-member space is ~3 s plus 2 sends, well inside grammY's 10 s webhook timeout. If Telegram redelivers anyway, `updateCycleStartDay` returns `false` (an atomic `WHERE cycle_start_day <> $day`), so nothing is sent twice. The PATCH can be ~3 s slow in the rare 429 case. Acceptable | — |
+
+**Fixes (2026-11-01):** finding 1 fixed (toggle path now passes `currentCycle`). Finding 2 fixed (select disabled while a save is pending). Finding 4 fixed (PRD F17.5 and F17.6 updated). Findings 3 and 5 parked.
 | 7 | Info | `api/index.ts:175-187` | The space write (budget/cycle) and the user-settings write aren't in one transaction. That was already true for `monthlyBudgetCents`. The Mini App sends `cycleStartDay` alone, so in practice there's no partial write | — |
 
 **Verified, not just trusted**
