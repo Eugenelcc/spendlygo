@@ -1391,3 +1391,77 @@ minimal. Nothing else was built.
 - [x] `pnpm ci:local` passed (545 tests)
 
 - **Part 3 review follow-ups (owner-approved):** export failure now toasts "Couldn't export — try again" and keeps the sheet open with the choice kept (closes only on success, via an `onDone` callback); the month text-box fallback is validated as `YYYY-MM` with an inline "Use the format 2026-10" hint and Download disabled; bot `/export YYYY-MM-DD..YYYY-MM-DD` documented in the usage hint, `/help` and PRD F8.4/§8. No test edits.
+
+### Review — Part 4 (setting the start day)
+
+*Reviewed 2026-11-01 by `reviewer` (Opus) against `git diff origin/main..HEAD`
+(b548730 spec, 5c5d7c8 tests, 0803a7f server, c3fe88e Mini App, a1db714 spec
+notes, 51329cc test typing). `TEST_DATABASE_URL=… pnpm ci:local`: **passed**
+(39 files, 578 tests, build, bundle 87.7 KB gzipped, 44% of budget).*
+
+**Verdict: ready for owner (with nits).** No blocking findings. Finding 1 is a
+small bot regression worth a one-line fix before merge. 2–5 can be parked.
+
+| # | Severity | Where | What / why | Failure scenario / fix |
+|---|---|---|---|---|
+| 1 | Low (bot UX regression) | `apps/server/src/bot/commands/settings.ts:222` | The existing toggle/hour path re-renders the message with `buildSettingsText(updated, ctx.config)` and **no cycle**. So the new `Budget cycle: …` line (P4-AC6) disappears after any other setting is changed. No test covers the text after a toggle | `/settings` shows `Budget cycle: starts on the 20th (20 Oct – 19 Nov)`. The user taps "Digest: on" and the edited message no longer has a cycle line, until they send `/settings` again. Fix: pass `await currentCycle(ctx, updated)` as the third argument (one more `findById`). Add a test asserting the line survives `set:d:0` |
+| 2 | Low (Mini App race) | `apps/miniapp/src/features/settings/CycleStartDayField.tsx:33,40` | Nothing stops a second pick while the first PATCH is still in flight. Two PATCHes can reach the server in either order, and each one is a real change | The user picks 20, then 25 straight away. If the server gets 25 before 20, the stored day is 20. There are two "Saved" toasts, and the partner gets two messages, the last saying "20th". After the refetch the select shows 20 (the truth), but the user meant 25. Also, the first refetch changes `startDay` and resets `chosen` while 25 is still pending, so the select flickers 25 → 20 → 25. Fix: `disabled` while a cycle save is pending (or serialise saves) |
+| 3 | Nit | `apps/miniapp/src/App.tsx:522`, `screens/Settings.tsx:188-195` | `busy={settings.isPending}` is shared, so picking a cycle day briefly turns the button into "Saving…" and disables "Save budget" | Cosmetic, and the same already happens for the digest hour |
+| 4 | Nit (docs) | `PRD.md:507` (F17.5), F17.6 | F17.5 still says "Export and setting the day follow in later parts". Both have now shipped. F17.6 names the PATCH and the bot picker, but not the Mini App Settings › Budget field (P4-AC16) | Fix: drop the stale sentence. Add "and the Mini App's Settings › Budget select" to F17.6 |
+| 5 | Nit | `CycleStartDayField.tsx:8` | The `ordinal` helper is a copy of core's `ordinalDay`. That is documented in `apps/miniapp/CLAUDE.md`, and it has to be a copy because the Mini App can't import core | It could move to `@spendlygo/shared` later. The copy is identical, `day % 100` included |
+| 6 | Info (§10, accepted by plan) | `apps/server/src/api/index.ts:183`, `bot/commands/settings.ts:207` | Both paths `await notifyCycleChange`, which may sleep up to 3 s per member on a 429. The plan asks for exactly this. In the bot it runs **after** `answerCallbackQuery` and the edit, so the spinner never waits. The worst case for a 2-member space is ~3 s plus 2 sends, well inside grammY's 10 s webhook timeout. If Telegram redelivers anyway, `updateCycleStartDay` returns `false` (an atomic `WHERE cycle_start_day <> $day`), so nothing is sent twice. The PATCH can be ~3 s slow in the rare 429 case. Acceptable | — |
+| 7 | Info | `api/index.ts:175-187` | The space write (budget/cycle) and the user-settings write aren't in one transaction. That was already true for `monthlyBudgetCents`. The Mini App sends `cycleStartDay` alone, so in practice there's no partial write | — |
+
+**Verified, not just trusted**
+- **Identity (§4).** The PATCH writes only `activeHouseholdId(user)`, with `user` taken from `requireInitData`. The schema is still `.strict()`, so `householdId` in the body is a 400, and the test checks that neither space changed. The 401 is tested too. In the bot, the space id in `set:c`/`set:cp` is regex- and `z.string().uuid()`-checked, then **only compared** with `activeHouseholdId(appUser)`. The write uses `activeHouseholdId(user)`, never `action.householdId`. A mismatch answers `STALE_TEXT` before any read or write (P4-AC10 test: no edit, no send, both spaces still 1). Telegram only delivers callback_data that the bot itself attached, and the compare-only design holds even if that weren't so.
+- **Idempotency.** `updateCycleStartDay` is a single conditional UPDATE … RETURNING, so concurrent identical PATCHes or redelivered callbacks give exactly one `changed = true`. Tests: a second PATCH sends nothing (AC11). A replayed `set:c` leaves `updated_at` untouched (AC8). A shared-space redelivery sends exactly one message, to the creator (AC13). Every callback path answers exactly once (asserted `toHaveBeenCalledTimes(1)`), including the DB-error path ("Couldn't save that", then rethrow), which matches the existing toggle path.
+- **Telegram (§10).** Sends are sequential, one per other member and one per chat. `sendMessageWithRetry` retries only `GrammyError` 429 with `retry_after ≤ 3`, exactly once. Above 3, a 403, or a second failure is rethrown, logged and skipped (unit tests for all four, plus AC14/AC15 end to end, with `sleep` called with 1000). Plain text, no `parse_mode`, so first names need no escaping.
+- **Privacy (§6).** Logs carry `settings.cycle_notify_failed { userId, errorName, errorMessage }` (the Telegram description only) and `settings.updated { userId, fields: 'cycleStartDay' }`. No amounts, names or chat ids. The notice text has no amounts.
+- **Time (§9).** The notice cycle is `cycleContaining(todayFor(ctx, member), day)`, the recipient's own timezone through the injected Clock. The bot text uses `todayFor(ctx, user)`.
+- **Mini App.** On success, `refreshAll` refetches `today`, `transactions`, `stats` (History's cycle key starts with `stats`) and `me`, and `['recap']` is now invalidated as well (AC18). On failure, `mutateAsync` rejects and `chosen` resets to the saved day. The hook-level `onError` fires the error haptic and there is no toast. The CSS uses only `--text` / `--text-subtle` tokens. The `<label htmlFor>` and native `<select>` are accessible. The preview uses `me.cycle?.days ?? daysInMonth(today)`, and the "this cycle"/"this month" wording follows the start day (AC17). Older servers fall back to day 1.
+- **Currency.** No new `S$` in code or user copy. The only `S$` lines in the diff are the handoff doc's notes about the switch to `$`.
+- **Docs.** PRD F17.6 + §8, ADR 0007 rollback note (it matches the Plan's *Rollback*), server and Mini App `CLAUDE.md` gotchas, `/help` line, settings.ts header comment. BACKLOG → Done waits for the release, as planned.
+- **Tests weren't weakened.** 5c5d7c8 changed one existing assertion, the toggle-list test, which now filters out `set:cp:`. The plan allowed this ("only if it enumerates exact data"), and P4-AC7 pins the new button. 51329cc changed types only.
+
+**Plan fidelity.** Every Part 4 file in the plan was touched as described. As
+the build notes say, there was no repo change (`updateCycleStartDay` already
+existed from Part 1). Small, harmless differences from the plan: App.tsx uses
+`mutateAsync` instead of `mutate` (it's needed for the revert in P4-AC18, and
+it's documented), and the PATCH reuses `activeSpaceSettings` to fill the
+response's `cycleStartDay`. The server and the Mini App are in separate commits
+(0803a7f, c3fe88e), as the Rollback plan requires. Nothing outside the plan was
+built.
+
+**Acceptance criteria → tests**
+
+| # | Proven by |
+|---|---|
+| P4-AC1 | `api/pay-cycle.test.ts` › "owner's example: setting day 20 on 31 Oct moves Today to 20 Oct – 19 Nov" |
+| P4-AC2 | `pay-cycle.test.ts` › "rejects 0, 32, 1.5 and \"20\" without changing anything" (pre-set to 7, so the "unchanged" check is meaningful) |
+| P4-AC3 | `pay-cycle.test.ts` › "either member of a shared space can change it" |
+| P4-AC4 | `pay-cycle.test.ts` › "changes only the active space" |
+| P4-AC5 | `pay-cycle.test.ts` › "a householdId in the body is a 400; unauthenticated is a 401" |
+| P4-AC6 | `bot/commands/settings.test.ts` › "shows the cycle start day and range" |
+| P4-AC7 | `settings.test.ts` › "day picker lists 1–31, 7 per row, …, and stays within 64 bytes" |
+| P4-AC8 | `settings.test.ts` (DB) › "set:c:20 updates the active space and a replay is a no-op" |
+| P4-AC9 | `settings.test.ts` › "parseSettingsCallback rejects malformed cycle data, including the old id-less form" |
+| P4-AC10 | `settings.test.ts` (DB) › "a picker for another space is answered \"out of date\" and writes nothing" |
+| P4-AC11 | `pay-cycle.test.ts` › "a partner's change sends one message to each other member, and none when nothing changed" |
+| P4-AC12 | `pay-cycle.test.ts` › "a personal space change messages nobody" |
+| P4-AC13 | `settings.test.ts` (DB) › "a redelivered set:c in a shared space messages the partner once" |
+| P4-AC14 | `pay-cycle.test.ts` › "a blocked partner never fails the change" + `send-with-retry.test.ts` › "does not retry a 403" |
+| P4-AC15 | `pay-cycle.test.ts` › "a 429 is retried once after retry_after" + `send-with-retry.test.ts` › "> 3 seconds" and "only one retry" |
+| P4-AC16–18 | Real-stack screenshots and a dev-bot check recorded by the orchestrator (select, caption, hints; `= $1,550/month (31 days this cycle)`; Saved vs forced-400 revert) |
+| ordinalDay | `packages/core/src/cycle.test.ts` (1st…31st incl. 11th–13th) |
+
+**PR checklist (WORKFLOW §4)**
+- [x] **Cost (§1):** no new dependency or service. Bundle 87.7 KB gz (44%)
+- [x] **Money (§2):** no new arithmetic. The preview reuses existing cents maths with `me.cycle.days`
+- [x] **Data (§3):** one-row conditional UPDATE, idempotent. No migration (the column is from Part 1). No deletes
+- [x] **Auth (§4):** identity from `initData` / `appUser` only. Only the active space is written. Strict schema. Cross-user + 401 tests (AC5), stale-space test (AC10)
+- [x] **Privacy (§6):** logs carry user ids and error names only. The notice has no amounts
+- [x] **Runtime (§7):** no JS aggregation added
+- [x] **Time (§9):** recipient/user timezone via `todayFor` (injected Clock)
+- [x] **Telegram (§10):** callbacks answered once on every path. Sequential sends. 429 ≤ 3 s retried once. Notify runs after the answer (see finding 6)
+- [x] **Docs:** PRD, ADR 0007, both nested CLAUDE.md files, `/help` (PRD F17.5 tidy-up: finding 4)
+- [x] `pnpm ci:local` passed (578 tests)
