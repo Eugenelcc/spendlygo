@@ -9,8 +9,9 @@
  */
 
 import { createHmac } from 'node:crypto';
-import { Bot } from 'grammy';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { Bot, GrammyError } from 'grammy';
+import type { BotContext } from '../bot/middleware.js';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { fixedClock } from '@spendlygo/core';
 import {
@@ -23,7 +24,7 @@ import {
 import { createApp } from '../app.js';
 import type { Config } from '../config.js';
 import type { AppContext } from '../context.js';
-import { setLogLevel } from '../logger.js';
+import { logger, setLogLevel } from '../logger.js';
 
 const TEST_DATABASE_URL = process.env.TEST_DATABASE_URL;
 const describeIfDb = TEST_DATABASE_URL ? describe : describe.skip;
@@ -49,10 +50,10 @@ async function json(response: Response): Promise<any> {
   return response.json();
 }
 
-function auth(telegramId: bigint, now: Date = OCT_31): Record<string, string> {
+function auth(telegramId: bigint, now: Date = OCT_31, firstName = 'Test'): Record<string, string> {
   const fields: Record<string, string> = {
     auth_date: String(Math.floor(now.getTime() / 1000) - 30),
-    user: JSON.stringify({ id: Number(telegramId), first_name: 'Test' }),
+    user: JSON.stringify({ id: Number(telegramId), first_name: firstName }),
   };
   const dataCheckString = Object.entries(fields)
     .map(([k, v]) => `${k}=${v}`)
@@ -87,15 +88,20 @@ describeIfDb('pay cycle API (F17)', () => {
     version: 'test',
   };
 
-  function makeApp(now: Date): ReturnType<typeof createApp> {
+  function makeApp(
+    now: Date,
+    bot: Bot<BotContext> = new Bot<BotContext>(BOT_TOKEN, { botInfo: undefined as never }),
+    sleep?: (ms: number) => Promise<void>,
+  ): ReturnType<typeof createApp> {
     const ctx: AppContext = {
       config,
       db: handle.db,
       dbHandle: handle,
       clock: fixedClock(now),
     };
-    return createApp(ctx, new Bot(BOT_TOKEN, { botInfo: undefined as never }), {
+    return createApp(ctx, bot, {
       state: { bot: 'ready', webhook: 'registered' },
+      ...(sleep ? { sleep } : {}),
     });
   }
 
@@ -126,10 +132,11 @@ describeIfDb('pay cycle API (F17)', () => {
     await handle.close();
   });
 
-  async function personalSpaceFor(telegramId: bigint) {
+  async function personalSpaceFor(telegramId: bigint, firstName?: string) {
     const user = await usersRepo.upsertByTelegramId(handle.db, {
       telegramId,
       timezone: 'Asia/Singapore',
+      ...(firstName ? { firstName } : {}),
     });
     return { user, space: await householdsRepo.personalSpaceOf(handle.db, user.id) };
   }
@@ -287,6 +294,182 @@ describeIfDb('pay cycle API (F17)', () => {
 
       const me = await json(await app.request('/api/me', { headers: auth(OWNER) }));
       expect(me.user.monthlyBudgetCents).toBe(150_000);
+    });
+
+    // --- Part 4 (B-032, P4-AC1 to AC5, AC11, AC12, AC14, AC15) ----------------
+
+    const patch = (body: unknown, telegramId: bigint = OWNER, firstName?: string) =>
+      app.request('/api/settings', {
+        method: 'PATCH',
+        headers: auth(telegramId, OCT_31, firstName),
+        body: JSON.stringify(body),
+      });
+
+    const meOf = async (telegramId: bigint) =>
+      json(await app.request('/api/me', { headers: auth(telegramId) }));
+
+    /** A shared space: OWNER created it, PARTNER ("Priya") joined; start day 1. */
+    async function sharedSpace() {
+      const creator = await personalSpaceFor(OWNER, 'Owen');
+      const partner = await personalSpaceFor(PARTNER, 'Priya');
+      const shared = await householdsRepo.create(handle.db, creator.user.id);
+      const invite = await householdsRepo.createInvite(handle.db, shared.id, creator.user.id);
+      await householdsRepo.joinByCode(handle.db, invite.code, partner.user.id);
+      await householdsRepo.updateBudget(handle.db, shared.id, 150_000);
+      return { creator, partner, shared };
+    }
+
+    /** An app whose bot.api.sendMessage is a mock, as alerts.test.ts does. */
+    function appWithBot(sleep?: (ms: number) => Promise<void>) {
+      const bot = new Bot<BotContext>(BOT_TOKEN, { botInfo: undefined as never });
+      const sendMessage = vi.fn().mockResolvedValue({});
+      bot.api.sendMessage = sendMessage as never;
+      return { target: makeApp(OCT_31, bot, sleep), sendMessage };
+    }
+
+    const noticeRequest = (target: ReturnType<typeof createApp>, day = 20) =>
+      target.request('/api/settings', {
+        method: 'PATCH',
+        headers: auth(PARTNER, OCT_31, 'Priya'),
+        body: JSON.stringify({ cycleStartDay: day }),
+      });
+
+    const grammyError = (code: number, description: string, retryAfter?: number) =>
+      new GrammyError(
+        `Call to 'sendMessage' failed!`,
+        {
+          ok: false,
+          error_code: code,
+          description,
+          ...(retryAfter === undefined ? {} : { parameters: { retry_after: retryAfter } }),
+        },
+        'sendMessage',
+        {},
+      );
+
+    it("owner's example: setting day 20 on 31 Oct moves Today to 20 Oct – 19 Nov", async () => {
+      await ownersOctober(1);
+      const response = await patch({ cycleStartDay: 20 });
+      expect(response.status).toBe(200);
+      expect((await json(response)).user.cycleStartDay).toBe(20);
+
+      const body = await json(await app.request('/api/today', { headers: auth(OWNER) }));
+      expect(body.safeToSpend).toMatchObject({
+        spentMonthToDateCents: 5000,
+        dayOfMonth: 12,
+        daysInMonth: 31,
+        daysRemaining: 20,
+        safeTodayCents: 7250,
+      });
+      expect(body.cycle).toEqual(CYCLE_20);
+    });
+
+    it('rejects 0, 32, 1.5 and "20" without changing anything', async () => {
+      const { space } = await personalSpaceFor(OWNER);
+      await householdsRepo.updateCycleStartDay(handle.db, space.id, 7);
+      for (const bad of [0, 32, 1.5, '20']) {
+        const response = await patch({ cycleStartDay: bad });
+        expect(response.status, String(bad)).toBe(400);
+      }
+      expect((await meOf(OWNER)).cycle.startDay).toBe(7);
+    });
+
+    it('either member of a shared space can change it', async () => {
+      await sharedSpace();
+      const response = await patch({ cycleStartDay: 20 }, PARTNER); // not the creator
+      expect(response.status).toBe(200);
+      expect((await meOf(OWNER)).cycle.startDay).toBe(20);
+      expect((await meOf(PARTNER)).cycle.startDay).toBe(20);
+    });
+
+    it('changes only the active space', async () => {
+      const { partner } = await sharedSpace();
+      expect((await patch({ cycleStartDay: 20 }, PARTNER)).status).toBe(200);
+
+      const switched = await app.request('/api/spaces/switch', {
+        method: 'POST',
+        headers: auth(PARTNER),
+        body: JSON.stringify({ householdId: partner.space.id }),
+      });
+      expect(switched.status).toBe(200);
+      expect((await meOf(PARTNER)).cycle.startDay).toBe(1);
+    });
+
+    it('a householdId in the body is a 400; unauthenticated is a 401', async () => {
+      const { space: ownerSpace } = await personalSpaceFor(OWNER);
+      const { space: strangerSpace } = await personalSpaceFor(STRANGER);
+
+      const cross = await patch({ cycleStartDay: 20, householdId: ownerSpace.id }, STRANGER);
+      expect(cross.status).toBe(400);
+      expect((await householdsRepo.findById(handle.db, ownerSpace.id))?.cycleStartDay).toBe(1);
+      expect((await householdsRepo.findById(handle.db, strangerSpace.id))?.cycleStartDay).toBe(1);
+
+      const anon = await app.request('/api/settings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cycleStartDay: 20 }),
+      });
+      expect(anon.status).toBe(401);
+      expect((await householdsRepo.findById(handle.db, ownerSpace.id))?.cycleStartDay).toBe(1);
+    });
+
+    it("a partner's change sends one message to each other member, and none when nothing changed", async () => {
+      await sharedSpace();
+      const { target, sendMessage } = appWithBot();
+
+      expect((await noticeRequest(target)).status).toBe(200);
+      expect(sendMessage).toHaveBeenCalledTimes(1);
+      expect(sendMessage).toHaveBeenCalledWith(
+        String(OWNER),
+        "Priya set this shared space's budget month to start on the 20th. This cycle: 20 Oct – 19 Nov.",
+      );
+
+      expect((await noticeRequest(target)).status).toBe(200); // same value again
+      expect(sendMessage).toHaveBeenCalledTimes(1);
+    });
+
+    it('a personal space change messages nobody', async () => {
+      await personalSpaceFor(OWNER, 'Owen');
+      const { target, sendMessage } = appWithBot();
+      const response = await target.request('/api/settings', {
+        method: 'PATCH',
+        headers: auth(OWNER, OCT_31, 'Owen'),
+        body: JSON.stringify({ cycleStartDay: 20 }),
+      });
+      expect(response.status).toBe(200);
+      expect(sendMessage).not.toHaveBeenCalled();
+    });
+
+    it('a blocked partner never fails the change', async () => {
+      await sharedSpace();
+      const { target, sendMessage } = appWithBot();
+      sendMessage.mockRejectedValue(grammyError(403, 'Forbidden: bot was blocked by the user'));
+      const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+
+      const response = await noticeRequest(target);
+      expect(response.status).toBe(200);
+      expect((await json(response)).user.cycleStartDay).toBe(20);
+      expect(sendMessage).toHaveBeenCalledTimes(1); // nothing retried
+      expect((await meOf(PARTNER)).cycle.startDay).toBe(20);
+      expect(warn).toHaveBeenCalledWith(
+        'settings.cycle_notify_failed',
+        expect.objectContaining({ userId: expect.any(String) }),
+      );
+      warn.mockRestore();
+    });
+
+    it('a 429 is retried once after retry_after', async () => {
+      await sharedSpace();
+      const sleep = vi.fn().mockResolvedValue(undefined);
+      const { target, sendMessage } = appWithBot(sleep);
+      sendMessage
+        .mockRejectedValueOnce(grammyError(429, 'Too Many Requests: retry after 1', 1))
+        .mockResolvedValue({});
+
+      const response = await noticeRequest(target);
+      expect(response.status).toBe(200);
+      expect(sleep).toHaveBeenCalledWith(1000);
+      expect(sendMessage).toHaveBeenCalledTimes(2);
     });
   });
   // --- Part 2 (B-032, P2-AC1 to AC5): the Stats month view -------------------

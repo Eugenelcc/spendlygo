@@ -10,6 +10,7 @@ import {
   formatCycleRange,
   formatDateRangeWithYears,
   nextCycle,
+  ordinalDay,
   previousCycle,
   type BudgetCycle,
 } from './cycle.js';
@@ -159,5 +160,25 @@ describe('cycleAlertKey (B-032 Part 2, Q2 A)', () => {
       }
       expect(seen.size).toBe(36);
     }
+  });
+});
+
+describe('ordinalDay (B-032 Part 4)', () => {
+  it.each([
+    [1, '1st'],
+    [2, '2nd'],
+    [3, '3rd'],
+    [4, '4th'],
+    [11, '11th'],
+    [12, '12th'],
+    [13, '13th'],
+    [20, '20th'],
+    [21, '21st'],
+    [22, '22nd'],
+    [23, '23rd'],
+    [30, '30th'],
+    [31, '31st'],
+  ])('%i is %s', (day, expected) => {
+    expect(ordinalDay(day)).toBe(expected);
   });
 });

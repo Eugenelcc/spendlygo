@@ -20,6 +20,8 @@ export interface CreateAppOptions {
    * can receive an update while the bot is still initialising.
    */
   state: RuntimeState;
+  /** Test seam only: replaces the real timer when a Telegram 429 is retried. */
+  sleep?: (ms: number) => Promise<void>;
 }
 
 export function createApp(ctx: AppContext, bot: SpendlygoBot, options: CreateAppOptions): Hono {
@@ -89,7 +91,7 @@ export function createApp(ctx: AppContext, bot: SpendlygoBot, options: CreateApp
     return handleUpdate(c);
   });
 
-  app.route('/api', createApiRouter(ctx, bot));
+  app.route('/api', createApiRouter(ctx, bot, options.sleep));
   app.route('/tasks', createTasksRouter(ctx, bot));
 
   app.get('/', (c) =>

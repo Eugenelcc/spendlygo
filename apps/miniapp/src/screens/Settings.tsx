@@ -7,6 +7,7 @@ import type {
   RecurringRule,
   SavingsGoal,
 } from '@spendlygo/shared';
+import { CycleStartDayField } from '../features/settings/CycleStartDayField';
 import { ExportSheet } from '../features/settings/ExportSheet';
 import { GoalsSection } from '../components/GoalsSection';
 import { HouseholdSection } from '../components/HouseholdSection';
@@ -22,6 +23,7 @@ export interface SettingsScreenProps {
   onSaveBudget: (cents: number | null) => void;
   onToggleDigest: (enabled: boolean) => void;
   onSetDigestHour: (hour: number) => void;
+  onSetCycleStartDay: (day: number) => Promise<unknown>;
   onToggleAlerts: (enabled: boolean) => void;
   categories: Category[];
   today: string;
@@ -66,6 +68,7 @@ export function SettingsScreen({
   onSaveBudget,
   onToggleDigest,
   onSetDigestHour,
+  onSetCycleStartDay,
   onToggleAlerts,
   categories,
   today,
@@ -96,7 +99,9 @@ export function SettingsScreen({
   const [addingRecurring, setAddingRecurring] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
 
-  const daysThisMonth = daysInMonth(today);
+  // Days in the budget cycle (F17); an older server sends no cycle, so fall back to the calendar month.
+  const cycleStartDay = me.cycle?.startDay ?? 1;
+  const daysThisMonth = me.cycle?.days ?? daysInMonth(today);
   const parsed = Number(draft.replace(/,/g, ''));
   const valid = draft.trim() !== '' && Number.isFinite(parsed) && parsed >= 0;
   // Whatever mode the field is in, this is always the monthly figure that
@@ -162,7 +167,7 @@ export function SettingsScreen({
                   locale: user.locale,
                   hideZeroCents: true,
                 })}
-                /month ({daysThisMonth} days this month)
+                /month ({daysThisMonth} days {cycleStartDay === 1 ? 'this month' : 'this cycle'})
               </span>
             ) : (
               <span>
@@ -189,6 +194,12 @@ export function SettingsScreen({
         >
           {busy ? 'Saving…' : 'Save budget'}
         </button>
+        <CycleStartDayField
+          startDay={cycleStartDay}
+          label={me.cycle?.label}
+          isShared={me.household !== null}
+          onChange={onSetCycleStartDay}
+        />
         {user.monthlyBudgetCents !== null && (
           <div className="card__foot card__foot--tight">
             <span>

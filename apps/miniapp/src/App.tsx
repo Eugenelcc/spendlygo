@@ -295,6 +295,7 @@ function Shell(): JSX.Element {
     onSuccess: () => {
       haptics.success();
       refreshAll();
+      void queryClient.invalidateQueries({ queryKey: ['recap'] });
       showToast('Saved');
     },
     onError: () => haptics.error(),
@@ -522,6 +523,7 @@ function Shell(): JSX.Element {
             onSaveBudget={(cents) => settings.mutate({ monthlyBudgetCents: cents })}
             onToggleDigest={(enabled) => settings.mutate({ digestEnabled: enabled })}
             onSetDigestHour={(hour) => settings.mutate({ digestHour: hour })}
+            onSetCycleStartDay={(day) => settings.mutateAsync({ cycleStartDay: day })}
             onToggleAlerts={(enabled) => settings.mutate({ alertsEnabled: enabled })}
             categories={categories.data?.categories ?? []}
             today={today.data.today}

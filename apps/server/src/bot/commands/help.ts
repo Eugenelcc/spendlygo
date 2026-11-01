@@ -74,7 +74,7 @@ of them, personal budget included.
 /export — download your data as CSV
 /recent — your last 10 entries
 /undo — undo the last entry
-/settings — digest time and notifications
+/settings — digest time, notifications and the day your budget month starts
 /app — open the app
 /help — this message`;
 

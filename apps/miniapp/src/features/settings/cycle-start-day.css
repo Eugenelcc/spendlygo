@@ -1,0 +1,15 @@
+.cycle-field {
+  margin-top: 12px;
+}
+
+.cycle-field__caption {
+  margin: 6px 0 0;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.cycle-field__hint {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--text-subtle);
+}

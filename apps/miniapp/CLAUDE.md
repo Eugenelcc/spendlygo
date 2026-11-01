@@ -120,3 +120,4 @@ Until then, UI changes are verified by light and dark screenshots at 375px
 | Telegram theme vars differ across clients | Always supply a CSS fallback: `var(--tg-theme-bg-color, #fff)` |
 | Haptics throw on unsupported clients | Feature-check before every call |
 | React 19 removed the global `JSX` namespace | `import type { JSX } from 'react'` |
+| The cycle start day field saves through `mutateAsync` (B-032 part 4) | `CycleStartDayField` shows the picked day at once and falls back to `me.cycle.startDay` when the promise rejects (e.g. a 400 from an older, strict server), so there is never a false "Saved". The ordinal helper is duplicated from `@spendlygo/core` because the Mini App can't import it |

@@ -7,8 +7,15 @@
 import { eq } from 'drizzle-orm';
 import { Bot } from 'grammy';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { fixedClock } from '@spendlygo/core';
-import { createDatabase, schema, usersRepo, type DatabaseHandle, type User } from '@spendlygo/db';
+import { cycleContaining, fixedClock } from '@spendlygo/core';
+import {
+  createDatabase,
+  householdsRepo,
+  schema,
+  usersRepo,
+  type DatabaseHandle,
+  type User,
+} from '@spendlygo/db';
 import type { Config } from '../../config.js';
 import type { AppContext } from '../../context.js';
 import { setLogLevel } from '../../logger.js';
@@ -16,6 +23,7 @@ import { configureBotMenu } from '../index.js';
 import type { BotContext } from '../middleware.js';
 import {
   buildSettingsText,
+  cycleDayPickerKeyboard,
   handleSettingsCallback,
   hourPickerKeyboard,
   parseSettingsCallback,
@@ -79,6 +87,8 @@ function fakeBotCtx(appUser: User, data: string | undefined): BotContext {
     editMessageText: vi.fn().mockResolvedValue(true),
     editMessageReplyMarkup: vi.fn().mockResolvedValue(true),
     reply: vi.fn().mockResolvedValue(undefined),
+    // B-032 Part 4: the partner notice goes out through botCtx.api.
+    api: { sendMessage: vi.fn().mockResolvedValue({}) },
   } as unknown as BotContext;
 }
 
@@ -126,7 +136,13 @@ describe('/settings rendering (PRD F9.4)', () => {
   it('each toggle button carries the opposite of the current state', () => {
     const user = userWith({ digestEnabled: true, nudgeEnabled: false, alertsEnabled: true });
     const data = callbackData(settingsKeyboard(user, config));
-    expect(data).toEqual(['set:d:0', 'set:hp', 'set:n:1', 'set:a:0']);
+    // B-032 P4: the cycle-day button (set:cp:<id>) is covered by P4-AC7; this test pins the toggles.
+    expect(data.filter((d) => !d.startsWith('set:cp:'))).toEqual([
+      'set:d:0',
+      'set:hp',
+      'set:n:1',
+      'set:a:0',
+    ]);
   });
 
   it('every callback_data is set:-prefixed and within 64 bytes', () => {
@@ -193,6 +209,74 @@ describe('/settings rendering (PRD F9.4)', () => {
     });
     expect(parseSettingsCallback('set:hp')).toEqual({ kind: 'view', view: 'hours' });
     expect(parseSettingsCallback('set:back')).toEqual({ kind: 'view', view: 'main' });
+  });
+});
+
+describe('/settings pay cycle (B-032 Part 4)', () => {
+  const config = configWith({});
+  const SPACE = '11111111-2222-3333-4444-555555555555';
+
+  it('shows the cycle start day and range', () => {
+    const day20 = buildSettingsText(userWith(), config, cycleContaining('2026-10-31', 20));
+    expect(day20).toContain('Budget cycle: starts on the 20th (20 Oct – 19 Nov)');
+
+    const day1 = buildSettingsText(userWith(), config, cycleContaining('2026-10-31', 1));
+    expect(day1).toContain('Budget cycle: calendar month (starts on the 1st)');
+  });
+
+  it('day picker lists 1–31, 7 per row, marks the current day, carries the space id, and stays within 64 bytes', () => {
+    // The main keyboard offers the picker for the active space.
+    const main = settingsKeyboard(userWith({ activeHouseholdId: SPACE }), config);
+    const open = allButtons(main).find((b) => b.text === 'Change cycle start day');
+    expect(open?.callback_data).toBe(`set:cp:${SPACE}`);
+
+    const picker = cycleDayPickerKeyboard(20, SPACE);
+    const rows = rowsOf(picker);
+    const buttons = allButtons(picker);
+    const days = buttons.slice(0, 31);
+    expect(days.map((b) => b.callback_data)).toEqual(
+      Array.from({ length: 31 }, (_, i) => `set:c:${i + 1}:${SPACE}`),
+    );
+    for (const row of rows.slice(0, 4)) expect(row).toHaveLength(7);
+    const marked = days.filter((b) => b.text.startsWith('• '));
+    expect(marked).toHaveLength(1);
+    expect(marked[0]?.callback_data).toBe(`set:c:20:${SPACE}`);
+    expect(buttons[buttons.length - 1]).toMatchObject({
+      text: '← Back',
+      callback_data: 'set:back',
+    });
+
+    const realUuid = '123e4567-e89b-12d3-a456-426614174000';
+    for (const keyboard of [cycleDayPickerKeyboard(31, realUuid), main]) {
+      for (const value of callbackData(keyboard)) {
+        expect(Buffer.byteLength(value, 'utf8')).toBeLessThanOrEqual(64);
+      }
+    }
+    expect(Buffer.byteLength(`set:c:31:${realUuid}`, 'utf8')).toBe(45);
+  });
+
+  it('parseSettingsCallback rejects malformed cycle data, including the old id-less form', () => {
+    const uuid = '123e4567-e89b-12d3-a456-426614174000';
+    for (const bad of [
+      'set:c:20',
+      `set:c:0:${uuid}`,
+      `set:c:32:${uuid}`,
+      `set:c:x:${uuid}`,
+      'set:c:20:not-a-uuid',
+      'set:cp',
+    ]) {
+      expect(parseSettingsCallback(bad), bad).toBeNull();
+    }
+    expect(parseSettingsCallback(`set:c:20:${uuid}`)).toEqual({
+      kind: 'cycle',
+      day: 20,
+      householdId: uuid,
+    });
+    expect(parseSettingsCallback(`set:cp:${uuid}`)).toEqual({
+      kind: 'view',
+      view: 'days',
+      householdId: uuid,
+    });
   });
 });
 
@@ -378,5 +462,87 @@ describeIfDb('/settings callbacks (DB)', () => {
     await handleSettingsCallback(ctx, fakeBotCtx(userB, 'set:d:0'));
     expect((await reload(userB)).digestEnabled).toBe(false);
     expect((await reload(userA)).digestEnabled).toBe(true);
+  });
+  describe('pay cycle (B-032 Part 4)', () => {
+    async function cycleDayOf(householdId: string): Promise<number | undefined> {
+      return (await householdsRepo.findById(handle.db, householdId))?.cycleStartDay;
+    }
+
+    async function updatedAtOf(householdId: string): Promise<number | undefined> {
+      return (await householdsRepo.findById(handle.db, householdId))?.updatedAt.getTime();
+    }
+
+    it('set:c:20 updates the active space and a replay is a no-op', async () => {
+      const space = await householdsRepo.personalSpaceOf(handle.db, userA.id);
+      const data = `set:c:20:${space.id}`;
+
+      const first = fakeBotCtx(userA, data);
+      await handleSettingsCallback(ctx, first);
+      expect(await cycleDayOf(space.id)).toBe(20);
+      expect(first.answerCallbackQuery).toHaveBeenCalledTimes(1);
+      const stamp = await updatedAtOf(space.id);
+
+      const second = fakeBotCtx(userA, data);
+      await handleSettingsCallback(ctx, second);
+      expect(await cycleDayOf(space.id)).toBe(20);
+      expect(second.answerCallbackQuery).toHaveBeenCalledTimes(1);
+      expect(await updatedAtOf(space.id)).toBe(stamp); // nothing written
+      expect(first.api.sendMessage).not.toHaveBeenCalled(); // personal space
+    });
+
+    it('a picker for another space is answered "out of date" and writes nothing', async () => {
+      const personal = await householdsRepo.personalSpaceOf(handle.db, userA.id);
+      const shared = await householdsRepo.create(handle.db, userA.id); // now active
+      const current = await reload(userA);
+      expect(current.activeHouseholdId).toBe(shared.id);
+
+      for (const data of [`set:c:20:${personal.id}`, `set:cp:${personal.id}`]) {
+        const botCtx = fakeBotCtx(current, data);
+        await handleSettingsCallback(ctx, botCtx);
+        expect(botCtx.answerCallbackQuery).toHaveBeenCalledTimes(1);
+        expect(botCtx.answerCallbackQuery).toHaveBeenCalledWith({ text: STALE_TEXT });
+        expect(botCtx.editMessageText).not.toHaveBeenCalled();
+        expect(botCtx.editMessageReplyMarkup).not.toHaveBeenCalled();
+        expect(botCtx.api.sendMessage).not.toHaveBeenCalled();
+      }
+      expect(await cycleDayOf(personal.id)).toBe(1);
+      expect(await cycleDayOf(shared.id)).toBe(1);
+    });
+
+    it('a toggle keeps the cycle line in the edited message', async () => {
+      const space = await householdsRepo.personalSpaceOf(handle.db, userA.id);
+      await householdsRepo.updateCycleStartDay(handle.db, space.id, 20);
+      const october = { ...ctx, clock: fixedClock('2026-10-31T04:00:00Z') };
+
+      const botCtx = fakeBotCtx(userA, 'set:d:0');
+      await handleSettingsCallback(october, botCtx);
+
+      expect(botCtx.editMessageText).toHaveBeenCalledTimes(1);
+      const [text] = mock(botCtx.editMessageText).mock.calls[0] as [string];
+      expect(text).toContain('Budget cycle: starts on the 20th (20 Oct – 19 Nov)');
+    });
+
+    it('a redelivered set:c in a shared space messages the partner once', async () => {
+      const shared = await householdsRepo.create(handle.db, userA.id);
+      const invite = await householdsRepo.createInvite(handle.db, shared.id, userA.id);
+      await householdsRepo.joinByCode(handle.db, invite.code, userB.id);
+      const partner = await reload(userB);
+      const data = `set:c:20:${shared.id}`;
+
+      const first = fakeBotCtx(partner, data);
+      const second = fakeBotCtx(partner, data);
+      await handleSettingsCallback(ctx, first);
+      await handleSettingsCallback(ctx, second);
+
+      expect(await cycleDayOf(shared.id)).toBe(20);
+      expect(first.answerCallbackQuery).toHaveBeenCalledTimes(1);
+      expect(second.answerCallbackQuery).toHaveBeenCalledTimes(1);
+      const sent = [
+        ...mock(first.api.sendMessage).mock.calls,
+        ...mock(second.api.sendMessage).mock.calls,
+      ];
+      expect(sent).toHaveLength(1);
+      expect(sent[0]?.[0]).toBe(String(TELEGRAM_A)); // the creator, not the partner
+    });
   });
 });

@@ -388,6 +388,8 @@ export const updateSettingsSchema = z
     digestEnabled: z.boolean().optional(),
     nudgeEnabled: z.boolean().optional(),
     alertsEnabled: z.boolean().optional(),
+    /** Per space, like the budget (F17). Only the active space is ever written. */
+    cycleStartDay: z.number().int().min(1).max(31).optional(),
   })
   .strict();
 export type UpdateSettingsBody = z.infer<typeof updateSettingsSchema>;
